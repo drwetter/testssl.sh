@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Fast and reliable POC bash socket implementation of ticketbleed (CVE-2016-9244), see also http://ticketbleed.com/
 # Author: Dirk Wetter, GPLv2 see https://testssl.sh/LICENSE.txt

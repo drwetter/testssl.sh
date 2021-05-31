@@ -1,4 +1,4 @@
-#!/bin/bash 
+#!/usr/bin/env bash
 
 # POC bash socket implementation of CCS Injection vulnerability in OpenSSL (CVE-2014-0224), 
 # see https://www.openssl.org/news/secadv_20140605.txt

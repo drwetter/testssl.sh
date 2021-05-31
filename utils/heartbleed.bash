@@ -1,4 +1,4 @@
-#!/bin/bash 
+#!/usr/bin/env bash
 
 # POC bash socket implementation of heartbleed (CVE-2014-0160), see also http://heartbleed.com/
 # Author: Dirk Wetter, GPLv2 see https://testssl.sh/LICENSE.txt 
