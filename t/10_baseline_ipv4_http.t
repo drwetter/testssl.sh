@@ -68,3 +68,6 @@ sub json($) {
 	return from_json($file);
 }
 
+
+#  vim:ts=5:sw=5:expandtab
+

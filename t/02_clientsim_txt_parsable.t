@@ -23,4 +23,5 @@ $tests++;
 printf "\n";
 done_testing($tests);
 
+#  vim:ts=5:sw=5:expandtab
 
