@@ -303,5 +303,5 @@ echo
 
 exit $ret
 
-#  vim:tw=200:ts=5:sw=5:expandtab
+#  vim:ts=5:sw=5:expandtab
 #  $Id: heartbleed.bash,v 1.14 2015/07/06 19:26:38 dirkw Exp $ 

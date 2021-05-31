@@ -337,7 +337,7 @@ esac
 
 exit 0
 
-# vim:ts=5:sw=5
+# vim:ts=5:sw=5:expandtab
 # $Id: checkcert.sh,v 1.20 2014/09/16 22:38:03 dirkw Exp $ 
 
 

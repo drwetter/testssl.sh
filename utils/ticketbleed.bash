@@ -348,5 +348,5 @@ fi
 
 exit 0
 
-#  vim:ts=5:sw=5
+#  vim:ts=5:sw=5:expandtab
 

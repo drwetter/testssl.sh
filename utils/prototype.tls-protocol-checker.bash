@@ -368,5 +368,5 @@ done
 echo
 exit 0
 
-#  vim:tw=110:ts=5:sw=5
+#  vim:ts=5:sw=5:expandtab
 #  $Id: prototype.tls-protocol-checker.bash,v 1.13 2015/01/12 22:28:35 dirkw Exp $ 

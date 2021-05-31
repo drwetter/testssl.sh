@@ -155,6 +155,6 @@ echo "------------ all ok ------------"
 echo
 
 
-#  vim:ts=5:sw=5
+#  vim:ts=5:sw=5:expandtab
 #  $Id: make-openssl.sh,v 1.20 2019/02/22 09:07:07 dirkw Exp $
 
