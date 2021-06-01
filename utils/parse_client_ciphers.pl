@@ -41,3 +41,5 @@ print join ":", @spec;
 print "\n";
 my $count = @spec;
 print "$count ciphers\n";
+
+#  vim:ts=5:sw=5:expandtab

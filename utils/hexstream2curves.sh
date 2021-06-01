@@ -34,3 +34,5 @@ echo
 # remove leading : because of GREASE, and trailing because of TPM_ECC_NONE
 curves="${curves%:}"
 echo ${curves#:}
+
+#  vim:ts=5:sw=5:expandtab

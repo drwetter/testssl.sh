@@ -53,3 +53,4 @@ echo "You may now run \"testssl.sh $(docker inspect $ID --format '{{.NetworkSett
 
 exit 0
 
+#  vim:ts=5:sw=5:expandtab

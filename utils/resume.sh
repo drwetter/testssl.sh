@@ -18,3 +18,5 @@ echo "--------------------------------------------------------"
 openssl s_client -connect $1:443 -servername $1 -bugs -no_ssl2 -sess_in /tmp/ssl_s  </dev/null 2>/dev/null| egrep "New|Reused|SSL handshake has read"
 
 echo
+
+#  vim:ts=5:sw=5:expandtab

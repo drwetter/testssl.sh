@@ -10,3 +10,7 @@ is($newer_bundles,"","If there's an output with a *.pem file run \"~/utils/creat
 
 printf "\n";
 done_testing;
+
+
+#  vim:ts=5:sw=5:expandtab
+
