@@ -352,5 +352,5 @@ fi
 echo
 exit $ret
 
-#  vim:tw=100:ts=5:sw=5:expandtab
+#  vim:ts=5:sw=5:expandtab
 #  $Id: ccs-injection.bash,v 1.9 2015/07/06 20:01:49 dirkw Exp $ 

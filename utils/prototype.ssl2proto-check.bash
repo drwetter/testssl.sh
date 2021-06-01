@@ -228,5 +228,5 @@ exit 0
 #test: dragon,  simhq.com=gryphon1.gryphoninternet.com  misim.gov.il,   shop4-heating.co.uk, service.hamburgwasser.de
 #                74.116.0.167                           147.237.80.2    85.92.77.27
 
-#  vim:tw=110:ts=5:sw=5
+#  vim:ts=5:sw=5:expandtab
 #  $Id: prototype.ssl2proto-check.bash,v 1.10 2015/09/25 19:02:24 dirkw Exp $ 

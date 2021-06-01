@@ -64,5 +64,5 @@ done_testing($tests);
 printf "\n";
 
 
-#  vim:tw=95:ts=5:sw=5:et
+#  vim:ts=5:sw=5:expandtab
 
