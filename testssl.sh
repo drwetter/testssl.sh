@@ -2032,10 +2032,12 @@ wait_kill(){
      return 3                 # means killed
 }
 
-# parse_date date format input-format
+# Convert date formats -- we always use GMT=UTC here
+# argv1: source date string
+# argv2: dest date sting
 if "$HAS_GNUDATE"; then            # Linux and NetBSD
      parse_date() {
-          LC_ALL=C date -d "$1" "$2"
+          LC_ALL=C TZ=GMT date -d "$1" "$2"
      }
 elif "$HAS_FREEBSDDATE"; then      # FreeBSD, OS X and newer (~6.6) OpenBSD versions
      parse_date() {
@@ -2057,7 +2059,7 @@ elif "$HAS_OPENBSDDATE"; then
      }
 else
      parse_date() {
-          LC_ALL=C date -j "$2" "$1"
+          LC_ALL=C TZ=GMT date -j "$2" "$1"
      }
 fi
 
