@@ -1,0 +1,26 @@
+name: testssl.sh CI
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: ['ubuntu-latest']
+        perl: [ '5.30', '5.26' ]
+    name: Perl ${{ matrix.perl }} on ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up perl
+        uses: shogo82148/actions-setup-perl@v1
+        with:
+          perl-version: ${{ matrix.perl }}
+      - run: perl -V
+      - name: Install deps
+        run: sudo apt install dnsutils jsonlint
+      - run: cpanm --notest Test::More
+      - run: cpanm --notest Data::Dumper
+      - run: cpanm --notest JSON
+      - run: cpanm --notest Text::Diff
+      - run: prove -v
