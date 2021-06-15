@@ -1,4 +1,6 @@
-#/bin/sh -e
+#!/usr/bin/env bash
+
+set -e
 
 # utility which converts grepable nmap outout to testssl's file input
 
