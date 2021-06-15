@@ -28,7 +28,7 @@ check_result() {
 
      remove_quotes
      json_result="$(awk '/id.*'"${1}"'/,/finding.*$/' $FILE)"
-     [[ -z $json_result ]] && exit -1
+     [[ -z $json_result ]] && exit 1
      # is4lines?
      finding_value="$(awk -F':' '/finding/ { print $2" "$3" "$4 }' <<< "$json_result")"
      if [[ $# -eq 2 ]]; then

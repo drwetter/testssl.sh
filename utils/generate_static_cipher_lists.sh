@@ -96,7 +96,7 @@ get_mapping_file() {
 
      if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] ; then
           outln "\nATTENTION: No cipher mapping file found!"
-          exit -2
+          exit 2
      fi
 
      while read TLS_CIPHER_HEXCODE[TLS_NR_CIPHERS] n TLS_CIPHER_OSSL_NAME[TLS_NR_CIPHERS] TLS_CIPHER_RFC_NAME[TLS_NR_CIPHERS] TLS_CIPHER_SSLVERS[TLS_NR_CIPHERS] TLS_CIPHER_KX[TLS_NR_CIPHERS] TLS_CIPHER_AUTH[TLS_NR_CIPHERS] TLS_CIPHER_ENC[TLS_NR_CIPHERS] mac TLS_CIPHER_EXPORT[TLS_NR_CIPHERS]; do
