@@ -14614,8 +14614,9 @@ run_breach() {
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for BREACH (HTTP compression) vulnerability " && outln
      pr_bold " BREACH"; out " ($cve)                    "
      if "$CLIENT_AUTH"; then
-          outln "cannot be tested (server side requires x509 authentication)"
-          fileout "$jsonID" "INFO" "was not tested, server side requires x509 authentication" "$cve" "$cwe"
+          prln_warning "client x509-based authentication prevents this from being tested"
+          fileout "$jsonID" "WARN" "client x509-based authentication prevents this from being tested" "$cve" "$cwe"
+          return 7
      fi
 
      # if [[ $NR_HEADER_FAIL -ge $MAX_HEADER_FAIL ]]; then
