@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 #
 # This script compiles the "bad openssl" version, 1.0.2 supporting legacy
 # cryptography for Linux, FreeBSD and Darwin.
