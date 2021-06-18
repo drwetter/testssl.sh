@@ -62,8 +62,8 @@ HN="$1"
 [ -z "$HN" ] && HN=testssl.sh
 find_openssl_binary 
 
-ERRFILE=$(mktemp /tmp/curve_tester.R.XXXXXX) || exit -6
-TMPFILE=$(mktemp /tmp/curve_tester.T.XXXXXX) || exit -6
+ERRFILE=$(mktemp /tmp/curve_tester.R.XXXXXX) || exit 6
+TMPFILE=$(mktemp /tmp/curve_tester.T.XXXXXX) || exit 6
 
 
 for curve in $($OPENSSL ecparam -list_curves | awk -F':' '/:/ { print $1 }'); do
