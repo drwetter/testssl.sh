@@ -1,16 +1,27 @@
 name: testssl.sh CI
 
-on: [push, pull_request]
-  paths-ignore:
-    - 'utils/**'
-    - 'docs/**'
-    - 'bin/**'
-    - '**.md'
-    - '**.pem'
-    - '**.pdf'
-    - '**.html'
-    - 'LICENSE'
-    - 'Dockerfile'
+on:
+  push:
+    paths-ignore:
+      - 'utils/**'
+      - 'docs/**'
+      - 'bin/**'
+      - '**.md'
+      - '**.pem'
+      - '**.pdf'
+      - '**.html'
+      - 'LICENSE'
+      - 'Dockerfile'
+    pull_request:
+      - 'utils/**'
+      - 'docs/**'
+      - 'bin/**'
+      - '**.md'
+      - '**.pem'
+      - '**.pdf'
+      - '**.html'
+      - 'LICENSE'
+      - 'Dockerfile'
 
 jobs:
   build:
