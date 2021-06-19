@@ -1,14 +1,24 @@
 name: testssl.sh CI
 
 on: [push, pull_request]
+   paths-ignore:
+      - 'utils/**'
+      - 'docs/**'
+      - 'bin/**'
+      - '**.md'
+      - '**.pem'
+      - '**.pdf'
+      - '**.html'
+      - 'LICENSE'
+      - 'Dockerfile'
 
 jobs:
   build:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: ['ubuntu-latest']
-        perl: [ '5.30', '5.26' ]
+        os: ['ubuntu-20.04']
+        perl: [ '5.26' ]
     name: Perl ${{ matrix.perl }} on ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v2
