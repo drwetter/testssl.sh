@@ -1,0 +1,133 @@
+#!/usr/bin/env perl
+
+# baseline test for testssl, screen and JSON output using the supplied openssl binary
+# in server mode
+
+use strict;
+use Test::More;
+use Data::Dumper;
+# use IPC::Open3;
+use JSON;
+
+my $tests = 0;
+my $prg="./testssl.sh";
+my $check2run="--warnings=off -p -s -P --fs -S -h -U --ids-friendly -c -q --ip=one --color 0";
+my $uri="localhost:4433";
+my $socket_out="";
+my $openssl_out="";
+# Blacklists we use to trigger an error:
+my $socket_regex_bl='(e|E)rror|\.\/testssl\.sh: line |(f|F)atal|(c|C)ommand not found';
+my $openssl_regex_bl='(e|E)rror|(f|F)atal|\.\/testssl\.sh: line |Oops|s_client connect problem|(c|C)ommand not found';
+my $json_regex_bl='(id".*:\s"scanProblem"|severity".*:\s"FATAL"|"Scan interrupted")';
+
+my $socket_json="";
+my $openssl_json="";
+
+my $debug=1;
+
+my $crt="/tmp/server.crt";
+my $key="/tmp/server.pem";
+
+my $pid=0;
+
+my $ossl = "bin/openssl." . `uname -s` . "." . `uname -m`;
+$ossl =~ s/\R//g;                                       # remove LFs
+
+die "Unable to open $prg" unless -f $prg;
+die "Unable to open $ossl" unless -f $ossl;
+
+
+$check2run="--jsonfile tmp.json $check2run";
+
+
+# Provide proper start conditions
+unlink "tmp.json";
+
+# Title
+printf "\n%s\n", "Baseline unit tests against \"$uri\"";
+
+gen_cert();
+
+
+#1
+printf "\n%s\n", "1. Pure SSLv2 server...";
+start_server(-ssl2);
+
+printf "$prg $check2run $uri\n" if $debug ;
+$socket_out = `$prg $check2run $uri 2>&1`;
+print "$socket_out" if $debug;
+
+$socket_json = json('tmp.json');
+unlink "tmp.json";
+unlike($socket_out, qr/$socket_regex_bl/, "via sockets, terminal output");
+$tests++;
+unlike($socket_json, qr/$json_regex_bl/, "via sockets JSON output");
+$tests++;
+
+
+#2
+stop_server ($pid);
+start_server ('-cipher ALL:COMPLEMENTOFALL -alpn "h2" -nextprotoneg "spdy/3, http/1.1"');
+printf "$prg $check2run $uri\n" if $debug ;
+$socket_out = `$prg $check2run $uri 2>&1`;
+print "$socket_out" if $debug;
+
+$socket_json = json('tmp.json');
+unlink "tmp.json";
+unlike($socket_out, qr/$socket_regex_bl/, "via sockets, terminal output");
+$tests++;
+unlike($socket_json, qr/$json_regex_bl/, "via sockets JSON output");
+$tests++;
+
+
+stop_server ($pid);
+
+done_testing($tests);
+printf "\n";
+
+
+
+
+sub gen_cert {
+	local $a;
+
+	$a=`$ossl req -new -x509 -out /tmp/server.crt -nodes -keyout /tmp/server.pem -subj '/CN=localhost' &>/dev/null`;
+	printf "$a\n" if $debug;
+
+	die "unable to generate $crt" unless -s $crt;
+	die "unable to generate $key" unless -s $key;
+}
+
+sub start_server ($) {
+	my $arg=shift;
+
+	$ENV{OPENSSL_CONF} = '';
+	print "Start server with: OPENSSL_CONF='' $ossl s_server -www $arg -key /tmp/server.pem -cert /tmp/server.crt &>/dev/null &\n" if $debug;
+
+	system ("OPENSSL_CONF='' $ossl s_server -www $arg -key /tmp/server.pem -cert /tmp/server.crt &>/dev/null &");
+
+	# this sucks bug time. But open3 doesn't allow to pass ENV and this:   $ENV{OPENSSL_CONF} = '';     doesn't work
+	$pid= `pgrep -f  'openssl.*server.*pem'`;
+
+	#$pid = open3( $in, $out, $err, '$ossl s_server -www $arg -key /tmp/server.pem -cert /tmp/server.crt &');
+	print "pid: $pid\n" if $debug;
+}
+
+sub stop_server ($) {
+	my $pid=shift;
+
+	print "kill: $pid\n" if $debug;
+	kill 'KILL', $pid;
+	sleep 1 if $debug;
+	`ps -ef | grep $pid` if $debug;
+}
+
+
+
+sub json($) {
+	my $file = shift;
+	$file = `cat $file`;
+	unlink $file;
+	return from_json($file);
+}
+
