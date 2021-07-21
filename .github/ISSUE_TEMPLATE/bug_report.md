@@ -7,7 +7,7 @@ assignees: ''
 
 ---
 
-_Feel free to remove this line but please stick to the template. We would like to reproduce the bug and therefore need concise information. _
+_Feel free to remove this line but please stick to the template. We would like to reproduce the bug and therefore need concise information. Depending on the completeness of your information provided we might close your issue otherwise. _
 
 **Please check this repo whether this is a known issue**
 
