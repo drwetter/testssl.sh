@@ -206,6 +206,7 @@ Also for multiple server certificates are being checked for as well as for the c
 `-h, --header, --headers`       if the service is HTTP (either by detection or by enforcing via `--assume-http`. It tests several HTTP headers like
 
 * HTTP Strict Transport Security (HSTS)
+    - HSTS preload list status (when `--phone-out` supplied)
 * HTTP Public Key Pinning (HPKP)
 * Server banner
 * HTTP date+time
