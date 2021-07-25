@@ -19003,17 +19003,12 @@ nmap_to_plain_file() {
      else
           fatal "Nmap file $FNAME is not in grep(p)able format (-oG filename.g(n)map)" $ERR_FNAMEPARSE
      fi
-     # strip extension and create output file *.txt in same folder
+     # create ${FNAME%.*}.txt in $TEMPDIR
      target_fname="${FNAME%.*}.txt"
-     > "${target_fname}"
-     if [[ $? -ne 0 ]]; then
-          # try to just create ${FNAME%.*}.txt in the same dir as the gnmap file failed.
-          # backup is using one in $TEMPDIR
-          target_fname="${target_fname##*\/}"     # strip path (Unix)
-          target_fname="${target_fname##*\\}"     # strip path (Dos)
-          target_fname="$TEMPDIR/$target_fname"
-          > "${target_fname}" || fatal "Cannot create \"${target_fname}\"" $ERR_FCREATE
-     fi
+     target_fname="${target_fname##*\/}"     # strip path (Unix)
+     target_fname="${target_fname##*\\}"     # strip path (Dos)
+     target_fname="$TEMPDIR/$target_fname"
+     > "${target_fname}" || fatal "Cannot create \"${target_fname}\"" $ERR_FCREATE
 
      # Line x:   "Host: AAA.BBB.CCC.DDD (<FQDN>) Status: Up"
      # Line x+1: "Host: AAA.BBB.CCC.DDD (<FQDN>) Ports: 443/open/tcp//https///"
