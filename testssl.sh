@@ -21353,7 +21353,7 @@ nmap_to_plain_file() {
      local target_fname=""
      local oneline=""
      local ip hostdontcare round_brackets ports_specs starttls
-     local tmp port host_spec protocol dontcare dontcare1
+     local tmp port host_spec protocol ssl_hint dontcare dontcare1
      #FIXME: IPv6 is missing here
 
      # Ok, since we are here we are sure to have an nmap file. To avoid questions we make sure it's the right format too
@@ -21394,11 +21394,15 @@ nmap_to_plain_file() {
           while read -r oneline; do
                # 25/open/tcp//smtp//<banner>/,
                [[ "$oneline" =~ '/open/tcp/' ]] || continue                # no open tcp for this port on this IP --> move on
-               IFS=/ read -r port dontcare protocol dontcare1 <<< "$oneline"
-               starttls="$(ports2starttls $port)"
-               [[ $? -eq 1 ]] && continue                                  # nmap got a port but we don't know how to speak to
-               [[ "$DEBUG" -ge 1 ]] && echo "${starttls}$host_spec:$port"
-               echo "${starttls}${host_spec}:${port}" >>"$target_fname"
+               IFS=/ read -r port dontcare protocol ssl_hint dontcare1 <<< "$oneline"
+               if [[ "$ssl_hint" =~ ^(ssl|https) ]] || [[ "$dontcare1" =~ ^(ssl|https) ]]; then
+                    echo "${host_spec}:${port}" >>"$target_fname"
+               else
+                    starttls="$(ports2starttls $port)"
+                    [[ $? -eq 1 ]] && continue                             # nmap got a port but we don't know how to speak to
+                    [[ "$DEBUG" -ge 1 ]] && echo "${starttls}$host_spec:$port"
+                    echo "${starttls}${host_spec}:${port}" >>"$target_fname"
+               fi
           done < <(tr ',' '\n' <<< "$ports_specs")
      done < "$FNAME"
      [[ "$DEBUG" -ge 1 ]] && echo
