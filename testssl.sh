@@ -1555,6 +1555,14 @@ prepare_logging() {
 
 ################### END all file output functions #########################
 
+# prints a string of n spaces (n < 80)
+print_n_spaces() {
+     local -i n="$1"
+     local spaces="                                                                                "
+
+     out "${spaces:0:n}"
+}
+
 # prints out multiple lines in $1, left aligned by spaces in $2
 out_row_aligned() {
      local first=true
@@ -1638,14 +1646,12 @@ out_row_aligned_max_width_by_entry() {
 
 print_fixed_width() {
      local text="$1"
-     local -i i len width="$2"
+     local -i len width="$2"
      local print_function="$3"
 
      len=${#text}
      $print_function "$text"
-     for (( i=len; i <= width; i++ )); do
-          out " "
-     done
+     print_n_spaces "$((width-len+1))"
 }
 
 # saves $TMPFILE or file supplied in $2 under name "$TEMPDIR/$NODEIP.$1".
@@ -3570,9 +3576,7 @@ neat_list(){
           fi
      fi
      len=${#kx}
-     for (( i=len; i<10; i++ )); do
-          out " "
-     done
+     print_n_spaces "$((10-len))"
      out "$(printf -- " %-12s%-8s " "$enc" "$strength")"
      if [[ "$COLOR" -le 2 ]]; then
           if [[ "$DISPLAY_CIPHERNAMES" == rfc ]]; then
@@ -4984,13 +4988,9 @@ run_client_simulation() {
                               pr_cipher_quality "$cipher"
                          fi
                          if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]]; then
-                              for (( j=${#cipher}; j < 34; j++ )); do
-                                   out " "
-                              done
+                              print_n_spaces "$((34-${#cipher}))"
                          else
-                              for (( j=${#cipher}; j < 50; j++ )); do
-                                   out " "
-                              done
+                              print_n_spaces "$((50-${#cipher}))"
                          fi
                          if [[ -n "$what_dh" ]]; then
                               [[ -n "$curve" ]] && curve="($curve)"
