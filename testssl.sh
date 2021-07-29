@@ -815,6 +815,13 @@ count_chars() {
      echo $(wc -c <<< "$1")
 }
 
+# arg1: string to search within
+# arg2: char to count (or pattern like 1|2 )
+count_char_occurence() {
+     local nr=${1//[^$2]}
+     echo ${#nr}
+}
+
 newline_to_spaces() {
      tr '\n' ' ' <<< "$1" | sed 's/ $//'
 }
@@ -2232,7 +2239,7 @@ service_detection() {
                # trying with sockets is better than not even trying.
                tls_sockets "04" "$TLS13_CIPHER" "all+" "" "" false
                if [[ $? -eq 0 ]]; then
-                    plaintext="$(tm_out "$GET_REQ11" | hexdump -v -e '16/1 "%02X"')"
+                    plaintext="$(safe_echo "$GET_REQ11" | hexdump -v -e '16/1 "%02X"')"
                     plaintext="${plaintext%%[!0-9A-F]*}"
                     send_app_data "$plaintext"
                     if [[ $? -eq 0 ]]; then
@@ -2247,7 +2254,7 @@ service_detection() {
                fi
           else
                # SNI is not standardized for !HTTPS but fortunately for other protocols s_client doesn't seem to care
-               tm_out "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$1 -quiet $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE &
+               safe_echo "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$1 -quiet $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE &
                wait_kill $! $HEADER_MAXSLEEP
                was_killed=$?
           fi
@@ -2343,12 +2350,12 @@ run_http_header() {
 
      pr_bold " HTTP Status Code           "
      [[ -z "$1" ]] && url="/" || url="$1"
-     tm_out "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") >$HEADERFILE 2>$ERRFILE &
+     safe_echo "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") >$HEADERFILE 2>$ERRFILE &
      wait_kill $! $HEADER_MAXSLEEP
      if [[ $? -eq 0 ]]; then
           # Issue HTTP GET again as it properly finished within $HEADER_MAXSLEEP and didn't hang.
           # Doing it again in the foreground to get an accurate header time
-          tm_out "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") >$HEADERFILE 2>$ERRFILE
+          safe_echo "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") >$HEADERFILE 2>$ERRFILE
           NOW_TIME=$(date "+%s")
           HTTP_TIME=$(awk -F': ' '/^date:/ { print $2 }  /^Date:/ { print $2 }' $HEADERFILE)
           HAD_SLEPT=0
@@ -7376,6 +7383,251 @@ tls_time() {
      return 0
 }
 
+# rfc8461, rfc8460
+#
+sub_mta_sts() {
+     local mta_sts_record=""
+     local policy=""
+     local smtp_tls_record=""
+     local spaces="$1"
+     # we might reconsider this as booleans arent very flexible:
+     local mta_sts_record_ok=false policy_ok=false smtp_tls_record_ok=false
+     local -a failreason_policy=()
+     local -a failreason_mtasts_rec=()
+     local jsonID="smtp_mtasts"
+     local mx_record=""
+     local domain=""
+     local fqdnparts=$(count_words "${URI//./ }")
+     local useragent="$UA_STD"
+     $SNEAKY && useragent="$UA_SNEAKY"
+
+     [[ ! "$STARTTLS_PROTOCOL" =~ smtp ]] && return 0
+
+# echo "NODE: $NODE / URI: $URI / CMDLINE: ${CMDLINE[@]}"
+
+     pr_bold " MTA-STS Policy               "
+
+     if [[ "${CMDLINE[@]}" =~ \ --mx\  ]]; then
+          domain="$URI"
+     elif [[ fqdnparts -eq 2 ]] && [[ "$NODE" == ${URI%:*} ]]; then
+          # remove the port and check whether bot are the same when there's no subdomain
+          domain="$NODE"
+     else
+          # What's left now is a sub.domain.tld or sub.sub.domain.tld or ...
+          # But we implement first a safety measure to prevent querying a tld
+          if [[ $(count_words "${NODE//./ }") -ge 3 ]]; then
+               # we query sub.domain.tld first whether is has a _mta-sts TXT record
+               domain="$NODE"
+               mta_sts_record="$(get_txt_record _mta-sts.$domain)"
+               if [[ -z "$mta_sts_record" ]]; then
+                    # strip the (first sub):
+                    domain="${NODE#*.}"
+                    mta_sts_record="$(get_txt_record _mta-sts.$domain)"
+               fi
+          else
+               echo "#FIXME"
+               echo "NODE: $NODE / URI: $URI / CMDLINE: ${CMDLINE[@]}"
+          fi
+     fi
+
+     # 2+ level of subdomains?
+     # we check only for the TXT record in subdomains and give up if there's nothing??
+     # Possible that TXT record for domain overrides sub domain. if so: when ?
+     # - ./testssl.sh -S --mx gmail.com --> no _mta-sts TXT record ?
+     # -  --mx does this for every single MX. As the values are domain specific: global array?
+     # How about policy delegation (CNAME?) --> Not tested yet
+
+     [[ -z "$mta_sts_record" ]] && mta_sts_record="$(get_txt_record _mta-sts.$domain)"
+     # echo "$mta_sts_record"; echo
+
+     mta_sts_record_ok=true
+
+     if [[ -z "$mta_sts_record" ]]; then
+          failreason_mtasts_rec="no record"
+          mta_sts_record_ok=false
+     else
+          if [[ $(count_char_occurence "$mta_sts_record" ';') -ne 2 ]]; then
+               failreason_mtasts_rec+=("number of ; should be 2")
+               mta_sts_record_ok=false
+          fi
+          IFS=';' read v id <<< "${mta_sts_record}"
+          if [[ ! "$v" == v=STSv1 ]] ; then
+               failreason_mtasts_rec+=("v seems wrong")
+               mta_sts_record_ok=false
+          fi
+          if [[ ! "$id" =~ ^[\ ]+id= ]]; then
+               failreason_mtasts_rec+=("id seems wrong: $id")
+               mta_sts_record_ok=false
+          else
+               id="${id#*=}"       # strip key
+               if [[ ! "$id" =~ ^[[:alnum:]]{1,32}$ ]]; then
+                    failreason_mtasts_rec+=("'id' should be up to 32 alnum chars ")
+                    mta_sts_record_ok=false
+               fi
+          fi
+     fi
+
+     policy="$(safe_echo "GET /.well-known/mta-sts.txt HTTP/1.1\r\nHost: mta-sts.$domain\r\nUser-Agent: $useragent\r\nAccept-Encoding: identity\r\nAccept: text/*\r\nConnection: Close\r\n\r\n" | $OPENSSL s_client $(s_client_options "-quiet -ign_eof -connect mta-sts.$domain:443 $PROXY -servername mta-sts.$domain") 2>$ERRFILE)"
+     # echo "${PIPESTATUS[0]} ${PIPESTATUS[1]} ${PIPESTATUS[2]}"
+     # set -o pipefail? --> https://unix.stackexchange.com/questions/14270/get-exit-status-of-process-thats-piped-to-another
+    # here also the openssl return val needs to be checked
+
+     policy="$(print_after_blankline "$policy")"
+     # echo "$policy"; echo
+
+     # Syntax check, keep in mind $policy appears in bash as a single line with Unix LF (0a).
+     policy_ok=true
+     if [[ -z "$policy" ]]; then
+          policy_ok=false
+     else
+          for c in version mode mx max_age; do
+               if [[ ! "$policy" =~ $c: ]] && [[ ! "$policy" =~ $c\ : ]]; then
+                    policy_ok=false
+                    failreason_policy+=("$c wrong formatted/missing")
+               fi
+          done
+
+          #TODO: check with RFC wrt to the format of the policy
+          if "$policy_ok"; then
+               if [[ ! "$policy" =~ version:[\ ]+STSv1 ]]; then
+                    failreason_policy+=("version should be STSv1 ")
+                    policy_ok=false
+               fi
+               if [[ ! "$policy" =~ max_age:[\ ]+[0-9]{1,20} ]]; then
+                    failreason_policy+=("max age is not a number")
+                    policy_ok=false
+               fi
+               if [[ ! "$policy" =~ mode:[\ ]+(enforce|testing|none) ]]; then
+                    failreason_policy+=("policy should be either testing, enforce or none")
+                    policy_ok=false
+               fi
+               if [[ "$policy" =~ mode:[\ ]+testing ]]; then
+                    policy_mode=testing
+               fi
+               if [[ "$policy" =~ mode:[\ ]+none ]]; then
+                    policy_mode=none
+               fi
+          fi
+     fi
+     [[ -n "$failreason_policy" ]] && policy_ok=false
+     # get max_age:
+
+     # check policy:
+     # - max_age should be sufficient otherwise caching it is ~useless, see HSTS
+     # - whether mx record matches
+     # - check against https://tools.ietf.org/html/rfc8461#section-3.2
+
+     if [[ $DEBUG -ge 1 ]]; then
+          echo "$mta_sts_record" >$TEMPDIR/_mta-sts.$domain.txt
+          echo "$policy" >$TEMPDIR/$domain.policy_mta-sts.txt
+          echo "$smtp_tls_record" > $TEMPDIR/_smtp._tls.$domain
+     fi
+
+     smtp_tls_record="$(get_txt_record _smtp._tls.$domain)"
+     # for the time being:
+     [[ -n "$smtp_tls_record" ]] && smtp_tls_record_ok=true
+
+     # now the verdicts
+     if "$mta_sts_record_ok"; then
+          pr_svrty_good "valid"
+          outln " _mta-sts TXT record '$mta_sts_record'"
+          # quotes!
+          fileout "${jsonID}_txtrecord" "OK" "valid _mta-sts TXT record $mta_sts_record"
+     elif [[ -z "$mta_sts_record" ]]; then
+          pr_svrty_low "no"
+          outln " _mta-sts TXT record"
+          fileout "${jsonID}_txtrecord" "LOW" "no _mta-sts TXT record"
+     else
+          pr_svrty_low "invalid"
+          # Append to every element a string, here: '|'. n would work as well but we'd need $spaces.
+          # Catch is also for the last, so maybe we should avoid arrays
+          # Hint is from https://web.archive.org/web/20101114051536/http://codesnippets.joyent.com/posts/show/1826
+          failreason_mtasts_rec=( "${failreason_mtasts_rec[@]/%/ | }" )
+          fileout "${jsonID}_txtrecord" "LOW" "invalid _mta-sts TXT record $mta_sts_record $(printf '%s | ' "{failreason_mtasts_rec[@]}")"
+          outln " _mta-sts TXT record '${mta_sts_record}'\n${spaces}   $(printf '%s' "${failreason_mtasts_rec[@]}")"
+     fi
+     out "$spaces"
+
+     if "$policy_ok"; then
+          if [[ $policy_mode == testing ]]; then
+               out "\"none\" is a valid policy but why are you using it?"
+               fileout "${jsonID}_policy" "INFO" "none is valid but not a helpful policy at https://mta-sts.$domain/.well-known/mta-sts.txt"
+          elif [[ $policy_mode == testing ]]; then
+               out "valid but not enforced"
+               fileout "${jsonID}_policy" "INFO" "valid but not enforced policy at https://mta-sts.$domain/.well-known/mta-sts.txt"
+          else
+               pr_svrty_good "valid and enforced"
+               fileout "${jsonID}_policy" "OK" "valid and enforced policy at https://mta-sts.$domain/.well-known/mta-sts.txt"
+          fi
+          outln " policy https://mta-sts.$domain/.well-known/mta-sts.txt"
+     elif [[ -z "$policy" ]]; then
+          pr_svrty_low "no policy"
+          outln " at https://mta-sts.$domain/.well-known/mta-sts.txt"
+          fileout "${jsonID}_policy" "LOW" "no policy at https://mta-sts.$domain/.well-known/mta-sts.txt"
+     else
+          # missing: too short, not enforced, etc..
+          pr_svrty_low "invalid policy"
+          failreason_policy=( "${failreason_policy[@]/%/ | }" )
+          fileout "${jsonID}_policy" "LOW" "invalid policy  https://mta-sts.$domain/.well-known/mta-sts.txt: $(printf '%s' ${failreason_policy[@]})"
+          outln " at https://mta-sts.$domain/.well-known/mta-sts.txt: $(printf '%s' ${failreason_policy[@]})"
+     fi
+     out "$spaces"
+
+     if "$smtp_tls_record_ok"; then
+          outln "found optional TLS RPT TXT record '$smtp_tls_record'"
+          fileout "${jsonID}_tlsrpt" "INFO" "optional TLS-RPT TXT record '$smtp_tls_record'"
+     else
+          outln "No TLS RPT record"
+          fileout "${jsonID}_tlsrpt" "INFO" "no or invalid optional TLS RPT record '$smtp_tls_record'"
+     fi
+
+     return 0
+}
+
+# e.g. for removing the HTTP header. To be moved to the top
+#
+print_after_blankline() {
+     local first=true
+     local line=""
+
+     while read -r line; do
+          if ! "$first"; then
+               safe_echo "$line\n"
+          else
+               # ignore everything until we hit an empty line or a line with a blank or a CR / LF
+               if [[ -z "$line" ]] || [[ "$line" =~ ^[[:space:]]$ ]]; then
+                    first=false
+                    continue
+               fi
+          fi
+     done <<< $1
+}
+
+
+
+# RFC 6394
+# RFC 6698
+# RFC 7218
+# RFC 7671
+# RFC 7672
+# RFC 7673
+sub_dane() {
+     local tlsa_record=""
+     local rrsig_record=""
+     local spaces="$1"
+
+     # Not yet implemeted
+     return 0
+
+     pr_bold " DANE / DNSSEC                "
+
+     tlsa_record="$(get_tlsa_record _$PORT._tcp.$NODE)"
+     # parsing TLSA certificate usage, TLSA selector, TLSA matching type, hash
+     rrsig_record="$(get_rrsig_record $NODE)"
+
+     # return 0
+}
+
 # core function determining whether handshake succeeded or not
 # arg1: return value of "openssl s_client connect"
 # arg2: temporary file with the server hello
@@ -9497,6 +9749,7 @@ run_server_defaults() {
      local -a -i success
      local cn_nosni cn_sni sans_nosni sans_sni san tls_extensions client_auth_ca
      local using_sockets=true
+     local spaces="                              "
 
      "$SSL_NATIVE" && using_sockets=false
 
@@ -9843,6 +10096,9 @@ run_server_defaults() {
 
      tls_time
 
+     sub_mta_sts "$spaces"
+     sub_dane "$spaces"
+
      jsonID="clientAuth"
      pr_bold " Client Authentication        "
      outln "$CLIENT_AUTH"
@@ -9859,9 +10115,8 @@ run_server_defaults() {
                     fileout "$jsonID #$i" "INFO" "$client_auth_ca"
                     i+=1
                done <<< "$CLIENT_AUTH_CA_LIST"
-               fi
+          fi
      fi
-     
 
      if [[ -n "$SNI" ]] && [[ $certs_found -ne 0 ]] && [[ ! -e $HOSTCERT.nosni ]]; then
           # no cipher suites specified here. We just want the default vhost subject
@@ -19499,11 +19754,11 @@ prepare_debug() {
           cat >$TEMPDIR/environment.txt << EOF
 
 
-CVS_REL: $CVS_REL
 GIT_REL: $GIT_REL
 
 PID: $$
-commandline: "$CMDLINE"
+commandline: ${CMDLINE[@]}
+URI: $URI
 bash version: ${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}.${BASH_VERSINFO[2]}
 status: ${BASH_VERSINFO[4]}
 machine: ${BASH_VERSINFO[5]}
@@ -19888,7 +20143,7 @@ parse_hn_port() {
      NODE="$1"
      NODE="${NODE/https\:\/\//}"        # strip "https"
      NODE="${NODE%%/*}"                 # strip trailing urlpath
-     NODE="${NODE%%.}"                  # strip trailing "." if supplied
+
      if grep -q ':$' <<< "$NODE"; then
           if grep -wq http <<< "$NODE"; then
                fatal "\"http\" is not what you meant probably" $ERR_CMDLINE
@@ -19910,6 +20165,7 @@ parse_hn_port() {
           grep -q ':' <<< "$NODE" && \
                PORT=$(sed 's/^.*\://' <<< "$NODE") && NODE=$(sed 's/\:.*$//' <<< "$NODE")
      fi
+     NODE="${NODE%%.}"                  # strip trailing "." if supplied
 
      # We check for non-ASCII chars now. If there are some we'll try to convert it if IDN/IDN2 is installed
      # If not, we'll continue. Hoping later that dig can use it. If not the error handler will tell
@@ -20046,7 +20302,6 @@ get_a_record() {
      local saved_openssl_conf="$OPENSSL_CONF"
      local noidnout=""
 
-     "$HAS_DIG_NOIDNOUT" && noidnout="+noidnout"
      [[ "$NODNS" == none ]] && return 0      # if no DNS lookup was instructed, leave here
      if [[ "$1" == localhost ]]; then
           # This is a bit ugly but prevents from doing DNS lookups which could fail
@@ -20069,6 +20324,7 @@ get_a_record() {
           fi
      fi
      if [[ -z "$ip4" ]] && "$HAS_DIG"; then
+          "$HAS_DIG_NOIDNOUT" && noidnout="+noidnout"
           ip4=$(filter_ip4_address $(dig +short +timeout=2 +tries=2 $noidnout -t a "$1" 2>/dev/null | awk '/^[0-9]/ { print $1 }'))
      fi
      if [[ -z "$ip4" ]] && "$HAS_HOST"; then
@@ -20081,7 +20337,7 @@ get_a_record() {
           ip4=$(filter_ip4_address $(strip_lf "$(nslookup -querytype=a "$1" 2>/dev/null | awk '/^Name/ { getline; print $NF }')"))
      fi
      OPENSSL_CONF="$saved_openssl_conf"      # see https://github.com/drwetter/testssl.sh/issues/134
-     echo "$ip4"
+     safe_echo "$ip4"
 }
 
 # arg1: a host name. Returned will be 0-n IPv6 addresses
@@ -20091,7 +20347,6 @@ get_aaaa_record() {
      local saved_openssl_conf="$OPENSSL_CONF"
      local noidnout=""
 
-     "$HAS_DIG_NOIDNOUT" && noidnout="+noidnout"
      [[ "$NODNS" == none ]] && return 0      # if no DNS lookup was instructed, leave here
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
      if is_ipv6addr "$1"; then
@@ -20112,6 +20367,7 @@ get_aaaa_record() {
                     fatal "Local hostname given but no 'avahi-resolve' or 'dig' available." $ERR_DNSBIN
                fi
           elif "$HAS_DIG"; then
+               "$HAS_DIG_NOIDNOUT" && noidnout="+noidnout"
                ip6=$(filter_ip6_address $(dig +short +timeout=2 +tries=2 $noidnout -t aaaa "$1" 2>/dev/null | awk '/^[0-9]/ { print $1 }'))
           elif "$HAS_HOST"; then
                ip6=$(filter_ip6_address $(host -t aaaa "$1" | awk '/address/ { print $NF }'))
@@ -20122,7 +20378,7 @@ get_aaaa_record() {
           fi
      fi
      OPENSSL_CONF="$saved_openssl_conf"      # see https://github.com/drwetter/testssl.sh/issues/134
-     echo "$ip6"
+     safe_echo "$ip6"
 }
 
 # RFC6844: DNS Certification Authority Authorization (CAA) Resource Record
@@ -20137,7 +20393,6 @@ get_caa_rr_record() {
      local all_caa=""
      local noidnout=""
 
-     "$HAS_DIG_NOIDNOUT" && noidnout="+noidnout"
 
      [[ -n "$NODNS" ]] && return 0           # if minimum DNS lookup was instructed, leave here
      # if there's a type257 record there are two output formats here, mostly depending on age of distribution
@@ -20148,6 +20403,7 @@ get_caa_rr_record() {
      # caa_property then has key/value pairs, see https://tools.ietf.org/html/rfc6844#section-3
      OPENSSL_CONF=""
      if "$HAS_DIG"; then
+          "$HAS_DIG_NOIDNOUT" && noidnout="+noidnout"
           raw_caa="$(dig +short +timeout=3 +tries=3 $noidnout type257 "$1" 2>/dev/null | awk '{ print $1" "$2" "$3 }')"
           # empty if no CAA record
      elif "$HAS_DRILL"; then
@@ -20213,12 +20469,12 @@ get_mx_record() {
      local saved_openssl_conf="$OPENSSL_CONF"
      local noidnout=""
 
-     "$HAS_DIG_NOIDNOUT" && noidnout="+noidnout"
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
      # we need the last two columns here
      if "$HAS_HOST"; then
           mx="$(host -t MX "$1" 2>/dev/null | awk '/is handled by/ { print $(NF-1), $NF }')"
      elif "$HAS_DIG"; then
+          "$HAS_DIG_NOIDNOUT" && noidnout="+noidnout"
           mx="$(dig +short $noidnout -t MX "$1" 2>/dev/null | awk '/^[0-9]/ { print $1" "$2 }')"
      elif "$HAS_DRILL"; then
           mx="$(drill mx $1 | awk '/IN[ \t]MX[ \t]+/ { print $(NF-1), $NF }')"
@@ -20229,36 +20485,47 @@ get_mx_record() {
           fatal "No dig, host, drill or nslookup" $ERR_DNSBIN
      fi
      OPENSSL_CONF="$saved_openssl_conf"
-     echo "$mx"
+     safe_echo "$mx"
 }
 
 # arg1: domain / hostname. Returned will be the TXT record as a string which can be multilined
-# (one entry per line), for e.g. non-MTA-STS records.
-# Is supposed to be used by MTA STS in the future like get_txt_record _mta-sts.DOMAIN.TLD
+# (one entry per line), for e.g. MTA-STS records.
+#
 get_txt_record() {
      local record=""
      local saved_openssl_conf="$OPENSSL_CONF"
      local noidnout=""
 
-     "$HAS_DIG_NOIDNOUT" && noidnout="+noidnout"
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
      # we need the last two columns here and strip any remaining double quotes later
      if "$HAS_HOST"; then
-          record="$(host -t TXT "$1" 2>/dev/null | awk -F\" '/descriptive text/ { print $(NF-1) }')"
+          record="$(host -t TXT "$1" 2>/dev/null | grep 'descriptive text')"
      elif "$HAS_DIG"; then
+          "$HAS_DIG_NOIDNOUT" && noidnout="+noidnout"
           record="$(dig +short $noidnout -t TXT "$1" 2>/dev/null)"
+          record="${record% from*}"
      elif "$HAS_DRILL"; then
-          record="$(drill txt $1 | awk -F\" '/^[a-z0-9].*TXT/ { print $(NF-1) }')"
+          record="$(drill txt $1 | grep "^$1.*TXT")"
      elif "$HAS_NSLOOKUP"; then
-          record="$(strip_lf "$(nslookup -type=MX "$1" 2>/dev/null | awk -F= '/text/ { print $(NF-1), $NF }')")"
+          record="$(nslookup -type=TXT "$1" 2>/dev/null | grep -w text)"
      else
           # shouldn't reach this, as we checked in the top
           fatal "No dig, host, drill or nslookup" $ERR_DNSBIN
      fi
      OPENSSL_CONF="$saved_openssl_conf"
-     echo "${record//\"/}"
+     # Now, strip everything until the first double quote. Attention: $record may contain a couple of quotes!
+     # Also we readd the leading double quote. That is wrong if the record is empty. So we need to fix that
+     record="$(printf "%s" "\"${record#*\"}")"
+     if [[ "${record}" == \" ]]; then
+          record=''
+     fi
+     if [[ "${record:0:1}" == \" ]] && [[ "${record:$((${#record}-1)):1}" == \" ]]; then
+          # remove first char (here: double quote) and last (here: double quote)
+          record="${record:1:$((${#record}-1))}"
+          record="${record:0:$((${#record}-1))}"
+     fi
+     safe_echo "${record}"
 }
-
 
 
 # set IPADDRs and IP46ADDRs
