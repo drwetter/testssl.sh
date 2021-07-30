@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-#set -e
-
 # Utility which converts grepable nmap outout to testssl's file input
 # It is just borrowed from testssl.sh
 # License see testssl.sh
@@ -105,7 +103,7 @@ nmap_to_plain_file () {
      local target_fname=""
      local oneline=""
      local ip hostdontcare round_brackets ports_specs starttls
-     local tmp port host_spec protocol dontcare dontcare1
+     local tmp port host_spec protocol ssl_hint dontcare dontcare1
 
      # Ok, since we are here we are sure to have an nmap file. To avoid questions we make sure it's the right format too
      if [[ "$(head -1 "$fname")" =~ ( -oG )(.*) ]] || [[ "$(head -1 "$fname")" =~ ( -oA )(.*) ]] ; then
@@ -162,7 +160,7 @@ nmap_to_plain_file () {
 FNAME="$1"
 [[ ! -e $FNAME ]] && echo "$FNAME not readable" && exit 2
 
-nmap_to_plain_file $FNAME
+nmap_to_plain_file "$FNAME"
 
 exit $?
 
