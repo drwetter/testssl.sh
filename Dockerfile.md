@@ -34,13 +34,13 @@ docker run --rm -t mytestssl -p --header example.com
 
 ### From dockerhub
 
-You can pull the image from dockerhub and run:
+You can pull the image from dockerhub and e.g run:
 
 ```
-docker run --rm -t drwetter/testssl.sh:3.0 --fs example.com
+docker run --rm -t drwetter/testssl.sh:3.0 --protocols --server-preference example.com
 ```
 
-Other tags supported are: ``3.1dev`` and ``latest``. They  the same, i.e. the rolling release. ``3.0`` is the latest stable version from git which might have a few improvements (see git log) over the released 3.0.X.
+Other tags supported are: ``3.1dev`` and ``latest``. They are the same, i.e. the rolling release. ``3.0`` is the latest stable version from git which might have a few improvements (see git log) over the released 3.0.X.
 
 ``docker run --rm -t drwetter/testssl.sh:3.0 example.com``.
 
