@@ -47,9 +47,9 @@ Update notification here or @ [twitter](https://twitter.com/drwetter).
 
 You can download testssl.sh by cloning this git repository:
 
-    git clone --depth 1 https://github.com/drwetter/testssl.sh.git
+    git clone --depth 1 https://github.com/drwetter/testssl.sh.git --branch 3.0
 
-and checkout the 3.0 branch. For the stable version help yourself by downloading the [ZIP](https://codeload.github.com/drwetter/testssl.sh/zip/3.0.4) or [tar.gz](https://codeload.github.com/drwetter/testssl.sh/tar.gz/3.0.4) archive. Just ``cd`` to the directory created (=INSTALLDIR) and run it off there.
+For the stable version help yourself by downloading the [ZIP](https://codeload.github.com/drwetter/testssl.sh/zip/3.0.5) or the lastest testssl-3.0.X.tar.gz from [https://testssl.sh](https://testssl.sh/) archive. Just ``cd`` to the directory created (=INSTALLDIR) and run it off there.
 
 #### Docker
 
