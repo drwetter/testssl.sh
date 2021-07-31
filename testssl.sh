@@ -360,6 +360,8 @@ HAS_AES128_GCM=false
 HAS_AES256_GCM=false
 HAS_ZLIB=false
 HAS_DIG=false
+HAS_DIG_R=true
+DIG_R='-r'
 HAS_HOST=false
 HAS_DRILL=false
 HAS_NSLOOKUP=false
@@ -17409,6 +17411,7 @@ HAS_IDN: $HAS_IDN
 HAS_IDN2: $HAS_IDN2
 HAS_AVAHIRESOLVE: $HAS_AVAHIRESOLVE
 HAS_DIG_NOIDNOUT: $HAS_DIG_NOIDNOUT
+HAS_DIG_R: $HAS_DIG_R
 
 PATH: $PATH
 PROG_NAME: $PROG_NAME
@@ -17857,12 +17860,18 @@ check_resolver_bins() {
      type -p idn  &>/dev/null && HAS_IDN=true
      type -p idn2 &>/dev/null && HAS_IDN2=true
 
+     # Old dig versions don't have an option to ignore $HOME/.digrc
+     if dig -r 2>&1 | grep -qiE 'invalid|usage'; then
+          HAS_DIG_R=false
+          DIG_R=""
+     fi
+
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
      if ! "$HAS_DIG" && ! "$HAS_HOST" && ! "$HAS_DRILL" && ! "$HAS_NSLOOKUP"; then
           fatal "Neither \"dig\", \"host\", \"drill\" or \"nslookup\" is present" $ERR_DNSBIN
      fi
      if "$HAS_DIG"; then
-          if dig +noidnout -t a 2>&1 | grep -Eq 'Invalid option: \+noidnout|IDN support not enabled'; then
+          if dig $DIG_R +noidnout -t a 2>&1 | grep -Eq 'Invalid option: \+noidnout|IDN support not enabled'; then
                :
           else
                HAS_DIG_NOIDNOUT=true
@@ -17896,13 +17905,13 @@ get_a_record() {
           if "$HAS_AVAHIRESOLVE"; then
                ip4=$(filter_ip4_address $(avahi-resolve -4 -n "$1" 2>/dev/null | awk '{ print $2 }'))
           elif "$HAS_DIG"; then
-               ip4=$(filter_ip4_address $(dig @224.0.0.251 -p 5353 +short -t a +notcp "$1" 2>/dev/null | sed '/^;;/d'))
+               ip4=$(filter_ip4_address $(dig $DIG_R @224.0.0.251 -p 5353 +short -t a +notcp "$1" 2>/dev/null | sed '/^;;/d'))
           else
                fatal "Local hostname given but no 'avahi-resolve' or 'dig' available." $ERR_DNSBIN
           fi
      fi
      if [[ -z "$ip4" ]] && "$HAS_DIG"; then
-          ip4=$(filter_ip4_address $(dig +short +timeout=2 +tries=2 $noidnout -t a "$1" 2>/dev/null | awk '/^[0-9]/ { print $1 }'))
+          ip4=$(filter_ip4_address $(dig $DIG_R +short +timeout=2 +tries=2 $noidnout -t a "$1" 2>/dev/null | awk '/^[0-9]/ { print $1 }'))
      fi
      if [[ -z "$ip4" ]] && "$HAS_HOST"; then
           ip4=$(filter_ip4_address $(host -t a "$1" 2>/dev/null | awk '/address/ { print $NF }'))
@@ -17940,12 +17949,12 @@ get_aaaa_record() {
                if "$HAS_AVAHIRESOLVE"; then
                     ip6=$(filter_ip6_address $(avahi-resolve -6 -n "$1" 2>/dev/null | awk '{ print $2 }'))
                elif "$HAS_DIG"; then
-                    ip6=$(filter_ip6_address $(dig @ff02::fb -p 5353 -t aaaa +short +notcp "$NODE"))
+                    ip6=$(filter_ip6_address $(dig $DIG_R @ff02::fb -p 5353 -t aaaa +short +notcp "$NODE"))
                else
                     fatal "Local hostname given but no 'avahi-resolve' or 'dig' available." $ERR_DNSBIN
                fi
           elif "$HAS_DIG"; then
-               ip6=$(filter_ip6_address $(dig +short +timeout=2 +tries=2 $noidnout -t aaaa "$1" 2>/dev/null | awk '/^[0-9]/ { print $1 }'))
+               ip6=$(filter_ip6_address $(dig $DIG_R +short +timeout=2 +tries=2 $noidnout -t aaaa "$1" 2>/dev/null | awk '/^[0-9]/ { print $1 }'))
           elif "$HAS_HOST"; then
                ip6=$(filter_ip6_address $(host -t aaaa "$1" | awk '/address/ { print $NF }'))
           elif "$HAS_DRILL"; then
@@ -17980,7 +17989,7 @@ get_caa_rr_record() {
      # caa_property then has key/value pairs, see https://tools.ietf.org/html/rfc6844#section-3
      OPENSSL_CONF=""
      if "$HAS_DIG"; then
-          raw_caa="$(dig +short +timeout=3 +tries=3 $noidnout type257 "$1" 2>/dev/null | awk '{ print $1" "$2" "$3 }')"
+          raw_caa="$(dig $DIG_R +short +timeout=3 +tries=3 $noidnout type257 "$1" 2>/dev/null | awk '{ print $1" "$2" "$3 }')"
           # empty if no CAA record
      elif "$HAS_DRILL"; then
           raw_caa="$(drill $1 type257 | awk '/'"^${1}"'.*CAA/ { print $5,$6,$7 }')"
@@ -18051,7 +18060,7 @@ get_mx_record() {
      if "$HAS_HOST"; then
           mxs="$(host -t MX "$1" 2>/dev/null | awk '/is handled by/ { print $(NF-1), $NF }')"
      elif "$HAS_DIG"; then
-          mxs="$(dig +short $noidnout -t MX "$1" 2>/dev/null | awk '/^[0-9]/ { print $1" "$2 }')"
+          mxs="$(dig $DIG_R +short $noidnout -t MX "$1" 2>/dev/null | awk '/^[0-9]/ { print $1" "$2 }')"
      elif "$HAS_DRILL"; then
           mxs="$(drill mx $1 | awk '/IN[ \t]MX[ \t]+/ { print $(NF-1), $NF }')"
      elif "$HAS_NSLOOKUP"; then
@@ -18150,11 +18159,11 @@ determine_rdns() {
           if "$HAS_AVAHIRESOLVE"; then
                rDNS=$(avahi-resolve -a $nodeip 2>/dev/null | awk '{ print $2 }')
           elif "$HAS_DIG"; then
-               rDNS=$(dig -x $nodeip @224.0.0.251 -p 5353 +notcp +noall +answer +short | awk '{ print $1 }')
+               rDNS=$(dig $DIG_R -x $nodeip @224.0.0.251 -p 5353 +notcp +noall +answer +short | awk '{ print $1 }')
           fi
      elif "$HAS_DIG"; then
           # 1+2 should suffice. It's a compromise for if e.g. network is down but we have a docker/localhost server
-          rDNS=$(dig -x $nodeip +timeout=1 +tries=2 +noall +answer +short | awk '{ print $1 }')    # +short returns also CNAME, e.g. openssl.org
+          rDNS=$(dig $DIG_R -x $nodeip +timeout=1 +tries=2 +noall +answer +short | awk '{ print $1 }')    # +short returns also CNAME, e.g. openssl.org
      elif "$HAS_HOST"; then
           rDNS=$(host -t PTR $nodeip 2>/dev/null | awk '/pointer/ { print $NF }')
      elif "$HAS_DRILL"; then
