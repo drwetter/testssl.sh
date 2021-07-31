@@ -597,7 +597,9 @@ pr_bold()       { tm_bold "$1"; [[ "$COLOR" -ne 0 ]] && html_out "<span style=\"
 prln_bold()     { pr_bold "$1" ; outln; }
 
 NO_ITALICS=false
-if [[ $SYSTEM == OpenBSD ]]; then
+if [[ $TERM == screen ]]; then
+     NO_ITALICS=true
+elif [[ $SYSTEM == OpenBSD ]]; then
      NO_ITALICS=true
 elif [[ $SYSTEM == FreeBSD ]]; then
      if [[ ${SYSTEMREV%\.*} -le 9 ]]; then
