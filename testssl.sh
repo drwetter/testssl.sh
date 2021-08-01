@@ -22172,6 +22172,13 @@ parse_cmd_line() {
                     do_client_simulation=true
                     ;;
                -U|--vulnerable|--vulnerabilities)
+                    # Lookahead function: If the order of the cmdline is '-U --ids-friendly'
+                    # then we need to make sure we catch --ids-friendly. Normally we do not,
+                    # see #1717.  The following statement makes sure. In the do-while + case-esac
+                    # loop it will be execute again, but it does not hurt
+                    if [[ "${CMDLINE_ARRAY[@]}" =~ --ids-friendly ]]; then
+                         OFFENSIVE=false
+                    fi
                     do_vulnerabilities=true
                     do_heartbleed="$OFFENSIVE"
                     do_ccs_injection="$OFFENSIVE"
