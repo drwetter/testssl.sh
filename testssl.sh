@@ -867,7 +867,7 @@ fileout_pretty_json_banner() {
 
      echo -e "          \"Invocation\"  : \"$PROG_NAME $CMDLINE\",
           \"at\"          : \"$HNAME:$OPENSSL_LOCATION\",
-          \"version\"     : \"$VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE\",
+          \"version\"     : \"$VERSION ${GIT_REL_SHORT} from $REL_DATE\",
           \"openssl\"     : \"$OSSL_NAME $OSSL_VER from $OSSL_BUILD_DATE\",
           \"startTime\"   : \"$START_TIME\",
           \"scanResult\"  : ["
@@ -1097,7 +1097,7 @@ html_banner() {
      if "$CHILD_MASS_TESTING" && "$HTMLHEADER"; then
           html_out "## Scan started as: \"$PROG_NAME $CMDLINE\"\n"
           html_out "## at $HNAME:$OPENSSL_LOCATION\n"
-          html_out "## version testssl: $VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE\n"
+          html_out "## version testssl: $VERSION ${GIT_REL_SHORT} from $REL_DATE\n"
           html_out "## version openssl: \"$OSSL_NAME $OSSL_VER\" from \"$OSSL_BUILD_DATE\")\n\n"
      fi
 }
@@ -1141,7 +1141,7 @@ prepare_logging() {
      fi
      tmln_out "## Scan started as: \"$PROG_NAME $CMDLINE\"" >>"$LOGFILE"
      tmln_out "## at $HNAME:$OPENSSL_LOCATION" >>"$LOGFILE"
-     tmln_out "## version testssl: $VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE" >>"$LOGFILE"
+     tmln_out "## version testssl: $VERSION ${GIT_REL_SHORT} from $REL_DATE" >>"$LOGFILE"
      tmln_out "## version openssl: \"$OSSL_VER\" from \"$OSSL_BUILD_DATE\")\n" >>"$LOGFILE"
      exec > >(tee -a -i "$LOGFILE")
 }
@@ -17507,9 +17507,7 @@ mybanner() {
      "$QUIET" && return
      "$CHILD_MASS_TESTING" && return
      OPENSSL_NR_CIPHERS=$(count_ciphers "$(actually_supported_osslciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 'ALL')")
-     [[ -z "$GIT_REL" ]] && \
-          idtag="$CVS_REL" || \
-          idtag="$GIT_REL -- $CVS_REL_SHORT"
+     [[ -n "$GIT_REL" ]] && idtag="$GIT_REL"
      bb1=$(cat <<EOF
 
 ###########################################################
