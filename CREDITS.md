@@ -43,6 +43,7 @@ Full contribution, see git log.
   - maximum certificate lifespan of 398 days
   - ssl renegotiation amount variable
   - custom http request headers
+  - HSTS preload list lookup
 
 * Frank Breedijk
   - Detection of insecure redirects

@@ -843,6 +843,14 @@ strip_trailing_space() {
      printf "%s" "${1%"${1##*[![:space:]]}"}"
 }
 
+# removes first and last char, if both match with arg2. Leave arg2 empty to remove any first and last char.
+strip_enclosed() {
+    local regexp="^$2.*$2\$"
+    local returnstring=$1
+    [[ "$returnstring" =~ $regexp ]] && returnstring=""${returnstring:1:${#returnstring}-2}""
+    echo $returnstring
+}
+
 is_number() {
      [[ "$1" =~ ^[1-9][0-9]*$ ]] && \
           return 0 || \
@@ -2022,6 +2030,77 @@ check_revocation_ocsp() {
      fi
 }
 
+# API checks against the hstspreload.org HSTS Preload list API.
+# arg1: domain to be checked
+# arg2: JSON key to be checked (status, preloadedDomain, name, bulk)
+# arg3: to compare the JSON value against (case insensitive)
+# Returnvalues:
+#      0 - Nothing checked, just made the API request
+#      1 - Unsuccessful API request because of connection errors
+#     10 - Match
+#     20 - No match because value did not match
+#     21 - No match because key not found in response
+check_hsts_preloadlist_match() {
+     local domain="$1"
+     local key="$2"
+     local value="$3"
+     local tmpfile=$TEMPDIR/$NODE.hsts-preloadlist.txt
+     local uri_api_status="https://hstspreload.org/api/v2/status?domain=$domain"
+
+     "$PHONE_OUT" || return 0
+
+     # Only make a new API request once per domain
+     if [[ ! -f "$tmpfile" ]]; then
+          http_get "$uri_api_status" "$tmpfile"
+          [[ $? -ne 0 ]] && return 1
+     fi
+
+     # If no key was provided, just get the API response, and return
+     [[ -z "$key" ]] && return 0
+
+     # Check if key exists in response. If not, the API may have changed or something.
+     ! grep -Fiaqw "$key" $tmpfile && debugme echo "HSTS preloadlist key unrecognized: $key" && return 21
+
+     # Check if there is a match, return 10 if there is, 20 if not
+     grep -Fiaqw "\"$key\": $value" $tmpfile && return 10 || return 20
+
+     # do not remove tmpfile because it can be used again to limit lookups against API
+}
+
+# Checks for known values of specific key in preloadlist API.
+# Depends on check_hsts_preloadlist_match()
+# arg1: domain to be checked
+# arg2: key to be checked (string): status
+# Returnvalues (string): unknown, pending, rejected, preloaded
+check_hsts_preloadlist_value() {
+     local domain="$1"
+     local key="$2"
+     local values
+     local value
+     local value_ret
+
+     [[ -z "$key" ]] && return 1
+
+     # Currently using preset values and testing for matches instead of echo-ing
+     # directly from the response. No input has to be trusted this way.
+     case $key in
+          "status") values=("\"unknown\"" "\"pending\"" "\"rejected\"" "\"preloaded\"") ;;
+          "bulk") values=("true" "false") ;;
+          *) return 1 ;; # No supported key provided.
+     esac
+
+     for value in ${values[@]}; do
+          check_hsts_preloadlist_match "$domain" "$key" "$value"
+          [[ $? -eq 10 ]] && value_ret="$value" && break
+     done
+
+     value_ret=$(strip_enclosed "$value_ret" "\"")
+
+     [[ ! -z "$value_ret" ]] && echo "$value_ret" && return 0
+
+     return 1
+}
+
 wait_kill(){
      local pid=$1             # pid we wait for or kill
      local maxsleep=$2        # how long we wait before killing
@@ -2608,6 +2687,11 @@ run_hsts() {
      local hsts_age_days
      local spaces="                              "
      local jsonID="HSTS"
+     local json_postfix=""
+     local preloadmarked
+     local preloadsame
+     local preloadbulk
+     local preloadcombined
 
      if [[ ! -s $HEADERFILE ]]; then
           run_http_header "$1" || return 1
@@ -2646,18 +2730,71 @@ run_hsts() {
           fi
           if preload "$TMPFILE"; then
                fileout "${jsonID}_preload" "OK" "domain IS marked for preloading"
+               preloadmarked=true
           else
                fileout "${jsonID}_preload" "INFO" "domain is NOT marked for preloading"
-               #FIXME: To be checked against preloading lists,
-               # e.g. https://dxr.mozilla.org/mozilla-central/source/security/manager/boot/src/nsSTSPreloadList.inc
-               #      https://chromium.googlesource.com/chromium/src/+/master/net/http/transport_security_state_static.json
+               preloadmarked=false
           fi
      else
           pr_svrty_low "not offered"
           fileout "$jsonID" "LOW" "not offered"
           set_grade_cap "A" "HSTS is not offered"
+          preloadmarked=false
      fi
      outln
+
+     # Check if domain can be found in the HSTS preload list via hstspreload.org API.
+     # Regardless of the HSTS preload header presence, run this part. It may be rejected because it does not contain the right header for example,
+     # or it may be still in the list after it has been removed.
+     if "$PHONE_OUT"; then
+          json_postfix="_preloadlist"
+          out "$indent"; pr_bold " HSTS preload list            "
+
+          # Check if the domain is also the preloadedDomain. If so, it *may* be correct that the server response header does not have 'preloaded' included.
+          check_hsts_preloadlist_match "$NODE" "preloadedDomain" "\"$NODE\""
+          [[ $? -eq 10 ]] && preloadsame=true || preloadsame=false
+
+          # Check if the list entry is 'bulk'. When true it means it is added via form, if false it means it was manually added, or a subdomain.
+          check_hsts_preloadlist_match "$NODE" "bulk" "true"
+          [[ $? -eq 10 ]] && preloadbulk=true || preloadbulk=false
+
+          # Fill combined variable for clear lookup. (preloadmarked = true, preloadsame = true, preloadbulk = true) -> "111"
+          [[ $preloadmarked == true ]] && preloadcombined="${preloadcombined}1" || preloadcombined="${preloadcombined}0"
+          [[ $preloadsame == true ]] && preloadcombined="${preloadcombined}1" || preloadcombined="${preloadcombined}0"
+          [[ $preloadbulk == true ]] && preloadcombined="${preloadcombined}1" || preloadcombined="${preloadcombined}0"
+          debugme echo "Temporary lookupvariable: $preloadcombined"
+
+          # Determine and show the outcome
+          case "$(check_hsts_preloadlist_value "$NODE" "status")" in
+               "unknown") # Not found in HSTS preload list.
+                    case "$preloadcombined" in
+                         "000" | "001" | "010" | "011") outln "unknown"; fileout "${jsonID}${json_postfix}" "INFO" "unknown" ;;
+                         "100" | "101" | "110" | "111") pr_svrty_low "unknown"; outln " -- submit to HSTS preload list"; fileout "${jsonID}${json_postfix}" "LOW" "unknown" ;;
+                    esac
+                    ;;
+               "pending") # Currently in HSTS pending list.
+                    case "$preloadcombined" in
+                         "000" | "001" | "010" | "100" | "101" | "110" | "111") outln "pending"; fileout "${jsonID}${json_postfix}" "INFO" "pending" ;;
+                         "011") pr_svrty_medium "pending"; outln " -- addition going to fail, add header"; fileout "${jsonID}${json_postfix}" "MEDIUM" "pending" ;;
+                    esac
+                    ;;
+               "rejected") # Entry is considered rejected by HSTS list.
+                    case "$preloadcombined" in
+                         "000" | "001" | "010" | "011") outln "rejected"; fileout "${jsonID}${json_postfix}" "INFO" "rejected" ;;
+                         "100" | "101" | "110" | "111") pr_svrty_medium "rejected"; outln " -- check other requirements"; fileout "${jsonID}${json_postfix}" "MEDIUM" "rejected" ;;
+                    esac
+                    ;;
+               "preloaded") # Entry is marked as 'preload' in the HSTS preload list.
+                    case "$preloadcombined" in
+                         "000" | "001") prln_svrty_good "preloaded"; fileout "${jsonID}${json_postfix}" "OK" "preloaded" ;;
+                         "010") outln "preloaded -- manual addition detected"; fileout "${jsonID}${json_postfix}" "INFO" "preloaded" ;;
+                         "011") pr_svrty_medium "preloaded"; outln " -- list may remove entry, add header"; fileout "${jsonID}${json_postfix}" "MEDIUM" "preloaded" ;;
+                         "100" | "101" | "110" | "111") prln_svrty_best "preloaded"; fileout "${jsonID}${json_postfix}" "OK" "preloaded" ;;
+                    esac
+                    ;;
+          esac
+
+     fi
 
      tmpfile_handle ${FUNCNAME[0]}.txt
      return 0
