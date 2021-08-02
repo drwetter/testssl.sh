@@ -16,6 +16,13 @@ COPY --chown=testssl:testssl etc/. /home/testssl/etc/
 COPY --chown=testssl:testssl bin/. /home/testssl/bin/
 COPY --chown=testssl:testssl testssl.sh  /home/testssl/
 
+# enable using docker run --user uid:gid ...
+RUN chmod o+rx /home/testssl/testssl.sh \
+    && chmod o+r /home/testssl/etc/* \
+    && chmod o+r /home/testssl/bin/* \
+    && chmod o+x /home/testssl/bin/openssl.Linux.*
+
+
 ENTRYPOINT ["testssl.sh"]
 
 CMD ["--help"]
