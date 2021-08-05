@@ -9543,7 +9543,7 @@ run_server_defaults() {
      local -a ciphers_to_test certificate_type
      local -a -i success
      local cn_nosni cn_sni sans_nosni sans_sni san tls_extensions client_auth_ca
-     local cert_compression_methods
+     local cert_compression_methods=""
      local using_sockets=true
 
      "$SSL_NATIVE" && using_sockets=false
@@ -9751,7 +9751,7 @@ run_server_defaults() {
      done
 
      determine_tls_extensions
-     cert_compression_methods="$(determine_cert_compression)"
+     "$using_sockets" && cert_compression_methods="$(determine_cert_compression)"
      [[ -n "$cert_compression_methods" ]] && [[ "$cert_compression_methods" != "none" ]] && \
           extract_new_tls_extensions "$TEMPDIR/$NODEIP.determine_cert_compression.txt"
 
@@ -9895,7 +9895,11 @@ run_server_defaults() {
      tls_time
 
      jsonID="cert_compression"
-     if [[ $(has_server_protocol "tls1_3") -eq 0 ]]; then
+     if ! "$using_sockets"; then
+          # At the moment support for certificate compression can only be
+          # tested using tls_sockets().
+          :
+     elif [[ $(has_server_protocol "tls1_3") -eq 0 ]]; then
           jsonID="certificate_compression"
           pr_bold " Certificate Compression      "
           outln "$cert_compression_methods"
