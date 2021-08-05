@@ -30,6 +30,7 @@
 * Headerflag X-XSS-Protection is now labeled as INFO
 * Client simulation runs in wide mode which is even better readable
 * Added --reqheader to support custom headers in HTTP requests
+* Test for support for RFC 8879 certificate compression
 
 
 ### Features implemented / improvements in 3.0

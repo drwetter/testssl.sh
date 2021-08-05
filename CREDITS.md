@@ -23,12 +23,13 @@ Full contribution, see git log.
   - experimental "eTLS" detection
   - parallel mass testing!
   - RFC <--> OpenSSL cipher name space switches for the command line
-  - better error msg suppression (not fully installed openssl
+  - better error msg suppression (not fully installed openssl)
   - GREASE support
   - Bleichenbacher / ROBOT vulnerability test
   - several protocol preferences improvements
   - pwnedkeys.com support
   - CT support
+  - RFC 8879, certificate compression
   - Lots of fixes and improvements
 
 ##### Further credits (in alphabetical order)
