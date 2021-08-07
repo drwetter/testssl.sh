@@ -780,11 +780,11 @@ get_last_char() {
 }
                          # Checking for last char. If already a separator supplied, we don't need an additional one
 debugme() {
-     [[ "$DEBUG" -ge 2 ]] && "$@"
+     [[ "$DEBUG" -ge 2 ]] && "$@" >&2
      return 0
 }
 
-debugme1() { [[ "$DEBUG" -ge 2 ]] && "$@"; }
+debugme1() { [[ "$DEBUG" -ge 1 ]] && "$@" >&2; }
 
 hex2dec() {
      echo $((16#$1))
@@ -9124,7 +9124,7 @@ certificate_info() {
           out "no "
           fileout "${jsonID}${json_postfix}" "INFO" "no"
      fi
-     debugme1 echo -n "($(newline_to_spaces "$policy_oid"))"
+     debugme echo -n "($(newline_to_spaces "$policy_oid"))"
      outln
 #TODO: check browser OIDs:
 #         https://dxr.mozilla.org/mozilla-central/source/security/certverifier/ExtendedValidation.cpp
@@ -9224,7 +9224,7 @@ certificate_info() {
      else
           # All is fine with validity period
           # We ignore for now certificates < 2018/03/01. On the screen we only show debug info
-          debugme1 echo "${spaces}DEBUG: all is fine with total certificate life time"
+          debugme echo "${spaces}DEBUG: all is fine with total certificate life time"
           fileout "cert_extlifeSpan${json_postfix}" "OK" "certificate has no extended life time according to browser forum"
      fi
 
@@ -17800,7 +17800,7 @@ run_winshock() {
      if [[ "$(has_server_protocol "tls1_3")" -eq 0 ]] ; then
           # There's no MS server supporting TLS 1.3. Winshock was way back in time
           pr_svrty_best "not vulnerable (OK)"
-          debugme1 echo " - TLS 1.3 found"
+          debugme echo " - TLS 1.3 found"
           fileout "$jsonID" "OK" "not vulnerable " "$cve" "$cwe"
           outln
           return 0
