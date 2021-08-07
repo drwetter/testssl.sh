@@ -1166,7 +1166,7 @@ get_last_char() {
 }
                          # Checking for last char. If already a separator supplied, we don't need an additional one
 debugme() {
-     [[ "$DEBUG" -ge 2 ]] && "$@"
+     [[ "$DEBUG" -ge 2 ]] && "$@" >&2
      return 0
 }
 
