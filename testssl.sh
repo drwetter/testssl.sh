@@ -18317,14 +18317,15 @@ run_tls_truncation() {
      :
 }
 
-
+# see https://nostarttls.secvuln.info/
+#
 run_starttls_injection() {
      local uds=""
      local openssl_bin=""
      local -i socat_pid
      local -i openssl_pid
      local vuln=false
-     local cve=""
+     local cve="CVE-2011-0411 CVE-2021-38084 CVE-2021-33515 CVE-2020-15955 CVE-2021-37844 CVE-2021-37845 CVE-2021-37846 CVE-2020-29548 CVE-2020-15955 CVE-2020-29547"
      local cwe="CWE-74"
      local hint=""
      local jsonID="starttls_injection"
@@ -18336,7 +18337,7 @@ run_starttls_injection() {
           pr_headlineln " Checking for STARTTLS injection "
           outln
      fi
-     pr_bold " STARTTLS injection" ; out " (experimental)         "
+     pr_bold " STARTTLS injection" ; out " (CVE-2011-0411, exp.)  "
 
      # We'll do a soft fail here, also no warning, as I do not expect to have everybody have socat installed
      if [[ -z "$SOCAT" ]]; then
