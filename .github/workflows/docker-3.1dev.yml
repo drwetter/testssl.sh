@@ -9,9 +9,8 @@ on:
     - cron: "0 8 * * 1"
 
 env:
-  BUILD_VERSION: "3.1dev"
+  BUILD_VERSION: ${GITHUB_REF##*/}
   DOCKER_CLI_EXPERIMENTAL: enabled
-  #REPOSITORY: ${{ github.actor }}/${{ github.workflow }}
   REPOSITORY: ${{ github.actor }}/testssl.sh
 
 jobs:
@@ -53,11 +52,8 @@ jobs:
         uses: docker/build-push-action@v2.6.1
         with:
           push: ${{ github.event_name != 'pull_request' }}
-          #context: ${{ github.workflow }}
-          #context: docker
           context: .
           file: Dockerfile.git
-          #platforms: linux/amd64,linux/arm64,linux/386,linux/arm/v7,linux/arm/v6
           platforms: linux/amd64,linux/386,linux/arm64,linux/arm/v7,linux/arm/v6,linux/ppc64le
           build-args: BUILD_VERSION
           cache-from: type=gha, scope=${{ github.workflow }}
