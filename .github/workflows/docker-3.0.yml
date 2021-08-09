@@ -11,7 +11,6 @@ on:
 env:
   BUILD_VERSION: "3.0"
   DOCKER_CLI_EXPERIMENTAL: enabled
-  REPOSITORY: ${{ github.actor }}/testssl.sh
 
 jobs:
 
