@@ -9,7 +9,7 @@ on:
     - cron: "0 8 * * 1"
 
 env:
-  BUILD_VERSION: ${GITHUB_REF##*/}
+  BUILD_VERSION: "3.1dev"
   DOCKER_CLI_EXPERIMENTAL: enabled
   REPOSITORY: ${{ github.actor }}/testssl.sh
 
