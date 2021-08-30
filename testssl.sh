@@ -18564,8 +18564,6 @@ determine_service() {
                ftp|smtp|lmtp|pop3|imap|xmpp|telnet|ldap|postgres|mysql|nntp)
                     STARTTLS="-starttls $protocol"
                     if [[ "$protocol" == xmpp ]]; then
-                         # for XMPP, openssl has a problem using -connect $NODEIP:$PORT. thus we use -connect $NODE:$PORT instead!
-                         NODEIP="$NODE"
                          if [[ -n "$XMPP_HOST" ]]; then
                               if ! "$HAS_XMPP"; then
                                    fatal "Your $OPENSSL does not support the \"-xmpphost\" option" $ERR_OSSLBIN
@@ -18579,10 +18577,17 @@ determine_service() {
                                         prln_warning " IP address doesn't work for XMPP, trying PTR record $rDNS"
                                         # remove trailing .
                                         NODE=${rDNS%%.}
-                                        NODEIP=${rDNS%%.}
                                    else
                                         fatal "No DNS supplied and no PTR record available which I can try for XMPP" $ERR_DNSLOOKUP
                                    fi
+                              fi
+                              if "$HAS_XMPP"; then
+                                   # small hack -- instead of changing calls all over the place
+                                   STARTTLS="$STARTTLS -xmpphost $NODE"
+                              else
+                                   # If the XMPP name cannot be provided using -xmpphost,
+                                   # then it needs to be provided to the -connect option
+                                   NODEIP="$NODE" 
                               fi
                          fi
                     elif [[ "$protocol" == postgres ]]; then
