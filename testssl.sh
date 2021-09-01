@@ -20116,7 +20116,7 @@ check_resolver_bins() {
      type -p idn2 &>/dev/null && HAS_IDN2=true
 
      # Old dig versions don't have an option to ignore $HOME/.digrc
-     if ! dig -h | grep -E '\-r.*~/.digrc'; then
+     if ! dig -h | grep -qE '\-r.*~/.digrc'; then
           HAS_DIG_R=false
           DIG_R=""
      fi
@@ -20124,9 +20124,7 @@ check_resolver_bins() {
           fatal "Neither \"dig\", \"host\", \"drill\" or \"nslookup\" is present" $ERR_DNSBIN
      fi
      if "$HAS_DIG"; then
-          if dig $DIG_R +noidnout -t a invalid. 2>&1 | grep -Eq 'Invalid option: \+noidnout|IDN support not enabled'; then
-               :
-          else
+          if dig -h | grep -Eq idnout; then
                HAS_DIG_NOIDNOUT=true
           fi
      fi
