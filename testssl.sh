@@ -20106,6 +20106,7 @@ get_local_a() {
 check_resolver_bins() {
      local saved_openssl_conf="$OPENSSL_CONF"
 
+     OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
      type -p dig   &> /dev/null &&  HAS_DIG=true
      type -p host  &> /dev/null &&  HAS_HOST=true
      type -p drill &> /dev/null &&  HAS_DRILL=true
@@ -20115,19 +20116,15 @@ check_resolver_bins() {
      type -p idn2 &>/dev/null && HAS_IDN2=true
 
      # Old dig versions don't have an option to ignore $HOME/.digrc
-     if dig -r 2>&1 | grep -qiE 'invalid|usage'; then
+     if ! dig -h | grep -qE '\-r.*~/.digrc'; then
           HAS_DIG_R=false
           DIG_R=""
      fi
-
-     OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
      if ! "$HAS_DIG" && ! "$HAS_HOST" && ! "$HAS_DRILL" && ! "$HAS_NSLOOKUP"; then
           fatal "Neither \"dig\", \"host\", \"drill\" or \"nslookup\" is present" $ERR_DNSBIN
      fi
      if "$HAS_DIG"; then
-          if dig $DIG_R +noidnout -t a 2>&1 | grep -Eq 'Invalid option: \+noidnout|IDN support not enabled'; then
-               :
-          else
+          if dig -h | grep -Eq idnout; then
                HAS_DIG_NOIDNOUT=true
           fi
      fi
