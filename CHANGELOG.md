@@ -32,7 +32,6 @@
 * Added --reqheader to support custom headers in HTTP requests
 * Test for support for RFC 8879 certificate compression
 
-
 ### Features implemented / improvements in 3.0
 
 * Full support of TLS 1.3, shows also drafts supported
@@ -115,7 +114,6 @@
 * Postgres und MySQL STARTTLS support
 * Man page
 
-
 ### New in 2.8
 
 * Trust chain check against certificate stores from Apple (OS), Linux (OS),
@@ -168,7 +166,6 @@
   * lots of fixes, code improvements, even more robust
 
 Full log @ https://github.com/drwetter/testssl.sh/commits/2.6/testssl.sh
-
 
 ### New in 2.4
   * "only one cmd line option at a time" is completely gone
@@ -324,7 +321,6 @@ Full changelog @  https://github.com/drwetter/testssl.sh/commits/2.2/testssl.sh
 - fix for netweaver banner (server is lowercase)
 - no server banner is no disadvantage (color code)
 
-
 1.89
 - reordered! : protocols + cipher come first
 - colorized preferred server preference (e.g. CBC+RC4 is light red now, TLSv1.2 green)
@@ -470,7 +466,6 @@ Full changelog @  https://github.com/drwetter/testssl.sh/commits/2.2/testssl.sh
 * showciphers variable introduced: only show ciphers if this is set (it is by
   default now and there's a comment
 * openssl version + path to it in the banner
-
 
 1.20
 * bugfix (ssl in ssl handshake failure is sometimes too much)

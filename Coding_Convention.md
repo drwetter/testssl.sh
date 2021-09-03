@@ -47,7 +47,7 @@ Bash is actually quite powerful -- not only with respect to sockets. It's not as
     * Watch out for any input especially (but not only) supplied from the server. Input should never be trusted.
     * Unless you're really sure where the values come from, variables need to be put in quotes.
     * You can use `safe_echo()` when processing input which does some input validation.
-    *  Use ``out()`` or similar output functions when writing something back to the user.
+    * Use ``out()`` or similar output functions when writing something back to the user.
 * Use `$OPENSSL` instead of `openssl`. The latter is highly system depended and also $OPENSSL is a binary which capabilities are checked internally before using it, independent whether the supplied one is being used or another one.
 
 #### Variables
@@ -70,4 +70,3 @@ Bash is actually quite powerful -- not only with respect to sockets. It's not as
 * Unit tests are done automatically done with Perl using Travis. The trigger is `~/.travis.yml`. The general documentation for [Test::More](https://perldoc.perl.org/Test/More.html) is a good start. You are encouraged to write own checks. You can use e.g. `t/20_baseline_ipv4_http.t` as an example.
 * If it's an OpenSSL feature you want to use and it could be not available for older OpenSSL versions testssl.sh needs to find out whether OpenSSL has that feature. Best do this with OpenSSL itself and not by checking the version as some vendors do backports. See the examples for `HAS_SSL2` or proxy option check of OpenSSL in `check_proxy()`.
 * If a feature of OpenSSL is not available you need to tell this the user by using `pr_warning*()`. Or accordingly with `fatal()` if a continuation of the program doesn't make sense anymore.
-

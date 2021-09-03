@@ -59,4 +59,3 @@ sub json($) {
 	unlink $file;
 	return from_json($file);
 }
-

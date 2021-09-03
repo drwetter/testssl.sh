@@ -22,7 +22,3 @@ The whole process is done manually.
 * "ciphersutes" are TLS 1.3 ciphersuites. You can identify them as they currently are like 0x130?. Retrieve them from above see ``~/utils/hexstream2cipher.sh``
 * Figure out the services by applying a good piece of human logic
 * Before submitting a PR: test it yourself! You can also watch it again via wireshark
-
-
-
-

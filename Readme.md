@@ -73,9 +73,9 @@ For more please consult [Dockerfile.md](https://github.com/drwetter/testssl.sh/b
 
 ### Status
 
-We're currently in the development phase, version 3.1dev. 3.1dev will eventually become 3.2. Bigger features are developed in a separate branch before merged into 3.1dev to avoid hiccups or inconsistencies. Albeit we try to keep 3.1dev as solid as possible things will certainly change in 3.1dev. Think of the 3.1dev branch like a rolling release. So if you need stability the 3.0 branch is better for you. 
+We're currently in the development phase, version 3.1dev. 3.1dev will eventually become 3.2. Bigger features are developed in a separate branch before merged into 3.1dev to avoid hiccups or inconsistencies. Albeit we try to keep 3.1dev as solid as possible things will certainly change in 3.1dev. Think of the 3.1dev branch like a rolling release. So if you need stability the 3.0 branch is better for you.
 
-Version 3.0.X receives bugfixes, labeled as 3.0.1, 3.0.2 and so on. This will happen until 3.2 is released. 
+Version 3.0.X receives bugfixes, labeled as 3.0.1, 3.0.2 and so on. This will happen until 3.2 is released.
 
 Support for 2.9.5 has been dropped. Supported is >= 3.0.x only.
 

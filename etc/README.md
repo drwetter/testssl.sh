@@ -14,7 +14,7 @@ The certificate trust stores were retrieved from
   --> "Keychain Access" (2 click). In that window --> "Keychains" --> "System"
   --> "Category" --> "All Items"
   Select all CA certificates except for Developer ID Certification Authority,  "File" --> "Export Items"
-    2. __Internet:__ Pick the latest subdir (=highest number) from https://opensource.apple.com/source/security_certificates/. They are in DER format despite their file extension. Download them with ``wget --level=1 --cut-dirs=5  --mirror --convert-links --adjust-extension --page-requisites  --no-parent https://opensource.apple.com/source/security_certificates/security_certificates-*/certificates/roots/``
+    2. __Internet:__ Pick the latest subdir (=highest number) from https://opensource.apple.com/source/security_certificates/. They are in DER format despite their file extension. Download them with ``wget --level=1 --cut-dirs=5 --mirror --convert-links --adjust-extension --page-requisites --no-parent https://opensource.apple.com/source/security_certificates/security_certificates-*/certificates/roots/``
 
 
 Google Chromium uses basically the trust stores above, see https://www.chromium.org/Home/chromium-security/root-ca-policy.
