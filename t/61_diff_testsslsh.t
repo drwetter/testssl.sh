@@ -7,7 +7,7 @@
 # cert_serialNumber, cert_fingerprintSHA1, cert_fingerprintSHA256, cert
 # cert_expirationStatus, cert_notBefore, cert_notAfter, cert_caIssuers, intermediate_cert
 #
-# help is apreciated here
+# help is appreciated here
 
 use strict;
 use Test::More;

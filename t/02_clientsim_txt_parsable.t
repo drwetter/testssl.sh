@@ -1,7 +1,7 @@
 #!/usr/bin/env perl
 
 # Just a functional test, whether ~/etc/client-simulation.txt
-# doesn't have any synatx errors
+# doesn't have any syntax errors
 
 use strict;
 use Test::More;

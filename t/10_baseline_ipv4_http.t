@@ -49,7 +49,7 @@ $tests++;
 $openssl_out = `$prg --ssl-native $check2run $uri 2>&1`;
 $openssl_json = json('tmp.json');
 unlink "tmp.json";
-# With Google only we somtimes encounter an error as they return a 0 char with openssl, so we white list this pattern here:
+# With Google only we sometimes encounter an error as they return a 0 char with openssl, so we white list this pattern here:
 # It should be fixed in the code though so we comment this out
 # $openssl_out =~ s/testssl.*warning: command substitution: ignored null byte in input\n//g;
 unlike($openssl_out, qr/$openssl_regex_bl/, "via OpenSSL");

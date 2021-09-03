@@ -1,7 +1,7 @@
 
 ### Contributions / participation
 
-is always welcome, here @ gihub or via e-mail.
+is always welcome, here @ github or via e-mail.
 
 Note please the following
 

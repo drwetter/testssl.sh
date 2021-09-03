@@ -98,7 +98,7 @@ Full contribution, see git log.
   - LibreSSL patch
 
 * Jean Marsault
-  - client auth: ideas, code snipplets
+  - client auth: ideas, code snippets
 
 * Thomas Martens
   - adding colorblind option
