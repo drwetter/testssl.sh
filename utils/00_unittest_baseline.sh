@@ -8,7 +8,7 @@ $OPENSSL version -a || exit 1
 FILE=tmp.json
 
 remove_quotes() {
-     sed -i 's/"//g' $FILE
+     sed -i 's/"//g' "$FILE"
 }
 
 # arg1:   id_value
@@ -27,7 +27,7 @@ check_result() {
      local finding_value=""
 
      remove_quotes
-     json_result="$(awk '/id.*'"${1}"'/,/finding.*$/' $FILE)"
+     json_result="$(awk '/id.*'"${1}"'/,/finding.*$/' "$FILE")"
      [[ -z $json_result ]] && exit 1
      # is4lines?
      finding_value="$(awk -F':' '/finding/ { print $2" "$3" "$4 }' <<< "$json_result")"
@@ -50,9 +50,9 @@ echo
 ### 1) test protocol SSlv2:
 $OPENSSL s_server -www -ssl2 -key /tmp/server.pem -cert /tmp/server.crt &>/dev/null &
 pid=$!
-rm $FILE 2>/dev/null
+rm "$FILE" 2>/dev/null
 echo "Running testssl.sh SSLv2 protocol check against localhost for SSLv2: "
-./testssl.sh -p -q --warnings=off --jsonfile=$FILE localhost:4433
+./testssl.sh -p -q --warnings=off --jsonfile="$FILE" localhost:4433
 check_result SSLv2 CRITICAL "vulnerable with 9 ciphers"
 [[ $? -eq 0 ]] && echo "SSLv2: PASSED" || echo "FAILED"
 echo
@@ -62,9 +62,9 @@ wait $pid 2>/dev/null
 ### 2) test NPN + ALPN
 $OPENSSL s_server -cipher 'ALL:COMPLEMENTOFALL' -alpn "h2" -nextprotoneg "spdy/3, http/1.1" -www -key /tmp/server.pem -cert /tmp/server.crt &>/dev/null &
 pid=$!
-rm $FILE
+rm "$FILE"
 echo "Running testssl.sh HTTP/2 protocol checks against localhost: "
-./testssl.sh -q --jsonfile=$FILE --protocols localhost:4433
+./testssl.sh -q --jsonfile="$FILE" --protocols localhost:4433
 if check_result NPN "spdy/3,  http/1.1"; then
      echo "SPDY/NPN:  PASSED"
 else
@@ -78,19 +78,19 @@ else
 fi
 kill -9 $pid
 wait $pid 2>/dev/null
-rm $FILE
+rm "$FILE"
 
 ### 3) test almost all other stuff
 $OPENSSL s_server -cipher 'ALL:COMPLEMENTOFALL' -www -key /tmp/server.pem -cert /tmp/server.crt &>/dev/null &
 pid=$!
-rm $FILE
+rm "$FILE"
 echo "Running baseline check with testssl.sh against localhost"
-./testssl.sh -q --jsonfile=$FILE localhost:4433
+./testssl.sh -q --jsonfile="$FILE" localhost:4433
 #check_result sslv2 CRITICAL "is offered"
 kill -9 $pid
 wait $pid 2>/dev/null
 
-rm $FILE
+rm "$FILE"
 
 
 ### test server defaults
