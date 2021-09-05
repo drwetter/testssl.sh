@@ -21,7 +21,7 @@
 * Detect better when no STARTTLS is offered
 * Rating (SSL Labs, not complete)
 * Don't penalize missing trust in rating when CA not in Java store
-* Added support for certificates with EdDSA signatures and pubilc keys
+* Added support for certificates with EdDSA signatures and public keys
 * --add-ca can also now be a directory with \*.pem files
 * Warning of 398 day limit for certificates issued after 2020/9/1
 * Added environment variable for amount of attempts for ssl renegotiation check
@@ -31,7 +31,6 @@
 * Client simulation runs in wide mode which is even better readable
 * Added --reqheader to support custom headers in HTTP requests
 * Test for support for RFC 8879 certificate compression
-
 
 ### Features implemented / improvements in 3.0
 
@@ -48,7 +47,7 @@
 * Socket timeouts (``--connect-timeout``)
 * IDN/IDN2 servername/URI + emoji support, supposed libidn/idn2 is installed and DNS resolver is recent) support
 * Initial support for certificate compression
-* Better JSON output: renamed IDs and findings shorter/better parsable, also includes certficate
+* Better JSON output: renamed IDs and findings shorter/better parsable, also includes certificate
 * JSON output now valid also for non-responding servers
 * Testing now per default 370 ciphers
 * Further improving the robustness of TLS sockets (sending and parsing)
@@ -82,7 +81,7 @@
 * Support for NNTP and LMTP via STARTTLS, fixes for MySQL and PostgresQL
 * Support for SNI and STARTTLS
 * More robustness for any STARTTLS protocol (fall back to plaintext while in TLS caused problems)
-* Renegotiation checks improved, also no false potive for Node.js anymore
+* Renegotiation checks improved, also no false positive for Node.js anymore
 * Major update of client simulations with self-collected up-to-date data
 * Update of CA certificate stores
 * Lots of bug fixes
@@ -93,7 +92,7 @@
 
 * Way better coverage of ciphers as most checks are done via bash sockets where ever possible
 * Further tests via TLS sockets and improvements (handshake parsing, completeness, robustness)
-* Testing 359 default ciphers (``testssl.sh -e/-E``) with a mixture of sockets and openssl. Same speed as with openssl only but addtional ciphers such as post-quantum ciphers, new CHAHA20/POLY1305, CamelliaGCM etc.
+* Testing 359 default ciphers (``testssl.sh -e/-E``) with a mixture of sockets and openssl. Same speed as with openssl only but additional ciphers such as post-quantum ciphers, new CHAHA20/POLY1305, CamelliaGCM etc.
 * TLS 1.2 protocol check via sockets in production
 * Finding more TLS extensions via sockets
 * TLS Supported Groups Registry (RFC 7919), key shares extension
@@ -114,7 +113,6 @@
 * File input for mass testing can be also in nmap grep(p)able (-oG) format
 * Postgres und MySQL STARTTLS support
 * Man page
-
 
 ### New in 2.8
 
@@ -137,7 +135,7 @@
 * Even more compatibility improvements for FreeBSD, NetBSD, Gentoo, RH-ish, F5 and Cisco systems
 * Considerable speed improvements for each cipher runs (-e/-E)
 * More robust SSLv2 + TLS socket interface
-* seperate check for curves
+* separate check for curves
 * OpenSSL 1.1.0 compliant
 * check for DROWN
 * Whole number of bugs squashed
@@ -156,7 +154,7 @@
   * (HTTP) proxy support! Also with sockets -- thx @jnewbigin
   * Extended validation certificate detection
   * Run in default mode through all ciphers at the end of a default run
-  * will test multiple IP adresses of one supplied server name in one shot, --ip= restricts it accordingly
+  * will test multiple IP addresses of one supplied server name in one shot, --ip= restricts it accordingly
   * new mass testing file option --file option where testssl.sh commands are being read from, see https://twitter.com/drwetter/status/627619848344989696
   * TLS time and HTTP time stamps
   * TLS time displayed also for STARTTLS protocols
@@ -168,7 +166,6 @@
   * lots of fixes, code improvements, even more robust
 
 Full log @ https://github.com/drwetter/testssl.sh/commits/2.6/testssl.sh
-
 
 ### New in 2.4
   * "only one cmd line option at a time" is completely gone
@@ -212,7 +209,7 @@ Full changelog @  https://github.com/drwetter/testssl.sh/commits/2.2/testssl.sh
   * tests ciphers per protocol
   * HSTS
   * web and application server banner
-  * server prefereences
+  * server preferences
   * TLS server extensions
   * server key size
   * cipher suite mapping from openssl to RFC
@@ -225,10 +222,10 @@ Full changelog @  https://github.com/drwetter/testssl.sh/commits/2.2/testssl.sh
 - IPv6 display fix
 
 1.111
-- NEW: tested unter FreeBSD (works with exception of xxd in CCS)
+- NEW: tested under FreeBSD (works with exception of xxd in CCS)
 - getent now works under Linux and FreeBSD
 - sed -i in hsts sacrificed for compatibility
-- reomved query for IP for finishing banner, is now called once in parse_hn_port
+- removed query for IP for finishing banner, is now called once in parse_hn_port
 - GOST warning after banner
 - empty build date is not displayed anymore
 - long build date strings minimized
@@ -318,16 +315,15 @@ Full changelog @  https://github.com/drwetter/testssl.sh/commits/2.2/testssl.sh
 1.91
 - replaced most lcyan to brown (=not really bad but somehow)
 - empty server string better displayed
-- prefered CBC TLS 1.2 cipher is now brown (lucky13)
+- preferred CBC TLS 1.2 cipher is now brown (lucky13)
 
 1.90
 - fix for netweaver banner (server is lowercase)
 - no server banner is no disadvantage (color code)
 
-
 1.89
 - reordered! : protocols + cipher come first
-- colorized prefered server preference (e.g. CBC+RC4 is light red now, TLSv1.2 green)
+- colorized preferred server preference (e.g. CBC+RC4 is light red now, TLSv1.2 green)
 - SSLv3 is now light cyan
 - NEW: -P|--preference now in help menu
 - light cyan is more appropriate than red for HSTS
@@ -362,10 +358,10 @@ Full changelog @  https://github.com/drwetter/testssl.sh/commits/2.2/testssl.sh
 - headline of -V / PFS+RC4 ciphers unified
 
 1.82
-- NEW: output for -V now better (bits seperate, spacing improved)
+- NEW: output for -V now better (bits separate, spacing improved)
 
 1.81
-- output for RC4+PFS now better (with headline, bits seperate, spacing improved)
+- output for RC4+PFS now better (with headline, bits separate, spacing improved)
 - both also sorted by encr. strength .. umm ..err bits!
 
 1.80
@@ -390,7 +386,7 @@ Full changelog @  https://github.com/drwetter/testssl.sh/commits/2.2/testssl.sh
 - removed legacy code (PROD_REL var)
 
 1.76
-- bash was gone!! desaster for Ubuntu, fixed
+- bash was gone!! disaster for Ubuntu, fixed
 - starttls+rc4 check: bottom line was wrong
 - starttls had too much output (certificate) at first a/v check
 
@@ -471,7 +467,6 @@ Full changelog @  https://github.com/drwetter/testssl.sh/commits/2.2/testssl.sh
   default now and there's a comment
 * openssl version + path to it in the banner
 
-
 1.20
 * bugfix (ssl in ssl handshake failure is sometimes too much)
 * date in output
@@ -480,13 +475,13 @@ Full changelog @  https://github.com/drwetter/testssl.sh/commits/2.2/testssl.sh
 1.19
 * bugfix
 1.18
-* Rearragement of arguments: URL comes now always last!
+* Rearrangement of arguments: URL comes now always last!
 * small code cleanups for readability
 * individual cipher test is now with bold headline, not blue
 * NOPARANOID flag tells whether medium grade ciphers are ok. NOW they are (=<1.17 was paranoid)
 
 1.17
-* SSL tests now for renegotiation vulnerabilty!
+* SSL tests now for renegotiation vulnerability!
 * version detection of testssl.sh
 * program has a banner
 * fixed bug leading to a file named "1"

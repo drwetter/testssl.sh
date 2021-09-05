@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 
-# Basics: is there a synatx error where alerady bash hiccups on?
+# Basics: is there a syntax error where already bash hiccups on?
 
 use strict;
 use Test::More;
