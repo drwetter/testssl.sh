@@ -20115,15 +20115,15 @@ check_resolver_bins() {
      type -p idn  &>/dev/null && HAS_IDN=true
      type -p idn2 &>/dev/null && HAS_IDN2=true
 
-     # Old dig versions don't have an option to ignore $HOME/.digrc
-     if ! dig -h | grep -qE '\-r.*~/.digrc'; then
-          HAS_DIG_R=false
-          DIG_R=""
-     fi
      if ! "$HAS_DIG" && ! "$HAS_HOST" && ! "$HAS_DRILL" && ! "$HAS_NSLOOKUP"; then
           fatal "Neither \"dig\", \"host\", \"drill\" or \"nslookup\" is present" $ERR_DNSBIN
      fi
      if "$HAS_DIG"; then
+          # Old dig versions don't have an option to ignore $HOME/.digrc
+          if ! dig -h | grep -qE '\-r.*~/.digrc'; then
+               HAS_DIG_R=false
+               DIG_R=""
+          fi
           if dig -h | grep -Eq idnout; then
                HAS_DIG_NOIDNOUT=true
           fi
