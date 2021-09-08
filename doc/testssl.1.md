@@ -161,7 +161,7 @@ Any single check switch supplied as an argument prevents testssl.sh from doing a
 
 `-E, --cipher-per-proto`  is similar to `-e, --each-cipher`. It checks each of the possible ciphers, here: per protocol. If you want to display each cipher tested you need to add `--show-each`. The output is sorted by security strength, it lists the encryption bits though.
 
-`-s, --std, --standard`   tests certain lists of cipher suites by strength. Those lists are (`openssl ciphers $LIST`, $LIST from below:)
+`-s, --std, --standard`   tests certain lists of cipher suites / cipher catagories by strength. Those lists are (`openssl ciphers $LIST`, $LIST from below:)
 
 * `NULL encryption ciphers`: 'NULL:eNULL'
 * `Anonymous NULL ciphers`: 'aNULL:ADH'
