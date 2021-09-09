@@ -130,7 +130,7 @@ unlike($openssl_out, qr/$openssl_regex_bl/, "");
 $tests++;
 
 
-$uri="news.newsguy.com:119";
+$uri="140.238.219.117:119";
 
 # unlink "tmp.json";
 printf "\n%s\n", "STARTTLS NNTP unit tests via sockets --> $uri ...";
