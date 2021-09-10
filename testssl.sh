@@ -17242,7 +17242,7 @@ help() {
 single check as <options>  ("$PROG_NAME URI" does everything except -E and -g):
      -e, --each-cipher             checks each local cipher remotely
      -E, --cipher-per-proto        checks those per protocol
-     -s, --std, --standard         tests certain lists of cipher suites by strength
+     -s, --std, --standard         tests standard cipher categories by strength
      -p, --protocols               checks TLS/SSL protocols (including SPDY/HTTP2)
      -g, --grease                  tests several server implementation bugs like GREASE and size limitations
      -S, --server-defaults         displays the server's default picks and certificate info
