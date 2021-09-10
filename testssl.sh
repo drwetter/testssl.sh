@@ -19467,7 +19467,7 @@ help() {
 single check as <options>  ("$PROG_NAME URI" does everything except -E and -g):
      -e, --each-cipher             checks each local cipher remotely
      -E, --cipher-per-proto        checks those per protocol
-     -s, --std, --standard         tests certain lists of cipher suites by strength
+     -s, --std, --categories       tests standard cipher categories by strength
      -f, --fs, --nsa               checks forward secrecy settings
      -p, --protocols               checks TLS/SSL protocols (including SPDY/HTTP2)
      -g, --grease                  tests several server implementation bugs like GREASE and size limitations
@@ -22243,7 +22243,8 @@ parse_cmd_line() {
                -p|--protocols)
                     do_protocols=true
                     ;;
-               -s|--std|--standard)
+               -s|--std|--standard|--categories)
+                    # --standard is deprecated
                     do_cipherlists=true
                     ;;
                -S|--server[-_]defaults)
