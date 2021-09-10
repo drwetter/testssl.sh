@@ -6,10 +6,12 @@ labels: ''
 assignees: ''
 
 ---
+<!---
 
 _Feel free to remove this line but please stick to the template. We would like to reproduce the bug and therefore need concise information. Depending on the completeness of your information provided we might close your issue otherwise. _
+-->
 
-**Please check this repo whether this is a known issue**
+**Before you open an issue please check this repo whether this is a known problem**
 
 **Command line / docker command to reproduce**
 In addition the target of your scan would be helpful. If you don't want to disclose it publicly: ``grep SWCONTACT testssl.sh``.
