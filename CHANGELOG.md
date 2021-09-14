@@ -507,7 +507,7 @@ Full changelog @  https://github.com/drwetter/testssl.sh/commits/2.2/testssl.sh
 * as a courtesy I am providing 64+32 Linux binaries for testing 56 Bit ciphers
 
 1.11
-* Hint for howto enable 56 Bit ciphers fpr testing
+* Hint for howto enable 56 Bit ciphers for testing
 * possible to specify where openssl is (hardcoded, $ENV, last resort: auto)
 * warns if netcat is not there
 

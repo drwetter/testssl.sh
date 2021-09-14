@@ -19,6 +19,6 @@ The whole process is done manually.
 * Review TLS extension 13 (=0x000d) whether any SHA1 signature algorithm is listed. If not "requiresSha2" is true
 * Leave "maxDhBits"/"minDhBits" and "minRsaBits"/"maxRsaBits" at -1, unless you know for sure what the client can handle
 * For "ciphers" mark the cipher suites --> Copy --> As a hex stream, remove any leading GREASE ciphers (?a?a) and supply it to `~/utils/hexstream2cipher.sh`
-* "ciphersutes" are TLS 1.3 ciphersuites. You can identify them as they currently are like 0x130?. Retrieve them from above see ``~/utils/hexstream2cipher.sh``
+* "ciphersuites" are TLS 1.3 ciphersuites. You can identify them as they currently are like 0x130?. Retrieve them from above see ``~/utils/hexstream2cipher.sh``
 * Figure out the services by applying a good piece of human logic
 * Before submitting a PR: test it yourself! You can also watch it again via wireshark

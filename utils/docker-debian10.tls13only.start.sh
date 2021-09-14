@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# no early data, but TLS 1.3 with debian:buster (sid simlar in Feb 2019)
+# no early data, but TLS 1.3 with debian:buster (sid similar in Feb 2019)
 
 image=${1:-"debian:buster"}
 docker pull "$image"

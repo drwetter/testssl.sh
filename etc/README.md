@@ -28,7 +28,7 @@ If you want to check trust against e.g. a company internal CA you need to use ``
 
 * ``cipher-mapping.txt`` contains information about all of the cipher suites defined for SSL/TLS
 
-* ``curves-mapping.txt`` contains information about all of the eliptic curves defined by IANA
+* ``curves-mapping.txt`` contains information about all of the elliptic curves defined by IANA
 
 * ``ca_hashes.txt`` is used for HPKP test in order to have a fast comparison with known CAs. Use
    ``~/utils/create_ca_hashes.sh`` for an update

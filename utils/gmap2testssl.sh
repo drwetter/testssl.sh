@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Utility which converts grepable nmap outout to testssl's file input
+# Utility which converts grepable nmap output to testssl's file input
 # It is just borrowed from testssl.sh
 # License see testssl.sh
 
