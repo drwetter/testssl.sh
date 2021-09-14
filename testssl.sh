@@ -1056,7 +1056,7 @@ set_grade_cap() {
      # Always set special attributes. These are hard caps, due to name mismatch or cert being invalid
      if [[ "$1" == T || "$1" == M ]]; then
           GRADE_CAP="$1"
-     # Only keep track of the lowest grade cap, since a higher grade cap wont do anything (F = lowest, A = highest)
+     # Only keep track of the lowest grade cap, since a higher grade cap won't do anything (F = lowest, A = highest)
      elif  [[ ! "$GRADE_CAP" > "$1" ]]; then
           GRADE_CAP="$1"
      fi
@@ -2044,7 +2044,7 @@ wait_kill(){
 
 # Convert date formats -- we always use GMT=UTC here
 # argv1: source date string
-# argv2: dest date sting
+# argv2: dest date string
 if "$HAS_GNUDATE"; then            # Linux and NetBSD
      parse_date() {
           LC_ALL=C TZ=GMT date -d "$1" "$2"
@@ -2402,7 +2402,7 @@ run_http_header() {
      debugme echo "NOW_TIME: $NOW_TIME | HTTP_TIME: $HTTP_TIME"
 
      # Quit on first empty line to catch 98% of the cases. Next pattern is there because the SEDs tested
-     # so far seem not to be fine with header containing x0d x0a (CRLF) which is the usal case.
+     # so far seem not to be fine with header containing x0d x0a (CRLF) which is the usual case.
      # So we also trigger also on any sign on a single line which is not alphanumeric (plus _)
      sed -e '/^$/q' -e '/^[^a-zA-Z_0-9]$/q' $HEADERFILE >$HEADERFILE.tmp
      # Now to be more sure we delete from '<' or '{' maybe with a leading blank until the end
@@ -7672,19 +7672,19 @@ get_server_certificate() {
      local success ret
      local npn_params="" line
      local ciphers_to_test=""
-     # Cipher suites that use a certifiate with an RSA (signature) public key
+     # Cipher suites that use a certificate with an RSA (signature) public key
      local -r a_rsa="cc,13, cc,15, c0,30, c0,28, c0,14, 00,9f, cc,a8, cc,aa, c0,a3, c0,9f, 00,6b, 00,39, c0,77, 00,c4, 00,88, c0,45, c0,4d, c0,53, c0,61, c0,7d, c0,8b, 16,b7, 16,b9, c0,2f, c0,27, c0,13, 00,9e, c0,a2, c0,9e, 00,67, 00,33, c0,76, 00,be, 00,9a, 00,45, c0,44, c0,4c, c0,52, c0,60, c0,7c, c0,8a, c0,11, c0,12, 00,16, 00,15, 00,14, c0,10"
-     # Cipher suites that use a certifiate with an RSA (encryption) public key
+     # Cipher suites that use a certificate with an RSA (encryption) public key
      local -r e_rsa="00,b7, c0,99, 00,ad, cc,ae, 00,9d, c0,a1, c0,9d, 00,3d, 00,35, 00,c0, 00,84, 00,95, c0,3d, c0,51, c0,69, c0,6f, c0,7b, c0,93, ff,01, 00,ac, c0,a0, c0,9c, 00,9c, 00,3c, 00,2f, 00,ba, 00,b6, 00,96, 00,41, c0,98, 00,07, 00,94, c0,3c, c0,50, c0,68, c0,6e, c0,7a, c0,92, 00,05, 00,04, 00,92, 00,0a, 00,93, fe,ff, ff,e0, 00,62, 00,09, 00,61, fe,fe, ff,e1, 00,64, 00,60, 00,08, 00,06, 00,03, 00,b9, 00,b8, 00,2e, 00,3b, 00,02, 00,01, ff,00"
-     # Cipher suites that use a certifiate with a DSA public key
+     # Cipher suites that use a certificate with a DSA public key
      local -r a_dss="00,a3, 00,6a, 00,38, 00,c3, 00,87, c0,43, c0,57, c0,81, 00,a2, 00,40, 00,32, 00,bd, 00,99, 00,44, c0,42, c0,56, c0,80, 00,66, 00,13, 00,63, 00,12, 00,65, 00,11"
-     # Cipher suites that use a certifiate with a DH public key
+     # Cipher suites that use a certificate with a DH public key
      local -r a_dh="00,a5, 00,a1, 00,69, 00,68, 00,37, 00,36, 00,c2, 00,c1, 00,86, 00,85, c0,3f, c0,41, c0,55, c0,59, c0,7f, c0,83, 00,a4, 00,a0, 00,3f, 00,3e, 00,31, 00,30, 00,bc, 00,bb, 00,98, 00,97, 00,43, 00,42, c0,3e, c0,40, c0,54, c0,58, c0,7e, c0,82, 00,10, 00,0d, 00,0f, 00,0c, 00,0b, 00,0e"
-     # Cipher suites that use a certifiate with an ECDH public key
+     # Cipher suites that use a certificate with an ECDH public key
      local -r a_ecdh="c0,32, c0,2e, c0,2a, c0,26, c0,0f, c0,05, c0,79, c0,75, c0,4b, c0,4f, c0,5f, c0,63, c0,89, c0,8d, c0,31, c0,2d, c0,29, c0,25, c0,0e, c0,04, c0,78, c0,74, c0,4a, c0,4e, c0,5e, c0,62, c0,88, c0,8c, c0,0c, c0,02, c0,0d, c0,03, c0,0b, c0,01"
-     # Cipher suites that use a certifiate with an ECDSA public key
+     # Cipher suites that use a certificate with an ECDSA public key
      local -r a_ecdsa="cc,14, c0,2c, c0,24, c0,0a, cc,a9, c0,af, c0,ad, c0,73, c0,49, c0,5d, c0,87, 16,b8, 16,ba, c0,2b, c0,23, c0,09, c0,ae, c0,ac, c0,72, c0,48, c0,5c, c0,86, c0,07, c0,08, c0,06"
-     # Cipher suites that use a certifiate with a GOST public key
+     # Cipher suites that use a certificate with a GOST public key
      local -r a_gost="00,80, 00,81, 00,82, 00,83"
      local using_sockets=true
 
@@ -7849,7 +7849,7 @@ get_server_certificate() {
                "ssl3") DETECTED_TLS_VERSION="0300" ;;
           esac
           # When "$2" is empty, get_server_certificate() is being called with SNI="".
-          # In case the extensions returned by the server differ depending on wheter
+          # In case the extensions returned by the server differ depending on whether
           # SNI is provided or not, don't collect extensions when SNI="" (unless
           # no DNS name was provided at the command line).
           [[ -z "$2" ]] && extract_new_tls_extensions $TMPFILE
@@ -8891,7 +8891,7 @@ certificate_info() {
      fileout "cert_fingerprintSHA256${json_postfix}" "INFO" "${cert_fingerprint_sha2}"
      outln "${spaces}SHA256 ${cert_fingerprint_sha2}"
 
-     # " " needs to be converted back to lf in JSON/CSV output. watch out leading/ending line containting "CERTIFICATE"
+     # " " needs to be converted back to lf in JSON/CSV output. watch out leading/ending line containing "CERTIFICATE"
      fileout "cert${json_postfix}" "INFO" "$hostcert"
 
      [[ -z $CERT_FINGERPRINT_SHA2 ]] && \
@@ -11026,7 +11026,7 @@ fd_socket() {
                     fi
                     ((NR_STARTTLS_FAIL++))
                     # This are mostly timeouts here (code >=128). We give the client a chance to try again later. For cases
-                    # where we have no STARTTLS in the server banner however - ret code=3 - we don't neet to try again
+                    # where we have no STARTTLS in the server banner however - ret code=3 - we don't need to try again
                     connectivity_problem $NR_STARTTLS_FAIL $MAX_STARTTLS_FAIL "STARTTLS handshake failed (code: $ret)" "repeated STARTTLS problems, giving up ($ret)"
                     return 6 ;;
           esac
@@ -11083,7 +11083,7 @@ socksend_clienthello() {
 }
 
 
-# ARG1: hexbytes -- preceeded by x -- separated by commas, with a leading comma
+# ARG1: hexbytes -- preceded by x -- separated by commas, with a leading comma
 # ARG2: seconds to sleep
 socksend() {
      local data line
@@ -16684,7 +16684,7 @@ run_sweet32() {
           fileout "SWEET32" "LOW" "uses 64 bit block ciphers" "$cve" "$cwe" "$hint"
           "$tls1_1_vulnerable" && set_grade_cap "C" "Uses 64 bit block ciphers with TLS 1.1 (vulnerable to SWEET32)"
      elif "$ssl2_sweet"; then
-          pr_svrty_low "VULNERABLE"; out ", uses 64 bit block ciphers wth SSLv2 only"
+          pr_svrty_low "VULNERABLE"; out ", uses 64 bit block ciphers with SSLv2 only"
           fileout "SWEET32" "LOW" "uses 64 bit block ciphers with SSLv2 only" "$cve" "$cwe" "$hint"
      else
           pr_svrty_best "not vulnerable (OK)";
@@ -21947,7 +21947,7 @@ set_rating_state() {
           "${!gbl}" && let nr_enabled++
      done
 
-     # ... atleast one of these has to be set
+     # ... at least one of these has to be set
      [[ "$do_allciphers" || "$do_cipher_per_proto" ]] && let nr_enabled++
 
      # ... else we can't do rating

@@ -236,7 +236,7 @@ containing files with a .pem extension, a single file or multiple files as a com
 
 <p><code>-E, --cipher-per-proto</code>  is similar to <code>-e, --each-cipher</code>. It checks each of the possible ciphers, here: per protocol. If you want to display each cipher tested you need to add <code>--show-each</code>. The output is sorted by security strength, it lists the encryption bits though.</p>
 
-<p><code>-s, --std, --categories</code>   tests certain lists of cipher suites / cipher catagories by strength. (<code>--standard</code> is deprecated.) Those lists are (<code>openssl ciphers $LIST</code>, $LIST from below:)</p>
+<p><code>-s, --std, --categories</code>   tests certain lists of cipher suites / cipher categories by strength. (<code>--standard</code> is deprecated.) Those lists are (<code>openssl ciphers $LIST</code>, $LIST from below:)</p>
 
 <ul>
 <li><code>NULL encryption ciphers</code>: 'NULL:eNULL'</li>
@@ -486,7 +486,7 @@ Rating automatically gets disabled, to not give a wrong or misleading grade, whe
 <li>CA_BUNDLES_PATH: If you have an own set of CA bundles or you want to point testssl.sh to a specific location of a CA bundle, you can use this variable to set the directory which testssl.sh will use. Please note that it overrides completely the builtin path of testssl.sh which means that you will only test against the bundles you point to. Also you might want to use <code>~/utils/create_ca_hashes.sh</code> to create the hashes for HPKP.</li>
 <li>MAX_SOCKET_FAIL: A number which tells testssl.sh how often a TCP socket connection may fail before the program gives up and terminates. The default is 2. You can increase it to a higher value if you frequently see a message like <em>Fatal error: repeated openssl s_client connect problem, doesn't make sense to continue</em>.</li>
 <li>MAX_OSSL_FAIL: A number which tells testssl.sh how often an OpenSSL s_client connect may fail before the program gives up and terminates. The default is 2. You can increase it to a higher value if you frequently see a message like <em>Fatal error: repeated TCP connect problems, giving up</em>.</li>
-<li>MAX_HEADER_FAIL: A number which tells testssl.sh how often a HTTP GET request over OpenSSL may return an empty file before the program gives up and terminates. The default is 3. Also here you can incerase the threshold when you spot messages like <em>Fatal error: repeated HTTP header connect problems, doesn't make sense to continue</em>.</li>
+<li>MAX_HEADER_FAIL: A number which tells testssl.sh how often a HTTP GET request over OpenSSL may return an empty file before the program gives up and terminates. The default is 3. Also here you can increase the threshold when you spot messages like <em>Fatal error: repeated HTTP header connect problems, doesn't make sense to continue</em>.</li>
 </ul>
 
 
