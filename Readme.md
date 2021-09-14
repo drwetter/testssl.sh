@@ -13,7 +13,7 @@ cryptographic flaws.
 * Clear output: you can tell easily whether anything is good or bad.
 * Machine readable output.
 * No installation needed: Linux, OSX/Darwin, FreeBSD, NetBSD, MSYS2/Cygwin,  WSL work out of the box. Only OpenBSD needs bash. No need to install  or to configure something.  No gems, CPAN, pip or the like.
-* A Dockerfile is provided, there's also an offical container @ dockerhub.
+* A Dockerfile is provided, there's also an official container @ dockerhub.
 * Flexibility: You can test any SSL/TLS enabled and STARTTLS service, not only web servers at port 443.
 * Toolbox: Several command line options help you to run *your* test and configure *your* output.
 * Reliability: features are tested thoroughly.
@@ -49,7 +49,7 @@ You can download testssl.sh by cloning this git repository:
 
     git clone --depth 1 https://github.com/drwetter/testssl.sh.git --branch 3.0
 
-For the stable version help yourself by downloading the [ZIP](https://codeload.github.com/drwetter/testssl.sh/zip/3.0.5) or the lastest testssl-3.0.X.tar.gz from [https://testssl.sh](https://testssl.sh/) archive. Just ``cd`` to the directory created (=INSTALLDIR) and run it off there.
+For the stable version help yourself by downloading the [ZIP](https://codeload.github.com/drwetter/testssl.sh/zip/3.0.5) or the latest testssl-3.0.X.tar.gz from [https://testssl.sh](https://testssl.sh/) archive. Just ``cd`` to the directory created (=INSTALLDIR) and run it off there.
 
 #### Docker
 

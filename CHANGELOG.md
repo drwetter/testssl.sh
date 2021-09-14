@@ -16,7 +16,7 @@
 * Socket timeouts (``--connect-timeout``)
 * IDN/IDN2 servername/URI + emoji support, supposed libidn/idn2 is installed and DNS resolver is recent) support
 * Initial support for certificate compression
-* Better JSON output: renamed IDs and findings shorter/better parsable, also includes certficate
+* Better JSON output: renamed IDs and findings shorter/better parsable, also includes certificate
 * JSON output now valid also for non-responding servers
 * Testing now per default 370 ciphers
 * Further improving the robustness of TLS sockets (sending and parsing)
@@ -61,7 +61,7 @@
 
 * Way better coverage of ciphers as most checks are done via bash sockets where ever possible
 * Further tests via TLS sockets and improvements (handshake parsing, completeness, robustness)
-* Testing 359 default ciphers (``testssl.sh -e/-E``) with a mixture of sockets and openssl. Same speed as with openssl only but addtional ciphers such as post-quantum ciphers, new CHAHA20/POLY1305, CamelliaGCM etc.
+* Testing 359 default ciphers (``testssl.sh -e/-E``) with a mixture of sockets and openssl. Same speed as with openssl only but additional ciphers such as post-quantum ciphers, new CHAHA20/POLY1305, CamelliaGCM etc.
 * TLS 1.2 protocol check via sockets in production
 * Finding more TLS extensions via sockets
 * TLS Supported Groups Registry (RFC 7919), key shares extension
@@ -105,7 +105,7 @@
 * Even more compatibility improvements for FreeBSD, NetBSD, Gentoo, RH-ish, F5 and Cisco systems
 * Considerable speed improvements for each cipher runs (-e/-E)
 * More robust SSLv2 + TLS socket interface
-* seperate check for curves
+* separate check for curves
 * OpenSSL 1.1.0 compliant
 * check for DROWN
 * Whole number of bugs squashed
@@ -124,7 +124,7 @@
   * (HTTP) proxy support! Also with sockets -- thx @jnewbigin
   * Extended validation certificate detection
   * Run in default mode through all ciphers at the end of a default run
-  * will test multiple IP adresses of one supplied server name in one shot, --ip= restricts it accordingly
+  * will test multiple IP addresses of one supplied server name in one shot, --ip= restricts it accordingly
   * new mass testing file option --file option where testssl.sh commands are being read from, see https://twitter.com/drwetter/status/627619848344989696
   * TLS time and HTTP time stamps
   * TLS time displayed also for STARTTLS protocols
@@ -193,10 +193,10 @@ Full changelog @  https://github.com/drwetter/testssl.sh/commits/2.2/testssl.sh
 - IPv6 display fix
 
 1.111
-- NEW: tested unter FreeBSD (works with exception of xxd in CCS)
+- NEW: tested under FreeBSD (works with exception of xxd in CCS)
 - getent now works under Linux and FreeBSD
 - sed -i in hsts sacrificed for compatibility
-- reomved query for IP for finishing banner, is now called once in parse_hn_port
+- removed query for IP for finishing banner, is now called once in parse_hn_port
 - GOST warning after banner
 - empty build date is not displayed anymore
 - long build date strings minimized
@@ -286,7 +286,7 @@ Full changelog @  https://github.com/drwetter/testssl.sh/commits/2.2/testssl.sh
 1.91
 - replaced most lcyan to brown (=not really bad but somehow)
 - empty server string better displayed
-- prefered CBC TLS 1.2 cipher is now brown (lucky13)
+- preferred CBC TLS 1.2 cipher is now brown (lucky13)
 
 1.90
 - fix for netweaver banner (server is lowercase)
@@ -295,7 +295,7 @@ Full changelog @  https://github.com/drwetter/testssl.sh/commits/2.2/testssl.sh
 
 1.89
 - reordered! : protocols + cipher come first
-- colorized prefered server preference (e.g. CBC+RC4 is light red now, TLSv1.2 green)
+- colorized preferred server preference (e.g. CBC+RC4 is light red now, TLSv1.2 green)
 - SSLv3 is now light cyan
 - NEW: -P|--preference now in help menu
 - light cyan is more appropriate than red for HSTS
@@ -330,10 +330,10 @@ Full changelog @  https://github.com/drwetter/testssl.sh/commits/2.2/testssl.sh
 - headline of -V / PFS+RC4 ciphers unified
 
 1.82
-- NEW: output for -V now better (bits seperate, spacing improved)
+- NEW: output for -V now better (bits separate, spacing improved)
 
 1.81
-- output for RC4+PFS now better (with headline, bits seperate, spacing improved)
+- output for RC4+PFS now better (with headline, bits separate, spacing improved)
 - both also sorted by encr. strength .. umm ..err bits!
 
 1.80
@@ -358,7 +358,7 @@ Full changelog @  https://github.com/drwetter/testssl.sh/commits/2.2/testssl.sh
 - removed legacy code (PROD_REL var)
 
 1.76
-- bash was gone!! desaster for Ubuntu, fixed
+- bash was gone!! disaster for Ubuntu, fixed
 - starttls+rc4 check: bottom line was wrong
 - starttls had too much output (certificate) at first a/v check
 
@@ -454,7 +454,7 @@ Full changelog @  https://github.com/drwetter/testssl.sh/commits/2.2/testssl.sh
 * NOPARANOID flag tells whether medium grade ciphers are ok. NOW they are (=<1.17 was paranoid)
 
 1.17
-* SSL tests now for renegotiation vulnerabilty!
+* SSL tests now for renegotiation vulnerability!
 * version detection of testssl.sh
 * program has a banner
 * fixed bug leading to a file named "1"
@@ -480,7 +480,7 @@ Full changelog @  https://github.com/drwetter/testssl.sh/commits/2.2/testssl.sh
 * as a courtesy I am providing 64+32 Linux binaries for testing 56 Bit ciphers
 
 1.11
-* Hint for howto enable 56 Bit ciphers fpr testing
+* Hint for howto enable 56 Bit ciphers for testing
 * possible to specify where openssl is (hardcoded, $ENV, last resort: auto)
 * warns if netcat is not there
 
