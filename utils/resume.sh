@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# simple check for seesion resumption 1) by SID, 2) by tickets
+# simple check for session resumption 1) by SID, 2) by tickets
 # Author: Dirk Wetter, GPLv2 see https://testssl.sh/LICENSE.txt
 
 

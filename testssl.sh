@@ -169,7 +169,7 @@ echo A | sed -E 's/A//' >/dev/null 2>&1 && \
      declare -r HAS_SED_E=true || \
      declare -r HAS_SED_E=false
 
-########### Terminal defintions
+########### Terminal definitions
 tty -s && \
      declare -r INTERACTIVE=true || \
      declare -r INTERACTIVE=false
@@ -292,7 +292,7 @@ CURVES_OFFERED=""                       # This keeps which curves have been dete
 KNOWN_OSSL_PROB=false                   # We need OpenSSL a few times. This variable is an indicator if we can't connect. Eases handling
 DETECTED_TLS_VERSION=""                 # .. as hex string, e.g. 0300 or 0303
 TLS13_ONLY=false                        # Does the server support TLS 1.3 ONLY?
-OSSL_SHORTCUT=${OSSL_SHORTCUT:-false}   # Hack: if during the scan turns out the OpenSSL binary suports TLS 1.3 would be a better choice, this enables it.
+OSSL_SHORTCUT=${OSSL_SHORTCUT:-false}   # Hack: if during the scan turns out the OpenSSL binary supports TLS 1.3 would be a better choice, this enables it.
 TLS_EXTENSIONS=""
 declare -r NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
 # alpn_protos needs to be space-separated, not comma-seperated, including odd ones observed @ facebook and others, old ones like h2-17 omitted as they could not be found
@@ -1877,7 +1877,7 @@ wait_kill(){
 
 # Convert date formats -- we always use GMT=UTC here
 # argv1: source date string
-# argv2: dest date sting
+# argv2: dest date string
 if "$HAS_GNUDATE"; then            # Linux and NetBSD
      parse_date() {
           LC_ALL=C TZ=GMT date -d "$1" "$2"
@@ -1887,7 +1887,7 @@ elif "$HAS_FREEBSDDATE"; then      # FreeBSD, OS X and newer (~6.6) OpenBSD vers
           LC_ALL=C TZ=GMT date -j -f "$3" "$2" "$1"
      }
 elif "$HAS_OPENBSDDATE"; then
-# We bascially echo it as a conversion as we want it is too difficult. Approach for that would be:
+# We basically echo it as a conversion as we want it is too difficult. Approach for that would be:
 #  printf '%s\n' "$1" | awk '{ printf "%04d%02d%02d\n", $4, $2, (index("JanFebMarAprMayJunJulAugSepOctNovDec",$1)+2)/3}'
 # 4: year, 1: month, 2: day, $3: time  (e.g. "Dec 8 10:16:13 2016")
 # This way we could also kind of convert args to epoch but as newer OpenBSDs "date" behave like FreeBSD
@@ -2199,7 +2199,7 @@ run_http_header() {
      debugme echo "NOW_TIME: $NOW_TIME | HTTP_TIME: $HTTP_TIME"
 
      # Quit on first empty line to catch 98% of the cases. Next pattern is there because the SEDs tested
-     # so far seem not to be fine with header containing x0d x0a (CRLF) which is the usal case.
+     # so far seem not to be fine with header containing x0d x0a (CRLF) which is the usual case.
      # So we also trigger also on any sign on a single line which is not alphanumeric (plus _)
      sed -e '/^$/q' -e '/^[^a-zA-Z_0-9]$/q' $HEADERFILE >$HEADERFILE.tmp
      # Now to be more sure we delete from '<' or '{' maybe with a leading blank until the end
@@ -3304,7 +3304,7 @@ neat_list(){
      [[ "$enc" == ChaCha20-Poly1305 ]] && enc="CHACHA20(256)"
      [[ "$enc" == GOST-28178-89-CNT ]] && enc="GOST(256)"
 
-     strength="${enc//\)/}"             # retrieve (). first remove traling ")"
+     strength="${enc//\)/}"             # retrieve (). first remove trailing ")"
      strength="${strength#*\(}"         # exfiltrate (VAL
      enc="${enc%%\(*}"
 
@@ -4423,7 +4423,7 @@ client_simulation_sockets() {
      # robustness to the implementation
      # see also https://github.com/drwetter/testssl.sh/pull/797
      if [[ "${1:0:4}" == 1603 ]]; then
-          # Extact list of cipher suites from SSLv3 or later ClientHello
+          # Extract list of cipher suites from SSLv3 or later ClientHello
           sid_len=4*$(hex2dec "${data:174:2}")
           offset1=178+$sid_len
           offset2=182+$sid_len
@@ -4431,7 +4431,7 @@ client_simulation_sockets() {
           offset1=186+$sid_len
           code2network "$(tolower "${data:offset1:len}")"    # convert CIPHER_SUITES to a "standardized" format
      else
-          # Extact list of cipher suites from SSLv2 ClientHello
+          # Extract list of cipher suites from SSLv2 ClientHello
           len=2*$(hex2dec "${clienthello:12:2}")
           for (( i=22; i < 22+len; i=i+6 )); do
                offset1=$i+2
@@ -4875,7 +4875,7 @@ run_prototest_openssl() {
 add_tls_offered() {
      # the ":" is mandatory here (and @ other places), otherwise e.g. tls1 will match tls1_2
      if [[ "$PROTOS_OFFERED" =~ $1: ]]; then
-          # we got that protcol already
+          # we got that protocol already
           :
      else
           PROTOS_OFFERED+="${1}:$2 "
@@ -7338,19 +7338,19 @@ get_server_certificate() {
      local success ret
      local npn_params="" line
      local ciphers_to_test=""
-     # Cipher suites that use a certifiate with an RSA (signature) public key
+     # Cipher suites that use a certificate with an RSA (signature) public key
      local -r a_rsa="cc,13, cc,15, c0,30, c0,28, c0,14, 00,9f, cc,a8, cc,aa, c0,a3, c0,9f, 00,6b, 00,39, c0,77, 00,c4, 00,88, c0,45, c0,4d, c0,53, c0,61, c0,7d, c0,8b, 16,b7, 16,b9, c0,2f, c0,27, c0,13, 00,9e, c0,a2, c0,9e, 00,67, 00,33, c0,76, 00,be, 00,9a, 00,45, c0,44, c0,4c, c0,52, c0,60, c0,7c, c0,8a, c0,11, c0,12, 00,16, 00,15, 00,14, c0,10"
-     # Cipher suites that use a certifiate with an RSA (encryption) public key
+     # Cipher suites that use a certificate with an RSA (encryption) public key
      local -r e_rsa="00,b7, c0,99, 00,ad, cc,ae, 00,9d, c0,a1, c0,9d, 00,3d, 00,35, 00,c0, 00,84, 00,95, c0,3d, c0,51, c0,69, c0,6f, c0,7b, c0,93, ff,01, 00,ac, c0,a0, c0,9c, 00,9c, 00,3c, 00,2f, 00,ba, 00,b6, 00,96, 00,41, c0,98, 00,07, 00,94, c0,3c, c0,50, c0,68, c0,6e, c0,7a, c0,92, 00,05, 00,04, 00,92, 00,0a, 00,93, fe,ff, ff,e0, 00,62, 00,09, 00,61, fe,fe, ff,e1, 00,64, 00,60, 00,08, 00,06, 00,03, 00,b9, 00,b8, 00,2e, 00,3b, 00,02, 00,01, ff,00"
-     # Cipher suites that use a certifiate with a DSA public key
+     # Cipher suites that use a certificate with a DSA public key
      local -r a_dss="00,a3, 00,6a, 00,38, 00,c3, 00,87, c0,43, c0,57, c0,81, 00,a2, 00,40, 00,32, 00,bd, 00,99, 00,44, c0,42, c0,56, c0,80, 00,66, 00,13, 00,63, 00,12, 00,65, 00,11"
-     # Cipher suites that use a certifiate with a DH public key
+     # Cipher suites that use a certificate with a DH public key
      local -r a_dh="00,a5, 00,a1, 00,69, 00,68, 00,37, 00,36, 00,c2, 00,c1, 00,86, 00,85, c0,3f, c0,41, c0,55, c0,59, c0,7f, c0,83, 00,a4, 00,a0, 00,3f, 00,3e, 00,31, 00,30, 00,bc, 00,bb, 00,98, 00,97, 00,43, 00,42, c0,3e, c0,40, c0,54, c0,58, c0,7e, c0,82, 00,10, 00,0d, 00,0f, 00,0c, 00,0b, 00,0e"
-     # Cipher suites that use a certifiate with an ECDH public key
+     # Cipher suites that use a certificate with an ECDH public key
      local -r a_ecdh="c0,32, c0,2e, c0,2a, c0,26, c0,0f, c0,05, c0,79, c0,75, c0,4b, c0,4f, c0,5f, c0,63, c0,89, c0,8d, c0,31, c0,2d, c0,29, c0,25, c0,0e, c0,04, c0,78, c0,74, c0,4a, c0,4e, c0,5e, c0,62, c0,88, c0,8c, c0,0c, c0,02, c0,0d, c0,03, c0,0b, c0,01"
-     # Cipher suites that use a certifiate with an ECDSA public key
+     # Cipher suites that use a certificate with an ECDSA public key
      local -r a_ecdsa="cc,14, c0,2c, c0,24, c0,0a, cc,a9, c0,af, c0,ad, c0,73, c0,49, c0,5d, c0,87, 16,b8, 16,ba, c0,2b, c0,23, c0,09, c0,ae, c0,ac, c0,72, c0,48, c0,5c, c0,86, c0,07, c0,08, c0,06"
-     # Cipher suites that use a certifiate with a GOST public key
+     # Cipher suites that use a certificate with a GOST public key
      local -r a_gost="00,80, 00,81, 00,82, 00,83"
      local using_sockets=true
 
@@ -7373,7 +7373,7 @@ get_server_certificate() {
                extract_stapled_ocsp
                success=$?
           else
-               # For STARTTLS protcols not being implemented yet via sockets this is a bypass otherwise it won't be usable at all (e.g. LDAP)
+               # For STARTTLS protocols not being implemented yet via sockets this is a bypass otherwise it won't be usable at all (e.g. LDAP)
                if ( [[ "$STARTTLS" =~ ldap ]] || [[ "$STARTTLS" =~ irc ]] ); then
                     return 1
                elif [[ "$1" =~ "tls1_3_RSA" ]]; then
@@ -7458,7 +7458,7 @@ get_server_certificate() {
           cp $TEMPDIR/$NODEIP.parse_tls_serverhello.txt $TMPFILE
 
           # When "$2" is empty, get_server_certificate() is being called with SNI="".
-          # In case the extensions returned by the server differ depending on wheter
+          # In case the extensions returned by the server differ depending on whether
           # SNI is provided or not, don't collect extensions when SNI="" (unless
           # no DNS name was provided at the command line).
           [[ -z "$2" ]] && extract_new_tls_extensions $TMPFILE
@@ -7513,7 +7513,7 @@ get_server_certificate() {
                "ssl3") DETECTED_TLS_VERSION="0300" ;;
           esac
           # When "$2" is empty, get_server_certificate() is being called with SNI="".
-          # In case the extensions returned by the server differ depending on wheter
+          # In case the extensions returned by the server differ depending on whether
           # SNI is provided or not, don't collect extensions when SNI="" (unless
           # no DNS name was provided at the command line).
           [[ -z "$2" ]] && extract_new_tls_extensions $TMPFILE
@@ -7807,7 +7807,7 @@ etsi_etls_visibility_info() {
      # OpenSSL displays all names of type otherName as "othername:<unsupported>".
      # As certificates will rarely include a name encoded as an otherName, check the
      # text version of the certificate for "othername:<unsupported>" before calling
-     # external functions to obtain the DER encoded certficate.
+     # external functions to obtain the DER encoded certificate.
      if [[ "$cert_txt" =~ X509v3\ Subject\ Alternative\ Name:.*othername:\<unsupported\> ]]; then
           dercert="$($OPENSSL x509 -in "$cert" -outform DER 2>>$ERRFILE | hexdump -v -e '16/1 "%02X"')"
           if [[ "$dercert" =~ 0603551D110101FF04[0-9A-F]*060604009B430301 ]] || \
@@ -8003,19 +8003,19 @@ certificate_transparency() {
      local hexc n ciph sslver kx auth enc mac export
      local extra_extns=""
      local -i success
-     # Cipher suites that use a certifiate with an RSA (signature) public key
+     # Cipher suites that use a certificate with an RSA (signature) public key
      local -r a_rsa="cc,13, cc,15, c0,30, c0,28, c0,14, 00,9f, cc,a8, cc,aa, c0,a3, c0,9f, 00,6b, 00,39, c0,77, 00,c4, 00,88, c0,45, c0,4d, c0,53, c0,61, c0,7d, c0,8b, 16,b7, 16,b9, c0,2f, c0,27, c0,13, 00,9e, c0,a2, c0,9e, 00,67, 00,33, c0,76, 00,be, 00,9a, 00,45, c0,44, c0,4c, c0,52, c0,60, c0,7c, c0,8a, c0,11, c0,12, 00,16, 00,15, 00,14, c0,10"
-     # Cipher suites that use a certifiate with an RSA (encryption) public key
+     # Cipher suites that use a certificate with an RSA (encryption) public key
      local -r e_rsa="00,b7, c0,99, 00,ad, cc,ae, 00,9d, c0,a1, c0,9d, 00,3d, 00,35, 00,c0, 00,84, 00,95, c0,3d, c0,51, c0,69, c0,6f, c0,7b, c0,93, ff,01, 00,ac, c0,a0, c0,9c, 00,9c, 00,3c, 00,2f, 00,ba, 00,b6, 00,96, 00,41, c0,98, 00,07, 00,94, c0,3c, c0,50, c0,68, c0,6e, c0,7a, c0,92, 00,05, 00,04, 00,92, 00,0a, 00,93, fe,ff, ff,e0, 00,62, 00,09, 00,61, fe,fe, ff,e1, 00,64, 00,60, 00,08, 00,06, 00,03, 00,b9, 00,b8, 00,2e, 00,3b, 00,02, 00,01, ff,00"
-     # Cipher suites that use a certifiate with a DSA public key
+     # Cipher suites that use a certificate with a DSA public key
      local -r a_dss="00,a3, 00,6a, 00,38, 00,c3, 00,87, c0,43, c0,57, c0,81, 00,a2, 00,40, 00,32, 00,bd, 00,99, 00,44, c0,42, c0,56, c0,80, 00,66, 00,13, 00,63, 00,12, 00,65, 00,11"
-     # Cipher suites that use a certifiate with a DH public key
+     # Cipher suites that use a certificate with a DH public key
      local -r a_dh="00,a5, 00,a1, 00,69, 00,68, 00,37, 00,36, 00,c2, 00,c1, 00,86, 00,85, c0,3f, c0,41, c0,55, c0,59, c0,7f, c0,83, 00,a4, 00,a0, 00,3f, 00,3e, 00,31, 00,30, 00,bc, 00,bb, 00,98, 00,97, 00,43, 00,42, c0,3e, c0,40, c0,54, c0,58, c0,7e, c0,82, 00,10, 00,0d, 00,0f, 00,0c, 00,0b, 00,0e"
-     # Cipher suites that use a certifiate with an ECDH public key
+     # Cipher suites that use a certificate with an ECDH public key
      local -r a_ecdh="c0,32, c0,2e, c0,2a, c0,26, c0,0f, c0,05, c0,79, c0,75, c0,4b, c0,4f, c0,5f, c0,63, c0,89, c0,8d, c0,31, c0,2d, c0,29, c0,25, c0,0e, c0,04, c0,78, c0,74, c0,4a, c0,4e, c0,5e, c0,62, c0,88, c0,8c, c0,0c, c0,02, c0,0d, c0,03, c0,0b, c0,01"
-     # Cipher suites that use a certifiate with an ECDSA public key
+     # Cipher suites that use a certificate with an ECDSA public key
      local -r a_ecdsa="cc,14, c0,2c, c0,24, c0,0a, cc,a9, c0,af, c0,ad, c0,73, c0,49, c0,5d, c0,87, 16,b8, 16,ba, c0,2b, c0,23, c0,09, c0,ae, c0,ac, c0,72, c0,48, c0,5c, c0,86, c0,07, c0,08, c0,06"
-     # Cipher suites that use a certifiate with a GOST public key
+     # Cipher suites that use a certificate with a GOST public key
      local -r a_gost="00,80, 00,81, 00,82, 00,83"
 
      # First check whether signed certificate timestamps (SCT) are included in the
@@ -10260,7 +10260,7 @@ starttls_mysql_dialog() {
      # 1 is the timeout value which only MySQL needs. Note, there seems no response whether STARTTLS
      # succeeded. We could try harder, see https://github.com/openssl/openssl/blob/master/apps/s_client.c
      # but atm this seems sufficient as later we will fail if there's no STARTTLS.
-     # BUT: there seeem to be cases when the handshake fails (8S01Bad handshake --> 30 38 53 30 31 42 61 64 20 68 61 6e 64 73 68 61 6b 65).
+     # BUT: there seem to be cases when the handshake fails (8S01Bad handshake --> 30 38 53 30 31 42 61 64 20 68 61 6e 64 73 68 61 6b 65).
      #      also there's a banner in the reply "<version><somebytes>mysql_native_password"
      # TODO: We could detect if the server supports STARTTLS via the "Server Capabilities"
      # bit field, but we'd need to parse the binary stream, with greater precision than regex.
@@ -10422,7 +10422,7 @@ socksend_clienthello() {
 }
 
 
-# ARG1: hexbytes -- preceeded by x -- separated by commas, with a leading comma
+# ARG1: hexbytes -- preceded by x -- separated by commas, with a leading comma
 # ARG2: seconds to sleep
 socksend() {
      local data line
@@ -14773,7 +14773,7 @@ run_sweet32() {
           pr_svrty_low "VULNERABLE"; out ", uses 64 bit block ciphers"
           fileout "SWEET32" "LOW" "uses 64 bit block ciphers" "$cve" "$cwe" "$hint"
      elif "$ssl2_sweet"; then
-          pr_svrty_low "VULNERABLE"; out ", uses 64 bit block ciphers wth SSLv2 only"
+          pr_svrty_low "VULNERABLE"; out ", uses 64 bit block ciphers with SSLv2 only"
           fileout "SWEET32" "LOW" "uses 64 bit block ciphers with SSLv2 only" "$cve" "$cwe" "$hint"
      else
           pr_svrty_best "not vulnerable (OK)";
@@ -14993,7 +14993,7 @@ run_tls_fallback_scsv() {
           # support SSLv3 and it is known that SSLv3 is the fallback protocol ($low_proto), then
           # the test cannot be performed. Similarly, if SSLv3 could be the fallback protocol, but
           # support for SSLv3 is unknown, then the test cannot be performed.
-          # NOTE: This check assumes that any server that suppports SSLv3 and either TLS 1.2 or
+          # NOTE: This check assumes that any server that supports SSLv3 and either TLS 1.2 or
           # TLS 1.1 would also support TLS 1. So, if $high_proto is not TLS 1, then it is assumed
           # that either (1) $low_proto has already been set (to TLS1.1 or TLS 1) or (2) no protocol
           # lower than $high_proto is offered.
@@ -15223,7 +15223,7 @@ get_common_prime() {
           return 1
      else
           dh_p="$(toupper "$dh_p")"
-          # In the previous line of the match is bascially the hint we want to echo
+          # In the previous line of the match is basically the hint we want to echo
           # the most elegant thing to get the previous line [ awk '/regex/ { print x }; { x=$0 }' ] doesn't work with gawk
           lineno_matched=$(grep -n "$dh_p" "$common_primes_file" 2>/dev/null | awk -F':' '{ print $1 }')
           if [[ "$lineno_matched" -ne 0 ]]; then
@@ -17005,7 +17005,7 @@ find_openssl_binary() {
      $OPENSSL ciphers -s 2>&1 | grep -aiq "unknown option" || \
           OSSL_CIPHERS_S="-s"
 
-     # This and all other occurences we do a little trick using "invalid." to avoid plain and
+     # This and all other occurrences we do a little trick using "invalid." to avoid plain and
      # link level DNS lookups. See issue #1418 and https://tools.ietf.org/html/rfc6761#section-6.4
      $OPENSSL s_client -ssl2 -connect invalid. 2>&1 | grep -aiq "unknown option" || \
           HAS_SSL2=true
@@ -18636,7 +18636,7 @@ determine_sizelimitbug() {
      local overflow_cipher='C0,86'
      local -i nr_ciphers
 
-     # For STARTTLS protcols not being implemented yet via sockets this is a bypass otherwise it won't be usable at all (e.g. LDAP)
+     # For STARTTLS protocols not being implemented yet via sockets this is a bypass otherwise it won't be usable at all (e.g. LDAP)
      # Fixme: find out whether we can't skip this in general for STARTTLS
      [[ "$STARTTLS" =~ ldap ]] && return 0
      [[ "$STARTTLS" =~ irc ]] && return 0
