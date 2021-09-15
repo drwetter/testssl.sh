@@ -19151,10 +19151,18 @@ find_openssl_binary() {
           :    # 5. we tried hard and failed, so now we use the system binaries
      fi
 
-     # no ERRFILE initialized yet, thus we use /dev/null for stderr directly
-     $OPENSSL version -a 2>/dev/null >/dev/null
-     if [[ $? -ne 0 ]] || [[ ! -x "$OPENSSL" ]]; then
-          fatal "cannot exec or find any openssl binary" $ERR_OSSLBIN
+     [[ ! -x "$OPENSSL" ]] && fatal "cannot exec or find any openssl binary" $ERR_OSSLBIN
+
+     # The former detection only was flawed, because when the system supplied openssl.cnf file
+     # couldn't be parsed by our openssl it bailed out here with a misleading error, see #1982.
+     # Now we try with another version of the config file and if it still fails we bail out.
+     if ! $OPENSSL version -d >/dev/null 2>&1 ; then
+          export OPENSSL_CONF="$TESTSSL_INSTALL_DIR/etc/openssl.cnf"
+          if ! $OPENSSL version -d >/dev/null 2>&1 ; then
+               fatal "cannot exec or find any openssl binary" $ERR_OSSLBIN
+          else
+               debugme1 echo "We provide our own openssl.cnf file as the one from your system cannot be used"
+          fi
      fi
 
      # https://www.openssl.org/news/changelog.html
@@ -19916,8 +19924,10 @@ initialize_engine(){
           # Avoid clashes of OpenSSL 1.1.1 config file with our openssl 1.0.2. This is for Debian 10
           export OPENSSL_CONF=''
           return 1
-     else      # we have engine support
-          if [[ -n "$OPENSSL_CONF" ]]; then
+     else
+          # we have engine support. But we want to check whether an external OPENSSL_CONF was supplied.
+          # $TESTSSL_INSTALL_DIR/etc/openssl.cnf is an internal presetting, see #1982
+          if [[ -n "$OPENSSL_CONF" ]] && [[ "$OPENSSL_CONF" != "$TESTSSL_INSTALL_DIR/etc/openssl.cnf" ]]; then
                prln_warning "For now I am providing the config file to have GOST support"
           else
                OPENSSL_CONF=$TEMPDIR/gost.conf
