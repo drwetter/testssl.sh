@@ -1488,7 +1488,7 @@ html_header() {
           html_out "<!-- This file was created with testssl.sh. https://testssl.sh -->\n"
           html_out "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n"
           html_out "<head>\n"
-          html_out "<meta http-equiv=\"Content-Type\" content=\"application/xml+xhtml; charset=UTF-8\" />\n"
+          html_out "<meta http-equiv=\"Content-Type\" content=\"application/xhtml+xml; charset=UTF-8\" />\n"
           html_out "<title>testssl.sh</title>\n"
           html_out "</head>\n"
           html_out "<body>\n"
