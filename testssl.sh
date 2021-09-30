@@ -183,7 +183,8 @@ FNAME_PREFIX=${FNAME_PREFIX:-""}        # output filename prefix, see --outprefi
 APPEND=${APPEND:-false}                 # append to csv/json/html/log file
 OVERWRITE=${OVERWRITE:-false}           # overwriting csv/json/html/log file
 [[ -z "$NODNS" ]] && declare NODNS      # If unset it does all DNS lookups per default. "min" only for hosts or "none" at all
-HAS_IPv6=${HAS_IPv6:-false}             # if you have OpenSSL with IPv6 support AND IPv6 networking set it to yes
+HAS_IPv6=${HAS_IPv6:-true}              # if you have OpenSSL with IPv6 support AND IPv6 networking set it to yes
+HAS_IPv4=${HAS_IPv4:-true}              # if IPv4 networking is present, set to false eg on NAT64 or IPv6-only networks
 ALL_CLIENTS=${ALL_CLIENTS:-false}       # do you want to run all client simulation form all clients supplied by SSLlabs?
 OFFENSIVE=${OFFENSIVE:-true}            # do you want to include offensive vulnerability tests which may cause blocking by an IDS?
 ADDTL_CA_FILES="${ADDTL_CA_FILES:-""}"  # single file with a CA in PEM format or comma separated lists of them
@@ -19514,7 +19515,8 @@ tuning / connect options (most also can be preset via environment variables):
      --ssl-native                  fallback to checks with OpenSSL where sockets are normally used
      --openssl <PATH>              use this openssl binary (default: look in \$PATH, \$RUN_DIR of $PROG_NAME)
      --proxy <host:port|auto>      (experimental) proxy connects via <host:port>, auto: values from \$env (\$http(s)_proxy)
-     -6                            also use IPv6. Works only with supporting OpenSSL version and IPv6 connectivity
+     -only6                        only test IPv6, even if IPv4 is also present
+     -only4                        only test IPv4, even if IPv6 is also present
      --ip <ip>                     a) tests the supplied <ip> v4 or v6 address instead of resolving host(s) in URI
                                    b) arg "one" means: just test the first DNS returns (useful for multiple IPs)
      -n, --nodns <min|none>        if "none": do not try any DNS lookups, "min" queries A, AAAA and MX records
@@ -19623,6 +19625,7 @@ HAS_CURVES: $HAS_CURVES
 OSSL_SUPPORTED_CURVES: $OSSL_SUPPORTED_CURVES
 
 HAS_IPv6: $HAS_IPv6
+HAS_IPv4: $HAS_IPv4
 HAS_SSL2: $HAS_SSL2
 HAS_SSL3: $HAS_SSL3
 HAS_TLS13: $HAS_TLS13
@@ -20411,29 +20414,36 @@ determine_ip_addresses() {
           fi
      fi
 
-     # IPv6 only address
-     if [[ -z "$ip4" ]]; then
-          if "$HAS_IPv6"; then
-               IPADDRs=$(newline_to_spaces "$ip6")
-               IP46ADDRs="$IPADDRs"          # IP46ADDRs are the ones to display, IPADDRs the ones to test
-          fi
-     else
-          if "$HAS_IPv6" && [[ -n "$ip6" ]]; then
-               if is_ipv6addr "$CMDLINE_IP"; then
-                    IPADDRs=$(newline_to_spaces "$ip6")
-               else
-                    IPADDRs=$(newline_to_spaces "$ip4 $ip6")
-               fi
-          else
-               IPADDRs=$(newline_to_spaces "$ip4")
+# construct IPADDRs
+     if "$HAS_IPv6"; then
+          if [[ -n "$ip6" ]]; then
+              if ! [[ -z "$IPADDRs" ]]; then
+                  IPADDRs+=" "
+              fi
+              IPADDRs+=$(newline_to_spaces "$ip6")
           fi
      fi
+     if "$HAS_IPv4"; then
+          if [[ -n "$ip4" ]]; then
+              if ! [[ -z "$IPADDRs" ]]; then
+                  IPADDRs+=" "
+              fi
+              IPADDRs+=$(newline_to_spaces "$ip4")
+          fi
+     fi
+
      if [[ -z "$IPADDRs" ]]; then
-          if [[ -n "$ip6" ]]; then
-               fatal "Only IPv6 address(es) for \"$NODE\" available, maybe add \"-6\" to $0" $ERR_DNSLOOKUP
-          else
+          if [[ -z "$IP46ADDRs" ]]; then
                fatal "No IPv4/IPv6 address(es) for \"$NODE\" available" $ERR_DNSLOOKUP
           fi
+
+          if [[ -n "$ip6" ]]; then
+               fatal "Only IPv6 address(es) for \"$NODE\" available but IPv4-only mode specified" $ERR_DNSLOOKUP
+          fi
+          if [[ -n "$ip4" ]]; then
+               fatal "Only IPv4 address(es) for \"$NODE\" available but IPv6-only mode specified" $ERR_DNSLOOKUP
+          fi
+
      fi
      return 0                                # IPADDR and IP46ADDR is set now
 }
@@ -22716,6 +22726,18 @@ parse_cmd_line() {
                -6)  # doesn't work automagically. My versions have -DOPENSSL_USE_IPV6, CentOS/RHEL/FC do not
                     HAS_IPv6=true
                     ;;
+               -only6)
+                    HAS_IPv4=false
+                    if ! "$HAS_IPv6"; then
+                        fatal "Options -only6 and -only4 are mutually exclusive"
+                    fi
+                    ;;
+               -only4)
+                    if ! "$HAS_IPv4"; then
+			fatal "Options -only6 and -only4 are mutually exclusive"
+                    fi
+                    HAS_IPv6=false
+                    ;;
                --has[-_]dhbits|--has[_-]dh[-_]bits)
                     # Should work automagically. Helper switch for CentOS,RHEL+FC w openssl server temp key backport (version 1.0.1), see #190
                     HAS_DH_BITS=true
@@ -23046,9 +23068,9 @@ lets_roll() {
      if ! determine_ip_addresses; then
           fatal "No IP address could be determined" $ERR_DNSLOOKUP
      fi
-     if [[ $(count_words "$IPADDRs") -gt 1 ]]; then    # we have more than one ipv4 address to check
+     if [[ $(count_words "$IPADDRs") -gt 1 ]]; then    # we have more than one ip address to check
           MULTIPLE_CHECKS=true
-          pr_bold "Testing all IPv4 addresses (port $PORT): "; outln "$IPADDRs"
+          pr_bold "Testing all IP addresses (port $PORT): "; outln "$IPADDRs"
           for ip in $IPADDRs; do
                draw_line "-" $((TERM_WIDTH * 2 / 3))
                outln
