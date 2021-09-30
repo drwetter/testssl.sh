@@ -150,8 +150,7 @@ in `/etc/hosts`.  The use of the switch is only useful if you either can't or ar
 `--phone-out` Checking for revoked certificates via CRL and OCSP is not done per default. This switch instructs testssl.sh to query external -- in a sense of the current run -- URIs. By using this switch you acknowledge that the check might have privacy issues, a download of several megabytes (CRL file) may happen and there may be network connectivity problems while contacting the endpoint which testssl.sh doesn't handle. PHONE_OUT is the environment variable for this which needs to be set to true if you want this.
 
 `--add-ca <CAfile>` enables you to add your own CA(s) in PEM format for trust chain checks. `CAfile` can be a directory containing files with a \.pem extension, a single file or multiple files as a comma separated list of root CAs. Internally they will be added during runtime to all CA stores. This is (only) useful for internal hosts whose certificates are issued by internal CAs. Alternatively ADDTL_CA_FILES is the environment variable for this.
-.
-.SS "SINGLE CHECK OPTIONS"
+
 
 ### SINGLE CHECK OPTIONS
 
