@@ -183,7 +183,7 @@ FNAME_PREFIX=${FNAME_PREFIX:-""}        # output filename prefix, see --outprefi
 APPEND=${APPEND:-false}                 # append to csv/json/html/log file
 OVERWRITE=${OVERWRITE:-false}           # overwriting csv/json/html/log file
 [[ -z "$NODNS" ]] && declare NODNS      # If unset it does all DNS lookups per default. "min" only for hosts or "none" at all
-NXCONNECT=${NXCONNECT:-invalid.}        # Especially for WSL this help avoiding DNS requests which windows doesn't seem to handle delayed
+NXCONNECT=${NXCONNECT:-invalid.}        # For WSL this helps avoiding DNS requests to "invalid." which windows seem to handle delayed
 HAS_IPv6=${HAS_IPv6:-false}             # if you have OpenSSL with IPv6 support AND IPv6 networking set it to yes
 ALL_CLIENTS=${ALL_CLIENTS:-false}       # do you want to run all client simulation form all clients supplied by SSLlabs?
 OFFENSIVE=${OFFENSIVE:-true}            # do you want to include offensive vulnerability tests which may cause blocking by an IDS?
@@ -5031,11 +5031,13 @@ run_client_simulation() {
      return $ret
 }
 
-# generic function whether $1 is supported by s_client ($2: string to display, currently nowhere being used)
+# generic function whether $1 is supported by s_client ($2: string to display)
+# Currently only used for protocols that's why we saved -connect $NXCONNECT.
+#TODO: we need to consider to remove the two instances from where this is called.
 #
 locally_supported() {
      [[ -n "$2" ]] && out "$2 "
-     if $OPENSSL s_client "$1" -connect $NXCONNECT 2>&1 | grep -aiq "unknown option"; then
+     if $OPENSSL s_client "$1" 2>&1 | grep -aiq "unknown option"; then
           prln_local_problem "$OPENSSL doesn't support \"s_client $1\""
           return 7
      fi
@@ -5055,9 +5057,9 @@ locally_supported() {
 run_prototest_openssl() {
      local -i ret=0
      local protos proto
+     local passed_check=false
 
-     # check whether the protocol being tested is supported by $OPENSSL
-     $OPENSSL s_client "$1" -connect $NXCONNECT 2>&1 | grep -aiq "unknown option" && return 7
+     $OPENSSL s_client "$1" 2>&1 | grep -aiq "unknown option" && return 7
      case "$1" in
           -ssl2) protos="-ssl2" ;;
           -ssl3) protos="-ssl3" ;;
@@ -5066,6 +5068,8 @@ run_prototest_openssl() {
           -tls1_2) protos="-no_ssl2"; "$HAS_TLS13" && protos+=" -no_tls1_3" ;;
           -tls1_3) protos="" ;;
      esac
+
+     #FIXME: we have here HAS_SSL(2|3) and more but we don't use that
      $OPENSSL s_client $(s_client_options "-state $protos $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>&1 </dev/null
      sclient_connect_successful $? $TMPFILE
      ret=$?
@@ -18340,7 +18344,7 @@ run_starttls_injection() {
      fi
      pr_bold " STARTTLS injection" ; out " (CVE-2011-0411, exp.)  "
 
-     # We'll do a soft fail here, also no warning, as I do not expect to have everybody have socat installed
+     # We'll do a soft fail here, also no warning, as I do not expect everybody to have socat installed
      if [[ -z "$SOCAT" ]]; then
           fileout "$jsonID" "WARN" "Need socat for this" "$cve" "$cwe" "$hint"
           outln "Need socat for this check"
@@ -19144,6 +19148,8 @@ find_openssl_binary() {
      elif [[ -e "/mnt/c/Windows/System32/bash.exe" ]] && test_openssl_suffix "$(dirname "$(type -p openssl)")"; then
           # 2. otherwise, only if on Bash on Windows, use system binaries only.
           SYSTEM2="WSL"
+          # Workaround for delayed responses of Windows DNS when using "invalid.", see #1738, #1812.
+          [[ $NXCONNECT == invalid. ]] && NXCONNECT=127.0.0.1:0
      elif test_openssl_suffix "$TESTSSL_INSTALL_DIR"; then
           :    # 3. otherwise try openssl in path of testssl.sh
      elif test_openssl_suffix "$TESTSSL_INSTALL_DIR/bin"; then
@@ -19234,29 +19240,29 @@ find_openssl_binary() {
 
      $OPENSSL ciphers -s 2>&1 | grep -aiq "unknown option" || OSSL_CIPHERS_S="-s"
 
-     # This and all other occurrences we do a little trick using "$NXCONNECT" to avoid plain and
-     # link level DNS lookups. See issue #1418 and https://tools.ietf.org/html/rfc6761#section-6.4
-     $OPENSSL s_client -ssl2 -connect $NXCONNECT 2>&1 | grep -aiq "unknown option" || HAS_SSL2=true
-     $OPENSSL s_client -ssl3 -connect $NXCONNECT 2>&1 | grep -aiq "unknown option" || HAS_SSL3=true
-     $OPENSSL s_client -tls1_3 -connect $NXCONNECT 2>&1 | grep -aiq "unknown option" || HAS_TLS13=true
-     $OPENSSL s_client -no_ssl2 -connect $NXCONNECT 2>&1 | grep -aiq "unknown option" || HAS_NO_SSL2=true
+     $OPENSSL s_client -ssl2  2>&1 | grep -aiq "unknown option" || HAS_SSL2=true
+     $OPENSSL s_client -ssl3  2>&1 | grep -aiq "unknown option" || HAS_SSL3=true
+     $OPENSSL s_client -tls1_3 2>&1 | grep -aiq "unknown option" || HAS_TLS13=true
+     $OPENSSL s_client -no_ssl2 2>&1 | grep -aiq "unknown option" || HAS_NO_SSL2=true
 
      $OPENSSL genpkey -algorithm X448 2>&1 | grep -aq "not found" || HAS_X448=true
      $OPENSSL genpkey -algorithm X25519 2>&1 | grep -aq "not found" || HAS_X25519=true
      $OPENSSL pkey -help 2>&1 | grep -q Error || HAS_PKEY=true
      $OPENSSL pkeyutl 2>&1 | grep -q Error ||  HAS_PKUTIL=true
 
+     # Below and at other occurrences we do a little trick using "$NXCONNECT" to avoid plain and
+     # link level DNS lookups. See issue #1418 and https://tools.ietf.org/html/rfc6761#section-6.4
      if "$HAS_TLS13"; then
           $OPENSSL s_client -tls1_3 -sigalgs PSS+SHA256:PSS+SHA384 -connect $NXCONNECT 2>&1 | grep -aiq "unknown option" || HAS_SIGALGS=true
      fi
 
-     $OPENSSL s_client -noservername -connect $NXCONNECT 2>&1 | grep -aiq "unknown option" || HAS_NOSERVERNAME=true
-     $OPENSSL s_client -ciphersuites -connect $NXCONNECT 2>&1 | grep -aiq "unknown option" || HAS_CIPHERSUITES=true
+     $OPENSSL s_client -noservername 2>&1 | grep -aiq "unknown option" || HAS_NOSERVERNAME=true
+     $OPENSSL s_client -ciphersuites 2>&1 | grep -aiq "unknown option" || HAS_CIPHERSUITES=true
 
      $OPENSSL ciphers @SECLEVEL=0:ALL > /dev/null 2> /dev/null && HAS_SECLEVEL=true
 
-     $OPENSSL s_client -comp -connect $NXCONNECT 2>&1 | grep -aiq "unknown option" || HAS_COMP=true
-     $OPENSSL s_client -no_comp -connect $NXCONNECT 2>&1 | grep -aiq "unknown option" || HAS_NO_COMP=true
+     $OPENSSL s_client -comp 2>&1 | grep -aiq "unknown option" || HAS_COMP=true
+     $OPENSSL s_client -no_comp 2>&1 | grep -aiq "unknown option" || HAS_NO_COMP=true
 
      OPENSSL_NR_CIPHERS=$(count_ciphers "$(actually_supported_osslciphers 'ALL:COMPLEMENTOFALL' 'ALL')")
 
@@ -20878,7 +20884,7 @@ determine_optimal_proto() {
      elif "$all_failed" && ! "$ALL_FAILED_SOCKETS"; then
           if ! "$HAS_TLS13" && "$TLS13_ONLY"; then
                pr_magenta " $NODE:$PORT appears to support TLS 1.3 ONLY. You better use --openssl=<path_to_openssl_supporting_TLS_1.3>"
-               if ! "$OSSL_SHORTCUT" || [[ ! -x /usr/bin/openssl ]] || /usr/bin/openssl s_client -tls1_3 -connect $NXCONNECT 2>&1 | grep -aiq "unknown option"; then
+               if ! "$OSSL_SHORTCUT" || [[ ! -x /usr/bin/openssl ]] || /usr/bin/openssl s_client -tls1_3 2>&1 | grep -aiq "unknown option"; then
                     outln
                     ignore_no_or_lame " Type \"yes\" to proceed and accept all scan problems" "yes"
                     [[ $? -ne 0 ]] && exit $ERR_CLUELESS
