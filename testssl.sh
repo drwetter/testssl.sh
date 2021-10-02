@@ -7264,9 +7264,9 @@ determine_trust() {
           # in a subshell because that should be valid here only
           (export SSL_CERT_DIR="/dev/null"; export SSL_CERT_FILE="/dev/null"
           if [[ $certificates_provided -ge 2 ]]; then
-               $OPENSSL verify -purpose sslserver -CAfile <(cat $ADDTL_CA_FILES "$bundle_fname") -untrusted $TEMPDIR/intermediatecerts.pem $HOSTCERT >$TEMPDIR/${certificate_file[i]}.1 2>$TEMPDIR/${certificate_file[i]}.2
+               $OPENSSL verify -trusted_first -purpose sslserver -CAfile <(cat $ADDTL_CA_FILES "$bundle_fname") -untrusted $TEMPDIR/intermediatecerts.pem $HOSTCERT >$TEMPDIR/${certificate_file[i]}.1 2>$TEMPDIR/${certificate_file[i]}.2
           else
-               $OPENSSL verify -purpose sslserver -CAfile <(cat $ADDTL_CA_FILES "$bundle_fname") $HOSTCERT >$TEMPDIR/${certificate_file[i]}.1 2>$TEMPDIR/${certificate_file[i]}.2
+               $OPENSSL verify -trusted_first -purpose sslserver -CAfile <(cat $ADDTL_CA_FILES "$bundle_fname") $HOSTCERT >$TEMPDIR/${certificate_file[i]}.1 2>$TEMPDIR/${certificate_file[i]}.2
           fi)
           verify_retcode[i]=$(awk '/error [1-9][0-9]? at [0-9]+ depth lookup:/ { if (!found) {print $2; found=1} }' $TEMPDIR/${certificate_file[i]}.1 $TEMPDIR/${certificate_file[i]}.2)
           [[ -z "${verify_retcode[i]}" ]] && verify_retcode[i]=0
