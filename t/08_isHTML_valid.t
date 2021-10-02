@@ -6,6 +6,7 @@
 use strict;
 use Test::More;
 use Data::Dumper;
+use Text::Diff;
 
 my $tests = 0;
 my $prg="./testssl.sh";
@@ -15,6 +16,7 @@ my $html="";
 my $debughtml="";
 my $edited_html="";
 my $check2run="--ip=one --color 0 --htmlfile tmp.html";
+my $diff="";
 
 die "Unable to open $prg" unless -f $prg;
 
@@ -71,6 +73,9 @@ $debughtml =~ s/.*DEBUG:.*\n//g;
 
 cmp_ok($debughtml, "eq", $html, "HTML file created with --debug 4 matches HTML file created without --debug");
 $tests++;
+
+$diff = diff \$debughtml, \$html;
+printf "\n%s\n", "$diff";
 
 printf "\n";
 done_testing($tests);

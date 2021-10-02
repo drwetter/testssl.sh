@@ -98,7 +98,7 @@ Please note that `fname` has to be in Unix format. DOS carriage returns won't be
 
 `--mode <serial|parallel>`. Mass testing to be done serial (default) or parallel (`--parallel` is shortcut for the latter, `--serial` is the opposite option). Per default mass testing is being run in serial mode, i.e. one line after the other is processed and invoked. The variable `MASS_TESTING_MODE` can be defined to be either equal `serial` or `parallel`.
 
-`--warnings <batch|off>`.  The warnings parameter determines how testssl.sh will deal with situations where user input normally will be necessary. There are two options. `batch` doesn't wait for a confirming keypress when a client- or server-side probem is encountered. As of 3.0 it just then terminates the particular scan.  This is automatically chosen for mass testing (`--file`). `off` just skips the warning, the confirmation but continues the scan, independent whether it makes sense or not. Please note that there are conflicts where testssl.sh will still ask for confirmation which are the ones which otherwise would have a drastic impact on the results. Almost any other decision will be made in the future as a best guess by testssl.sh.
+`--warnings <batch|off>`.  The warnings parameter determines how testssl.sh will deal with situations where user input normally will be necessary. There are two options. `batch` doesn't wait for a confirming keypress when a client- or server-side problem is encountered. As of 3.0 it just then terminates the particular scan.  This is automatically chosen for mass testing (`--file`). `off` just skips the warning, the confirmation but continues the scan, independent whether it makes sense or not. Please note that there are conflicts where testssl.sh will still ask for confirmation which are the ones which otherwise would have a drastic impact on the results. Almost any other decision will be made in the future as a best guess by testssl.sh.
 The same can be achieved by setting the environment variable `WARNINGS`.
 
 `--connect-timeout <seconds>`  This is useful for socket TCP connections to a node. If the node does not complete a TCP handshake (e.g. because it is down or behind a firewall or there's an IDS or a tarpit) testssl.sh may usually hang for around 2 minutes or even much more. This parameter instructs testssl.sh to wait at most `seconds` for the handshake to complete before giving up. This option only works if your OS has a timeout binary installed. CONNECT_TIMEOUT is the corresponding environment variable.
@@ -154,7 +154,7 @@ Any single check switch supplied as an argument prevents testssl.sh from doing a
 
 `-E, --cipher-per-proto`  is similar to `-e, --each-cipher`. It checks each of the possible ciphers, here: per protocol. If you want to display each cipher tested you need to add `--show-each`. The output is sorted by security strength, it lists the encryption bits though.
 
-`-s, --std, --standard`   tests certain lists of cipher suites by strength. Those lists are (`openssl ciphers $LIST`, $LIST from below:)
+`-s, --std, --standard`   tests certain lists of cipher suites / cipher categories by strength. Those lists are (`openssl ciphers $LIST`, $LIST from below:)
 
 * `NULL encryption ciphers`: 'NULL:eNULL'
 * `Anonymous NULL ciphers`: 'aNULL:ADH'
@@ -219,7 +219,7 @@ Also for multiple server certificates are being checked for as well as for the c
 
 ### VULNERABILITIES
 
-`-U, --vulnerable, --vulnerabilities` Just tests all (of the following) vulnerabilities. The environment variable `VULN_THRESHLD` determines after which value a separate headline for each vulnerability is being displayed. Default is `1` which means if you check for two vulnerabilities, only the general headline for vulnerabilities section is displayed -- in addition to the vulnerability and the result. Otherwise each vulnerability or vulnerability section gets its own headline in addition to the output of the name of the vulnerabilty and test result. A vulnerability section is comprised of more than one check, e.g. the renegotiation vulnerability check has two checks, so has Logjam.
+`-U, --vulnerable, --vulnerabilities` Just tests all (of the following) vulnerabilities. The environment variable `VULN_THRESHLD` determines after which value a separate headline for each vulnerability is being displayed. Default is `1` which means if you check for two vulnerabilities, only the general headline for vulnerabilities section is displayed -- in addition to the vulnerability and the result. Otherwise each vulnerability or vulnerability section gets its own headline in addition to the output of the name of the vulnerability and test result. A vulnerability section is comprised of more than one check, e.g. the renegotiation vulnerability check has two checks, so has Logjam.
 
 `-H, --heartbleed`              Checks for Heartbleed, a memory leakage in openssl. Unless the server side doesn't support the heartbeat extension it is likely that this check runs into a timeout. The seconds to wait for a reply can be adjusted with `HEARTBLEED_MAX_WAITSOCK`. 8 is the default.
 
@@ -381,7 +381,7 @@ Except the environment variables mentioned above which can replace command line 
 * CA_BUNDLES_PATH: If you have an own set of CA bundles or you want to point testssl.sh to a specific location of a CA bundle, you can use this variable to set the directory which testssl.sh will use. Please note that it overrides completely the builtin path of testssl.sh which means that you will only test against the bundles you point to. Also you might want to use `~/utils/create_ca_hashes.sh` to create the hashes for HPKP.
 * MAX_SOCKET_FAIL: A number which tells testssl.sh how often a TCP socket connection may fail before the program gives up and terminates. The default is 2. You can increase it to a higher value if you frequently see a message like *Fatal error: repeated openssl s_client connect problem, doesn't make sense to continue*.
 * MAX_OSSL_FAIL: A number which tells testssl.sh how often an OpenSSL s_client connect may fail before the program gives up and terminates. The default is 2. You can increase it to a higher value if you frequently see a message like *Fatal error: repeated TCP connect problems, giving up*.
-* MAX_HEADER_FAIL: A number which tells testssl.sh how often a HTTP GET request over OpenSSL may return an empty file before the program gives up and terminates. The default is 3. Also here you can incerase the threshold when you spot messages like *Fatal error: repeated HTTP header connect problems, doesn't make sense to continue*.
+* MAX_HEADER_FAIL: A number which tells testssl.sh how often a HTTP GET request over OpenSSL may return an empty file before the program gives up and terminates. The default is 3. Also here you can increase the threshold when you spot messages like *Fatal error: repeated HTTP header connect problems, doesn't make sense to continue*.
 
 
 

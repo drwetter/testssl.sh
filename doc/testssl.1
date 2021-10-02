@@ -122,7 +122,7 @@ Please note that \fBfname\fR has to be in Unix format\. DOS carriage returns won
 \fB\-\-mode <serial|parallel>\fR\. Mass testing to be done serial (default) or parallel (\fB\-\-parallel\fR is shortcut for the latter, \fB\-\-serial\fR is the opposite option)\. Per default mass testing is being run in serial mode, i\.e\. one line after the other is processed and invoked\. The variable \fBMASS_TESTING_MODE\fR can be defined to be either equal \fBserial\fR or \fBparallel\fR\.
 .
 .P
-\fB\-\-warnings <batch|off>\fR\. The warnings parameter determines how testssl\.sh will deal with situations where user input normally will be necessary\. There are two options\. \fBbatch\fR doesn\'t wait for a confirming keypress when a client\- or server\-side probem is encountered\. As of 3\.0 it just then terminates the particular scan\. This is automatically chosen for mass testing (\fB\-\-file\fR)\. \fBoff\fR just skips the warning, the confirmation but continues the scan, independent whether it makes sense or not\. Please note that there are conflicts where testssl\.sh will still ask for confirmation which are the ones which otherwise would have a drastic impact on the results\. Almost any other decision will be made in the future as a best guess by testssl\.sh\. The same can be achieved by setting the environment variable \fBWARNINGS\fR\.
+\fB\-\-warnings <batch|off>\fR\. The warnings parameter determines how testssl\.sh will deal with situations where user input normally will be necessary\. There are two options\. \fBbatch\fR doesn\'t wait for a confirming keypress when a client\- or server\-side problem is encountered\. As of 3\.0 it just then terminates the particular scan\. This is automatically chosen for mass testing (\fB\-\-file\fR)\. \fBoff\fR just skips the warning, the confirmation but continues the scan, independent whether it makes sense or not\. Please note that there are conflicts where testssl\.sh will still ask for confirmation which are the ones which otherwise would have a drastic impact on the results\. Almost any other decision will be made in the future as a best guess by testssl\.sh\. The same can be achieved by setting the environment variable \fBWARNINGS\fR\.
 .
 .P
 \fB\-\-connect\-timeout <seconds>\fR This is useful for socket TCP connections to a node\. If the node does not complete a TCP handshake (e\.g\. because it is down or behind a firewall or there\'s an IDS or a tarpit) testssl\.sh may usually hang for around 2 minutes or even much more\. This parameter instructs testssl\.sh to wait at most \fBseconds\fR for the handshake to complete before giving up\. This option only works if your OS has a timeout binary installed\. CONNECT_TIMEOUT is the corresponding environment variable\.
@@ -188,7 +188,7 @@ Any single check switch supplied as an argument prevents testssl\.sh from doing 
 \fB\-E, \-\-cipher\-per\-proto\fR is similar to \fB\-e, \-\-each\-cipher\fR\. It checks each of the possible ciphers, here: per protocol\. If you want to display each cipher tested you need to add \fB\-\-show\-each\fR\. The output is sorted by security strength, it lists the encryption bits though\.
 .
 .P
-\fB\-s, \-\-std, \-\-standard\fR tests certain lists of cipher suites by strength\. Those lists are (\fBopenssl ciphers $LIST\fR, $LIST from below:)
+\fB\-s, \-\-std, \-\-standard\fR tests certain lists of cipher suites / cipher categories by strength\. Those lists are (\fBopenssl ciphers $LIST\fR, $LIST from below:)
 .
 .IP "\(bu" 4
 \fBNULL encryption ciphers\fR: \'NULL:eNULL\'
@@ -335,7 +335,7 @@ Security headers (X\-Frame\-Options, X\-XSS\-Protection, Expect\-CT,\.\.\. , CSP
 \fB\-g, \-\-grease\fR checks several server implementation bugs like tolerance to size limitations and GREASE, see https://www\.ietf\.org/archive/id/draft\-ietf\-tls\-grease\-01\.txt \. This checks doesn\'t run per default\.
 .
 .SS "VULNERABILITIES"
-\fB\-U, \-\-vulnerable, \-\-vulnerabilities\fR Just tests all (of the following) vulnerabilities\. The environment variable \fBVULN_THRESHLD\fR determines after which value a separate headline for each vulnerability is being displayed\. Default is \fB1\fR which means if you check for two vulnerabilities, only the general headline for vulnerabilities section is displayed \-\- in addition to the vulnerability and the result\. Otherwise each vulnerability or vulnerability section gets its own headline in addition to the output of the name of the vulnerabilty and test result\. A vulnerability section is comprised of more than one check, e\.g\. the renegotiation vulnerability check has two checks, so has Logjam\.
+\fB\-U, \-\-vulnerable, \-\-vulnerabilities\fR Just tests all (of the following) vulnerabilities\. The environment variable \fBVULN_THRESHLD\fR determines after which value a separate headline for each vulnerability is being displayed\. Default is \fB1\fR which means if you check for two vulnerabilities, only the general headline for vulnerabilities section is displayed \-\- in addition to the vulnerability and the result\. Otherwise each vulnerability or vulnerability section gets its own headline in addition to the output of the name of the vulnerability and test result\. A vulnerability section is comprised of more than one check, e\.g\. the renegotiation vulnerability check has two checks, so has Logjam\.
 .
 .P
 \fB\-H, \-\-heartbleed\fR Checks for Heartbleed, a memory leakage in openssl\. Unless the server side doesn\'t support the heartbeat extension it is likely that this check runs into a timeout\. The seconds to wait for a reply can be adjusted with \fBHEARTBLEED_MAX_WAITSOCK\fR\. 8 is the default\.
@@ -622,7 +622,7 @@ MAX_SOCKET_FAIL: A number which tells testssl\.sh how often a TCP socket connect
 MAX_OSSL_FAIL: A number which tells testssl\.sh how often an OpenSSL s_client connect may fail before the program gives up and terminates\. The default is 2\. You can increase it to a higher value if you frequently see a message like \fIFatal error: repeated TCP connect problems, giving up\fR\.
 .
 .IP "\(bu" 4
-MAX_HEADER_FAIL: A number which tells testssl\.sh how often a HTTP GET request over OpenSSL may return an empty file before the program gives up and terminates\. The default is 3\. Also here you can incerase the threshold when you spot messages like \fIFatal error: repeated HTTP header connect problems, doesn\'t make sense to continue\fR\.
+MAX_HEADER_FAIL: A number which tells testssl\.sh how often a HTTP GET request over OpenSSL may return an empty file before the program gives up and terminates\. The default is 3\. Also here you can increase the threshold when you spot messages like \fIFatal error: repeated HTTP header connect problems, doesn\'t make sense to continue\fR\.
 .
 .IP "" 0
 .

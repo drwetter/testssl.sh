@@ -1,7 +1,7 @@
 
 ## Intro
 
-[![Build Status](https://travis-ci.org/drwetter/testssl.sh.svg?branch=master)](https://travis-ci.org/drwetter/testssl.sh)
+[![Build Status](https://github.com/drwetter/testssl.sh/actions/workflows/test.yml/badge.svg)](https://github.com/drwetter/testssl.sh/actions/workflows/test.yml)
 [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/drwetter/testssl.sh?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
 `testssl.sh` is a free command line tool which checks a server's service on
@@ -13,7 +13,7 @@ cryptographic flaws.
 * Clear output: you can tell easily whether anything is good or bad.
 * Machine readable output.
 * No installation needed: Linux, OSX/Darwin, FreeBSD, NetBSD, MSYS2/Cygwin,  WSL work out of the box. Only OpenBSD needs bash. No need to install  or to configure something.  No gems, CPAN, pip or the like.
-* A Dockerfile is provided, there's also an offical container @ dockerhub.
+* A Dockerfile is provided, there's also an official container @ dockerhub.
 * Flexibility: You can test any SSL/TLS enabled and STARTTLS service, not only web servers at port 443.
 * Toolbox: Several command line options help you to run *your* test and configure *your* output.
 * Reliability: features are tested thoroughly.
@@ -48,6 +48,7 @@ Update notification here or @ [twitter](https://twitter.com/drwetter).
 You can download testssl.sh by cloning this git repository:
 
     git clone --depth 1 https://github.com/drwetter/testssl.sh.git --branch 3.0
+
 
 For the stable version help yourself by downloading the [ZIP](https://codeload.github.com/drwetter/testssl.sh/zip/3.0.6) or the lastest testssl-3.0.X.tar.gz from [https://testssl.sh](https://testssl.sh/) archive. Just ``cd`` to the directory created (=INSTALLDIR) and run it off there.
 
