@@ -802,7 +802,7 @@ fileout_json_print_parameter() {
           spaces="              " || \
           spaces="                                "
      if [[ -n "$value" ]] || [[ "$parameter" == finding ]]; then
-          printf "%s%s%s%s" "$spaces" "\"$parameter\"" "$filler" ": \"$value\"" >> "$JSONFILE"
+          printf -- "%b%b%b%b" "$spaces" "\"$parameter\"" "$filler" ": \"$value\"" >> "$JSONFILE"
           "$not_last" && printf ",\n" >> "$JSONFILE"
      fi
 }
