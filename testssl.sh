@@ -410,6 +410,7 @@ KEY_EXCH_SCORE=100                      # Keeps track of the score for category 
 CIPH_STR_BEST=0                         # Keeps track of the best bit size for category 3 "Cipher Strength"
 CIPH_STR_WORST=100000                   # Keeps track of the worst bit size for category 3 "Cipher Strength"
                                         # Intentionally set very high, so it can be set to 0, if necessary
+TRUSTED1ST=""                           # Contains the `-trusted_first` flag, if this version of openssl supports it
 
 ########### Global variables for parallel mass testing
 #
@@ -19238,6 +19239,7 @@ find_openssl_binary() {
      HAS_ZLIB=false
      HAS_UDS=false
      HAS_UDS2=false
+	 TRUSTED1ST=""
 
      $OPENSSL ciphers -s 2>&1 | grep -aiq "unknown option" || OSSL_CIPHERS_S="-s"
 
