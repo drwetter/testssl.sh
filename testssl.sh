@@ -6550,6 +6550,10 @@ run_server_preference() {
 
      "$SSL_NATIVE" && using_sockets=false
 
+     if [ "$NODNS" == "strict" ]; then
+        NODEIP="$NODE"
+     fi
+
      outln
      pr_headlineln " Testing server's cipher preferences "
 
@@ -6828,7 +6832,6 @@ run_server_preference() {
           fi
      done <<< "$(tm_out " ssl2 22 SSLv2\n ssl3 00 SSLv3\n tls1 01 TLSv1\n tls1_1 02 TLSv1.1\n tls1_2 03 TLSv1.2\n tls1_3 04 TLSv1.3\n")"
      outln
-
      return $ret
      # end of run_server_preference()
 }
@@ -19521,7 +19524,7 @@ tuning / connect options (most also can be preset via environment variables):
      -6                            also use IPv6. Works only with supporting OpenSSL version and IPv6 connectivity
      --ip <ip>                     a) tests the supplied <ip> v4 or v6 address instead of resolving host(s) in URI
                                    b) arg "one" means: just test the first DNS returns (useful for multiple IPs)
-     -n, --nodns <min|none>        if "none": do not try any DNS lookups, "min" queries A, AAAA and MX records
+     -n, --nodns <min|none|strict> if "none": do not try any DNS lookups, "min" queries A, AAAA and MX records; strict uses *NO* DNS
      --sneaky                      leave less traces in target logs: user agent, referer
      --user-agent <user agent>     set a custom user agent instead of the standard user agent
      --ids-friendly                skips a few vulnerability checks which may cause IDSs to block the scanning IP
@@ -20154,7 +20157,10 @@ get_a_record() {
      local noidnout=""
 
      "$HAS_DIG_NOIDNOUT" && noidnout="+noidnout"
-     [[ "$NODNS" == none ]] && return 0      # if no DNS lookup was instructed, leave here
+     if [ "$NODNS" == none ] || [ "$NODNS" == strict ]; then
+      return 0      # if no DNS lookup was instructed, leave here
+     fi
+
      if [[ "$1" == localhost ]]; then
           # This is a bit ugly but prevents from doing DNS lookups which could fail
           echo 127.0.0.1
@@ -20374,8 +20380,14 @@ determine_ip_addresses() {
      local ip4=""
      local ip6=""
 
+     if [ "$NODNS" == "strict" ]; then
+        # Use a sentinel value; avoid 0.0.0.0 as it can be interpreted as loopback
+        CMDLINE_IP='-1.-1.-1.-1'
+     fi
+
      ip4="$(get_a_record "$NODE")"
      ip6="$(get_aaaa_record "$NODE")"
+     
      IP46ADDRs=$(newline_to_spaces "$ip4 $ip6")
 
      if [[ -n "$CMDLINE_IP" ]]; then
@@ -20393,6 +20405,8 @@ determine_ip_addresses() {
                ip4="$NODEIP"
           elif is_ipv6addr "$NODEIP"; then
                ip6="$NODEIP"
+          elif [ "$NODNS" == "strict" ]; then
+               ip4="$NODE"
           else
                fatal "couldn't identify supplied \"CMDLINE_IP\"" $ERR_DNSLOOKUP
           fi
@@ -20823,6 +20837,15 @@ determine_optimal_proto() {
 
      "$do_tls_sockets" && return 0
 
+     if [ "$NODNS" == "strict" ]; then
+        # The checks all use $NODEIP, so in strict mode we need to set it to $NODE
+        # There is no such thing as a real $NODEIP value in strict mode
+        # This check and assignment can (and probably should) take place outside of this function
+        # as it's required for all of the `openssl` invocations throughout the life of the app, not
+        # just this function
+        NODEIP=$NODE
+     fi
+
      >$ERRFILE
      if [[ -n "$1" ]]; then
           # STARTTLS workaround needed see https://github.com/drwetter/testssl.sh/issues/188 -- kind of odd
@@ -20939,6 +20962,7 @@ determine_optimal_proto() {
      fi
 
      tmpfile_handle ${FUNCNAME[0]}.txt
+     # NODEIP='0.0.0.0'
      return 0
 }
 
@@ -21124,6 +21148,10 @@ display_rdns_etc() {
      local ip further_ip_addrs=""
      local nodeip="$(tr -d '[]' <<< $NODEIP)"     # for displaying IPv6 addresses we don't need []
 
+     if [ "$NODNS" == "strict" ]; then
+       return 0
+     fi
+
      if [[ -n "$PROXY" ]]; then
           out " Via Proxy:              $CORRECT_SPACES"
           outln "$PROXYIP:$PROXYPORT "
@@ -21143,7 +21171,7 @@ display_rdns_etc() {
           outln " A record via:          $CORRECT_SPACES /etc/hosts "
      elif "$LOCAL_AAAA"; then
           outln " AAAA record via:       $CORRECT_SPACES /etc/hosts "
-     elif  [[ -n "$CMDLINE_IP" ]]; then
+     elif  [[ -n "$CMDLINE_IP" ]] && [[ "$NODNS" != "strict" ]]; then
           if is_ipv6addr $"$CMDLINE_IP"; then
                outln " AAAA record via:       $CORRECT_SPACES supplied IP \"$CMDLINE_IP\""
           else
@@ -22214,7 +22242,7 @@ parse_cmd_line() {
                -n|--nodns|-n=*|--nodns=*)
                     NODNS="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
-                    if [[ "$NODNS" != none ]] && [[ "$NODNS" != min ]]; then
+                    if [[ "$NODNS" != none ]] && [[ "$NODNS" != min ]] && [[ "$NODNS" != "strict" ]]; then
                          fatal "Value for nodns switch can be either \"min\" or \"none\"" $ERR_CMDLINE
                     fi
                     ;;
@@ -22758,9 +22786,9 @@ parse_cmd_line() {
      fi
 
      # Now spot some incompatibilities in cmdlines
-     [[ $CMDLINE_IP == one ]] && [[ "$NODNS" == none ]] && fatal "\"--ip=one\" and \"--nodns=none\" don't work together" $ERR_CMDLINE
+     [[ $CMDLINE_IP == one ]] && ( [[ "$NODNS" == none ]] || [[ "$NODNS" == "strict" ]] ) && fatal "\"--ip=one\" and \"--nodns=$NODNS\" don't work together" $ERR_CMDLINE
      [[ $CMDLINE_IP == one ]] && ( is_ipv4addr "$URI" || is_ipv6addr "$URI" )  && fatal "\"--ip=one\" plus supplying an IP address doesn't work" $ERR_CMDLINE
-     "$do_mx_all_ips" && [[ "$NODNS" == none ]] && fatal "\"--mx\" and \"--nodns=none\" don't work together" $ERR_CMDLINE
+     "$do_mx_all_ips" && ( [[ "$NODNS" == none ]] || [[ "$NODNS" == "strict" ]] ) && fatal "\"--mx\" and \"--nodns=none\" don't work together" $ERR_CMDLINE
      [[ -n "$CONNECT_TIMEOUT" ]] && [[ "$MASS_TESTING_MODE" == parallel ]] && fatal "Parallel mass scanning and specifying connect timeouts currently don't work together" $ERR_CMDLINE
 
      if [[ -d $ADDTL_CA_FILES ]]; then
@@ -23046,6 +23074,8 @@ lets_roll() {
 
      [[ -z "$NODE" ]] && parse_hn_port "${URI}"        # NODE, URL_PATH, PORT, IPADDRs and IP46ADDR is set now
      prepare_logging
+
+
 
      if ! determine_ip_addresses; then
           fatal "No IP address could be determined" $ERR_DNSLOOKUP
