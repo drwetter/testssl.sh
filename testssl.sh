@@ -8905,8 +8905,9 @@ certificate_info() {
           outln
           prln_svrty_low "${spaces}NOT ok: length must not exceed 20 bytes (is: $len_cert_serial bytes)"
           fileout "cert_serialNumberLen${json_postfix}" "LOW" "$len_cert_serial is too long"
-     elif [[ $len_cert_serial -lt 8 ]]; then
-          # Wording is from https://cabforum.org/wp-content/uploads/CA-Browser-Forum-BR-1.8.0.pdf
+     elif [[ $len_cert_serial -lt 8 ]] && [[ $SERVICE == HTTP ]]; then
+          # We only want this check for browsers as this requirement comes from the CA browser forum,
+          # see e.g. https://cabforum.org/wp-content/uploads/CA-Browser-Forum-BR-1.8.0.pdf
           prln_svrty_low "   NOT ok: length should be >= 64 bits entropy (is: $len_cert_serial bytes)"
           fileout "cert_serialNumberLen${json_postfix}" "LOW" "$len_cert_serial is not enough entropy"
      else
