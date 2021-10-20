@@ -19304,7 +19304,7 @@ find_openssl_binary() {
 
      if $OPENSSL s_client -curves "${curves_ossl[0]}" -connect $NXCONNECT 2>&1 | grep -aiq "unknown option"; then
           for curve in "${curves_ossl[@]}"; do
-               $OPENSSL s_client -groups $curve -connect $NXCONNECT:8443 2>&1 | grep -Eiaq "Error with command|unknown option|Failed to set groups"
+               $OPENSSL s_client -groups $curve -connect ${NXCONNECT%:*}:8443 2>&1 | grep -Eiaq "Error with command|unknown option|Failed to set groups"
                [[ $? -ne 0 ]] && OSSL_SUPPORTED_CURVES+=" $curve "
           done
      else
