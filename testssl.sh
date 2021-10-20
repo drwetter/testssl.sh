@@ -8083,6 +8083,31 @@ certificate_transparency() {
      return 0
 }
 
+# Shortcut for $OPENSSL x509 -noout -in $cert $ossl_command
+# arg1 is the certificate
+# arg2 is -serial | -fingerprint -sha1 | -fingerprint -sha256
+# returns the serial or fingerprint as ASCII
+#
+determine_cert_fingerprint_serial() {
+     local cert="$1"
+     local ossl_command="$2"
+     local result=""
+
+     result="$($OPENSSL x509 -noout $ossl_command 2>>$ERRFILE <<< "$cert")"
+     # remove strings in text output, colon only appear in fingerprints
+     result="${result//Fingerprint=}"
+     result="${result//serial=}"
+     result="${result//:/}"
+     result="${result//SHA1 /}"
+     result="${result//SHA256 /}"
+     # When the serial number is too large we'll get a 0x0a LF after 70 ASCII chars (see #2010).
+     # Thus we clean them here so that it is displayed correctly.
+     result="${result/[$'\n\r']/}"
+     result="${result//[\\]/}"
+     safe_echo "$result"
+}
+
+
 certificate_info() {
      local proto
      local -i certificate_number=$1
@@ -8123,6 +8148,7 @@ certificate_info() {
      local response=""
      local yearstart yearend clockstart clockend y m d
      local gt_825=false gt_825warn=false
+     local len_cert_serial=0
 
      if [[ $number_of_certificates -gt 1 ]]; then
           [[ $certificate_number -eq 1 ]] && outln
@@ -8383,20 +8409,41 @@ certificate_info() {
           fileout "${jsonID}${json_postfix}" "INFO" "$cert_ext_keyusage"
      fi
 
-     out "$indent"; pr_bold " Serial / Fingerprints        "
-     cert_serial="$($OPENSSL x509 -noout -in $HOSTCERT -serial 2>>$ERRFILE | sed 's/serial=//')"
+     hostcert="$(<$HOSTCERT)"
+
+     out "$indent"; pr_bold " Serial                       "
+     cert_serial="$(determine_cert_fingerprint_serial "$hostcert" "-serial")"
      fileout "cert_serialNumber${json_postfix}" "INFO" "$cert_serial"
+     out "$cert_serial"
 
-     cert_fingerprint_sha1="$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha1 2>>$ERRFILE | sed 's/Fingerprint=//' | sed 's/://g')"
-     fileout "cert_fingerprintSHA1${json_postfix}" "INFO" "${cert_fingerprint_sha1//SHA1 /}"
-     outln "$cert_serial / $cert_fingerprint_sha1"
+     len_cert_serial=${#cert_serial}
+     len_cert_serial=$(( len_cert_serial / 2 ))
 
-     cert_fingerprint_sha2="$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha256 2>>$ERRFILE | sed 's/Fingerprint=//' | sed 's/://g' )"
-     fileout "cert_fingerprintSHA256${json_postfix}" "INFO" "${cert_fingerprint_sha2//SHA256 /}"
-     outln "$spaces$cert_fingerprint_sha2"
+     if [[ $len_cert_serial -gt 20 ]]; then
+          # https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.2
+          outln
+          prln_svrty_low "${spaces}NOT ok: length must not exceed 20 bytes (is: $len_cert_serial bytes)"
+          fileout "cert_serialNumberLen${json_postfix}" "LOW" "$len_cert_serial is too long"
+     elif [[ $len_cert_serial -lt 8 ]]; then
+          # Wording is from https://cabforum.org/wp-content/uploads/CA-Browser-Forum-BR-1.8.0.pdf
+          prln_svrty_low "   NOT ok: length should be >= 64 bits entropy (is: $len_cert_serial bytes)"
+          fileout "cert_serialNumberLen${json_postfix}" "LOW" "$len_cert_serial is not enough entropy"
+     else
+          outln " (OK: length $len_cert_serial)"
+          fileout "cert_serialNumberLen${json_postfix}" "INFO" "$len_cert_serial"
+     fi
+
+     out "$indent"; pr_bold " Fingerprints                 "
+     cert_fingerprint_sha1="$(determine_cert_fingerprint_serial "$hostcert" "-fingerprint -sha1")"
+     outln "SHA1 $cert_fingerprint_sha1"
+     fileout "cert_fingerprintSHA1${json_postfix}" "INFO" "${cert_fingerprint_sha1}"
+
+     cert_fingerprint_sha2="$(determine_cert_fingerprint_serial "$hostcert" "-fingerprint -sha256")"
+     fileout "cert_fingerprintSHA256${json_postfix}" "INFO" "${cert_fingerprint_sha2}"
+     outln "${spaces}SHA256 ${cert_fingerprint_sha2}"
 
      # " " needs to be converted back to lf in JSON/CSV output
-     fileout "cert${json_postfix}" "INFO" "$(< $HOSTCERT)"
+     fileout "cert${json_postfix}" "INFO" "$hostcert"
 
      [[ -z $CERT_FINGERPRINT_SHA2 ]] && \
           CERT_FINGERPRINT_SHA2="$cert_fingerprint_sha2" ||
