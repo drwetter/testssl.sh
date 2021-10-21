@@ -11,7 +11,7 @@ Feel free to remove this line but please stick to the template.
 -->
 
 **Please check this repo whether this is a known feature request**
-If in doubt check the git log and/or check whether you run the lastest version from the git repo. Maybe this was solved already?
+If in doubt check the git log and/or check whether you run the latest version from the git repo. Maybe this was solved already?
 
 **Which version are you referring to**
 3.0.x or 3.1dev?
