@@ -12,7 +12,7 @@ _Feel free to remove this line but please stick to the template. We would like t
 -->
 
 **Before you open an issue please check this repo whether this is a known problem**
-If in doubt check the git log and/or check whether you run the lastest version from the git repo.
+If in doubt check the git log and/or check whether you run the latest version from the git repo.
 
 **Command line / docker command to reproduce**
 In addition the target of your scan would be helpful. If you don't want to disclose it publicly: ``grep SWCONTACT testssl.sh``.
