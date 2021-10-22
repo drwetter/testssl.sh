@@ -6550,7 +6550,7 @@ run_server_preference() {
 
      "$SSL_NATIVE" && using_sockets=false
 
-     if [ "$NODNS" == "strict" ]; then
+     if [[ "$NODNS" == "strict" ]]; then
         NODEIP="$NODE"
      fi
 
@@ -20157,7 +20157,7 @@ get_a_record() {
      local noidnout=""
 
      "$HAS_DIG_NOIDNOUT" && noidnout="+noidnout"
-     if [ "$NODNS" == none ] || [ "$NODNS" == strict ]; then
+     if [[ "$NODNS" == none ]] || [[ "$NODNS" == strict ]]; then
       return 0      # if no DNS lookup was instructed, leave here
      fi
 
@@ -20380,7 +20380,7 @@ determine_ip_addresses() {
      local ip4=""
      local ip6=""
 
-     if [ "$NODNS" == "strict" ]; then
+     if [[ "$NODNS" == "strict" ]]; then
         # Use a sentinel value; avoid 0.0.0.0 as it can be interpreted as loopback
         CMDLINE_IP='-1.-1.-1.-1'
      fi
@@ -20405,7 +20405,7 @@ determine_ip_addresses() {
                ip4="$NODEIP"
           elif is_ipv6addr "$NODEIP"; then
                ip6="$NODEIP"
-          elif [ "$NODNS" == "strict" ]; then
+          elif [[ "$NODNS" == "strict" ]]; then
                ip4="$NODE"
           else
                fatal "couldn't identify supplied \"CMDLINE_IP\"" $ERR_DNSLOOKUP
@@ -20837,7 +20837,7 @@ determine_optimal_proto() {
 
      "$do_tls_sockets" && return 0
 
-     if [ "$NODNS" == "strict" ]; then
+     if [[ "$NODNS" == "strict" ]]; then
         # The checks all use $NODEIP, so in strict mode we need to set it to $NODE
         # There is no such thing as a real $NODEIP value in strict mode
         # This check and assignment can (and probably should) take place outside of this function
@@ -21148,7 +21148,7 @@ display_rdns_etc() {
      local ip further_ip_addrs=""
      local nodeip="$(tr -d '[]' <<< $NODEIP)"     # for displaying IPv6 addresses we don't need []
 
-     if [ "$NODNS" == "strict" ]; then
+     if [[ "$NODNS" == "strict" ]]; then
        return 0
      fi
 
@@ -23074,8 +23074,6 @@ lets_roll() {
 
      [[ -z "$NODE" ]] && parse_hn_port "${URI}"        # NODE, URL_PATH, PORT, IPADDRs and IP46ADDR is set now
      prepare_logging
-
-
 
      if ! determine_ip_addresses; then
           fatal "No IP address could be determined" $ERR_DNSLOOKUP
