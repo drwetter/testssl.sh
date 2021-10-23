@@ -19303,14 +19303,20 @@ find_openssl_binary() {
 
      OPENSSL_NR_CIPHERS=$(count_ciphers "$(actually_supported_osslciphers 'ALL:COMPLEMENTOFALL' 'ALL')")
 
-     if $OPENSSL s_client -curves "${curves_ossl[0]}" -connect $NXCONNECT 2>&1 | grep -aiq "unknown option"; then
+     # The following statement works with OpenSSL 1.0.2, 1.1.1 and 3.0 and LibreSSL 3.4
+     if $OPENSSL s_client -curves 2>&1 | grep -aiq "unknown option"; then
+          # This is e.g. for LibreSSL (tested with version 3.4.1): WSL users will get "127.0.0.1:0" here,
+          # all other "invalid.:0". We need a port here, in any case!
+          # The $OPENSSL connect call deliberately fails: when the curve isn't available with
+          # "getaddrinfo: Name or service not known", newer LibreSSL with "Failed to set groups".
           for curve in "${curves_ossl[@]}"; do
-               $OPENSSL s_client -groups $curve -connect ${NXCONNECT%:*}:8443 2>&1 | grep -Eiaq "Error with command|unknown option|Failed to set groups"
+               $OPENSSL s_client -groups $curve -connect ${NXCONNECT%:*}:0 2>&1 | grep -Eiaq "Error with command|unknown option|Failed to set groups"
                [[ $? -ne 0 ]] && OSSL_SUPPORTED_CURVES+=" $curve "
           done
      else
           HAS_CURVES=true
           for curve in "${curves_ossl[@]}"; do
+               # Same as above, we just don't need a port for invalid.
                $OPENSSL s_client -curves $curve -connect $NXCONNECT 2>&1 | grep -Eiaq "Error with command|unknown option"
                [[ $? -ne 0 ]] && OSSL_SUPPORTED_CURVES+=" $curve "
           done
