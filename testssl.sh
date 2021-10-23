@@ -19303,10 +19303,10 @@ find_openssl_binary() {
 
      OPENSSL_NR_CIPHERS=$(count_ciphers "$(actually_supported_osslciphers 'ALL:COMPLEMENTOFALL' 'ALL')")
 
-     # The following statement works with openssl 1.0.2, 1.1.1 and 3.0 as LibreSSL 3.4
+     # The following statement works with OpenSSL 1.0.2, 1.1.1 and 3.0 and LibreSSL 3.4
      if $OPENSSL s_client -curves 2>&1 | grep -aiq "unknown option"; then
           # This is e.g. for LibreSSL (tested with version 3.4.1): WSL users will get "127.0.0.1:0" here,
-          # All other "invalid.:0". We need a port here, in any case!
+          # all other "invalid.:0". We need a port here, in any case!
           # The $OPENSSL connect call deliberately fails: when the curve isn't available with
           # "getaddrinfo: Name or service not known", newer LibreSSL with "Failed to set groups".
           for curve in "${curves_ossl[@]}"; do
