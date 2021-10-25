@@ -2197,7 +2197,7 @@ s_client_options() {
      if "$HAS_SECLEVEL"; then
           if [[ "$ciphers" == notpresent ]]; then
                [[ ! " $options " =~ \ -tls1_3\  ]] && ciphers="@SECLEVEL=0:ALL:COMPLEMENTOFALL"
-          else
+          elif [[ -n "$ciphers" ]]; then
                ciphers="@SECLEVEL=0:$ciphers"
           fi
      fi
