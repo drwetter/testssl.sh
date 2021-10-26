@@ -6858,7 +6858,7 @@ check_tls12_pref() {
      ciphers_to_test="${ciphers_to_test%:}"
      
      while true; do
-          $OPENSSL s_client $(s_client_options "$STARTTLS -tls1_2 $BUGS -cipher "$ciphers_to_test:$tested_cipher" -connect $NODEIP:$PORT $PROXY $SNI") </dev/null 2>>$ERRFILE >$TMPFILE
+          $OPENSSL s_client $(s_client_options "$STARTTLS -tls1_2 $BUGS -cipher "$ciphers_to_test$tested_cipher" -connect $NODEIP:$PORT $PROXY $SNI") </dev/null 2>>$ERRFILE >$TMPFILE
           if sclient_connect_successful $? $TMPFILE ; then
                cipher=$(get_cipher $TMPFILE)
                order+=" $cipher"
