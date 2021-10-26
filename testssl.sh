@@ -7026,7 +7026,7 @@ cipher_pref_check() {
                ciphers_found[i]=false
                hexc="${TLS_CIPHER_HEXCODE[i]}"
                if [[ ${#hexc} -eq 9 ]]; then
-                    if [[ " $order " =~ " ${TLS_CIPHER_OSSL_NAME[i]} " ]]; then
+                    if [[ " $order " =~ \ ${TLS_CIPHER_OSSL_NAME[i]}\  ]]; then
                          ciphers_found[i]=true
                     else
                          ciphers_found2[nr_nonossl_ciphers]=false
@@ -7040,8 +7040,8 @@ cipher_pref_check() {
                               [[ "${hexc:2:2}" != 13 ]] && nr_nonossl_ciphers+=1
                          elif [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ SHA256 ]] && \
                               [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ SHA384 ]] && \
-                              [[ "${TLS_CIPHER_RFC_NAME[i]}" != *"_CCM" ]] && \
-                              [[ "${TLS_CIPHER_RFC_NAME[i]}" != *"_CCM_8" ]]; then
+                              [[ "${TLS_CIPHER_RFC_NAME[i]}" != *_CCM ]] && \
+                              [[ "${TLS_CIPHER_RFC_NAME[i]}" != *_CCM_8 ]]; then
                               nr_nonossl_ciphers+=1
                          fi
                     fi
@@ -7109,13 +7109,13 @@ cipher_pref_check() {
                     hexcode[nr_ciphers]="${hexc:2:2},${hexc:7:2}"
                     rfc_ciph[nr_ciphers]="${TLS_CIPHER_RFC_NAME[i]}"
                     if [[ $proto == tls1_3 ]]; then
-                         [[ "${hexc:2:2}" == "13" ]] && nr_ciphers+=1
+                         [[ "${hexc:2:2}" == 13 ]] && nr_ciphers+=1
                     elif [[ $proto == tls1_2 ]]; then
-                         [[ "${hexc:2:2}" != "13" ]] && nr_ciphers+=1
+                         [[ "${hexc:2:2}" != 13 ]] && nr_ciphers+=1
                     elif [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ SHA256 ]] && \
                          [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ SHA384 ]] && \
-                         [[ "${TLS_CIPHER_RFC_NAME[i]}" != *"_CCM" ]] && \
-                         [[ "${TLS_CIPHER_RFC_NAME[i]}" != *"_CCM_8" ]]; then
+                         [[ "${TLS_CIPHER_RFC_NAME[i]}" != *_CCM ]] && \
+                         [[ "${TLS_CIPHER_RFC_NAME[i]}" != *_CCM_8 ]]; then
                          nr_ciphers+=1
                     fi
                fi
@@ -7128,13 +7128,13 @@ cipher_pref_check() {
                     hexcode[nr_ciphers]="${hexc:2:2},${hexc:7:2}"
                     rfc_ciph[nr_ciphers]="${TLS_CIPHER_RFC_NAME[i]}"
                     if [[ $proto == tls1_3 ]]; then
-                         [[ "${hexc:2:2}" == "13" ]] && nr_ciphers+=1
+                         [[ "${hexc:2:2}" == 13 ]] && nr_ciphers+=1
                     elif [[ $proto == tls1_2 ]]; then
-                         [[ "${hexc:2:2}" != "13" ]] && nr_ciphers+=1
+                         [[ "${hexc:2:2}" != 13 ]] && nr_ciphers+=1
                     elif [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ SHA256 ]] && \
                          [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ SHA384 ]] && \
-                         [[ "${TLS_CIPHER_RFC_NAME[i]}" != *"_CCM" ]] && \
-                         [[ "${TLS_CIPHER_RFC_NAME[i]}" != *"_CCM_8" ]]; then
+                         [[ "${TLS_CIPHER_RFC_NAME[i]}" != *_CCM ]] && \
+                         [[ "${TLS_CIPHER_RFC_NAME[i]}" != *_CCM_8 ]]; then
                          nr_ciphers+=1
                     fi
                fi
