@@ -6618,14 +6618,24 @@ run_server_preference() {
 }
 
 check_tls12_pref() {
+     local chacha20_ciphers="" non_chacha20_ciphers=""
      local batchremoved="-CAMELLIA:-IDEA:-KRB5:-PSK:-SRP:-aNULL:-eNULL"
      local batchremoved_success=false
      local tested_cipher="" cipher ciphers_to_test
      local order=""
      local -i nr_ciphers_found_r1=0 nr_ciphers_found_r2=0
 
+     # Place ChaCha20 ciphers at the end of the list to avoid accidentally
+     # triggering the server's PrioritizeChaCha setting.
+     ciphers_to_test="$(actually_supported_osslciphers "ALL:$batchremoved" "" "")"
+     for cipher in $(colon_to_spaces "$ciphers_to_test"); do
+          [[ "$cipher" =~ CHACHA20 ]] && chacha20_ciphers+="$cipher:" || non_chacha20_ciphers+="$cipher:"
+     done
+     ciphers_to_test="$non_chacha20_ciphers$chacha20_ciphers"
+     ciphers_to_test="${ciphers_to_test%:}"
+
      while true; do
-          $OPENSSL s_client $(s_client_options "$STARTTLS -tls1_2 $BUGS -cipher "ALL$tested_cipher:$batchremoved" -connect $NODEIP:$PORT $PROXY $SNI") </dev/null 2>>$ERRFILE >$TMPFILE
+          $OPENSSL s_client $(s_client_options "$STARTTLS -tls1_2 $BUGS -cipher "$ciphers_to_test$tested_cipher" -connect $NODEIP:$PORT $PROXY $SNI") </dev/null 2>>$ERRFILE >$TMPFILE
           if sclient_connect_successful $? $TMPFILE ; then
                cipher=$(get_cipher $TMPFILE)
                order+=" $cipher"
@@ -6659,7 +6669,14 @@ check_tls12_pref() {
 
      if "$batchremoved_success"; then
           # now we combine the two cipher sets from both while loops
-          combined_ciphers="$order"
+
+          # Place ChaCha20 ciphers at the end of the list to avoid accidentally
+          # triggering the server's PrioritizeChaCha setting.
+          chacha20_ciphers=""; non_chacha20_ciphers=""
+          for cipher in $order; do
+               [[ "$cipher" =~ CHACHA20 ]] && chacha20_ciphers+="$cipher " || non_chacha20_ciphers+="$cipher "
+          done
+          combined_ciphers="$non_chacha20_ciphers$chacha20_ciphers"
           order="" ; tested_cipher=""
           while true; do
                ciphers_to_test=""
@@ -6697,15 +6714,13 @@ check_tls12_pref() {
 cipher_pref_check() {
      local p="$1" proto_hex="$2" proto="$3"
      local using_sockets="$4"
-     local tested_cipher cipher order rfc_cipher rfc_order
-     local overflow_probe_cipherlist="ALL:-ECDHE-RSA-AES256-GCM-SHA384:-AES128-SHA:-DES-CBC3-SHA"
+     local tested_cipher cipher order="" rfc_cipher rfc_order
      local -i i nr_ciphers nr_nonossl_ciphers num_bundles mod_check bundle_size bundle end_of_bundle success
-     local hexc ciphers_to_test
+     local hexc ciphers_to_test cipher_list chacha20_ciphers non_chacha20_ciphers
      local -a rfc_ciph hexcode ciphers_found ciphers_found2
      local -a -i index
-     local ciphers_found_with_sockets
+     local ciphers_found_with_sockets=false
 
-     order=""; ciphers_found_with_sockets=false
      if [[ $p == ssl3 ]] && ! "$HAS_SSL3" && ! "$using_sockets"; then
           out "\n    SSLv3:     "; pr_local_problem "$OPENSSL doesn't support \"s_client -ssl3\"";
           return 0
@@ -6721,16 +6736,28 @@ cipher_pref_check() {
           if [[ $p == tls1_2 ]] && "$SERVER_SIZE_LIMIT_BUG"; then
                order="$(check_tls12_pref)"
           else
+               # Place ChaCha20 ciphers at the end of the list to avoid accidentally
+               # triggering the server's PrioritizeChaCha setting.
+               cipher_list=""; chacha20_ciphers=""; non_chacha20_ciphers=""
+               if [[ $p == tls1_3 ]]; then
+                    cipher_list="$(colon_to_spaces "$TLS13_OSSL_CIPHERS")"
+               else
+                    cipher_list="$(colon_to_spaces "$(actually_supported_osslciphers "ALL:COMPLEMENTOFALL" "" "")")"
+               fi
+               for cipher in $cipher_list; do
+                    [[ "$cipher" =~ CHACHA20 ]] && chacha20_ciphers+="$cipher " || non_chacha20_ciphers+="$cipher "
+               done
+               cipher_list="$non_chacha20_ciphers $chacha20_ciphers"
                tested_cipher=""
                while true; do
+                    ciphers_to_test=""
+                    for cipher in $cipher_list; do
+                         [[ ! "$tested_cipher:" =~ :-$cipher: ]] && ciphers_to_test+=":$cipher"
+                    done
+                    [[ -z "$ciphers_to_test" ]] && break
                     if [[ $p != tls1_3 ]]; then
-                         ciphers_to_test="-cipher ALL:COMPLEMENTOFALL${tested_cipher}"
+                         ciphers_to_test="-cipher ${ciphers_to_test:1}"
                     else
-                         ciphers_to_test=""
-                         for cipher in $(colon_to_spaces "$TLS13_OSSL_CIPHERS"); do
-                              [[ ! "$tested_cipher" =~ ":-"$cipher ]] && ciphers_to_test+=":$cipher"
-                         done
-                         [[ -z "$ciphers_to_test" ]] && break
                          ciphers_to_test="-ciphersuites ${ciphers_to_test:1}"
                     fi
                     $OPENSSL s_client $(s_client_options "$STARTTLS -"$p" $BUGS $ciphers_to_test -connect $NODEIP:$PORT $PROXY $SNI") </dev/null 2>>$ERRFILE >$TMPFILE
@@ -6750,7 +6777,7 @@ cipher_pref_check() {
                ciphers_found[i]=false
                hexc="${TLS_CIPHER_HEXCODE[i]}"
                if [[ ${#hexc} -eq 9 ]]; then
-                    if [[ " $order " =~ " ${TLS_CIPHER_OSSL_NAME[i]} " ]]; then
+                    if [[ " $order " =~ \ ${TLS_CIPHER_OSSL_NAME[i]}\  ]]; then
                          ciphers_found[i]=true
                     else
                          ciphers_found2[nr_nonossl_ciphers]=false
@@ -6764,8 +6791,8 @@ cipher_pref_check() {
                               [[ "${hexc:2:2}" != 13 ]] && nr_nonossl_ciphers+=1
                          elif [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ SHA256 ]] && \
                               [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ SHA384 ]] && \
-                              [[ "${TLS_CIPHER_RFC_NAME[i]}" != *"_CCM" ]] && \
-                              [[ "${TLS_CIPHER_RFC_NAME[i]}" != *"_CCM_8" ]]; then
+                              [[ "${TLS_CIPHER_RFC_NAME[i]}" != *_CCM ]] && \
+                              [[ "${TLS_CIPHER_RFC_NAME[i]}" != *_CCM_8 ]]; then
                               nr_nonossl_ciphers+=1
                          fi
                     fi
@@ -6822,22 +6849,46 @@ cipher_pref_check() {
      # If there is a SERVER_SIZE_LIMIT_BUG, then use sockets to find the cipher
      # order, but starting with the list of ciphers supported by the server.
      if "$ciphers_found_with_sockets"; then
+          # Create an array of the ciphers to test with any ChaCha20
+          # listed last in order to avoid accidentally triggering the
+          # server's PriorizeChaCha setting.
           order=""
           nr_ciphers=0
           for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
+               [[ "${TLS_CIPHER_RFC_NAME[i]}" =~ CHACHA20 ]] && continue
+               [[ "${TLS_CIPHER_OSSL_NAME[i]}" =~ CHACHA20 ]] && continue
                hexc="${TLS_CIPHER_HEXCODE[i]}"
                if "${ciphers_found[i]}" && [[ ${#hexc} -eq 9 ]]; then
                     ciphers_found2[nr_ciphers]=false
                     hexcode[nr_ciphers]="${hexc:2:2},${hexc:7:2}"
                     rfc_ciph[nr_ciphers]="${TLS_CIPHER_RFC_NAME[i]}"
-                    if [[ "$p" == "tls1_3" ]]; then
-                         [[ "${hexc:2:2}" == "13" ]] && nr_ciphers+=1
-                    elif [[ "$p" == "tls1_2" ]]; then
-                         [[ "${hexc:2:2}" != "13" ]] && nr_ciphers+=1
+                    if [[ "$p" == tls1_3 ]]; then
+                         [[ "${hexc:2:2}" == 13 ]] && nr_ciphers+=1
+                    elif [[ "$p" == tls1_2 ]]; then
+                         [[ "${hexc:2:2}" != 13 ]] && nr_ciphers+=1
                     elif [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ SHA256 ]] && \
                          [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ SHA384 ]] && \
-                         [[ "${TLS_CIPHER_RFC_NAME[i]}" != *"_CCM" ]] && \
-                         [[ "${TLS_CIPHER_RFC_NAME[i]}" != *"_CCM_8" ]]; then
+                         [[ "${TLS_CIPHER_RFC_NAME[i]}" != *_CCM ]] && \
+                         [[ "${TLS_CIPHER_RFC_NAME[i]}" != *_CCM_8 ]]; then
+                         nr_ciphers+=1
+                    fi
+               fi
+          done
+          for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
+               [[ "${TLS_CIPHER_RFC_NAME[i]}" =~ CHACHA20 ]] || [[ "${TLS_CIPHER_OSSL_NAME[i]}" =~ CHACHA20 ]] || continue
+               hexc="${TLS_CIPHER_HEXCODE[i]}"
+               if "${ciphers_found[i]}" && [[ ${#hexc} -eq 9 ]]; then
+                    ciphers_found2[nr_ciphers]=false
+                    hexcode[nr_ciphers]="${hexc:2:2},${hexc:7:2}"
+                    rfc_ciph[nr_ciphers]="${TLS_CIPHER_RFC_NAME[i]}"
+                    if [[ "$p" == tls1_3 ]]; then
+                         [[ "${hexc:2:2}" == 13 ]] && nr_ciphers+=1
+                    elif [[ "$p" == tls1_2 ]]; then
+                         [[ "${hexc:2:2}" != 13 ]] && nr_ciphers+=1
+                    elif [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ SHA256 ]] && \
+                         [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ SHA384 ]] && \
+                         [[ "${TLS_CIPHER_RFC_NAME[i]}" != *_CCM ]] && \
+                         [[ "${TLS_CIPHER_RFC_NAME[i]}" != *_CCM_8 ]]; then
                          nr_ciphers+=1
                     fi
                fi
