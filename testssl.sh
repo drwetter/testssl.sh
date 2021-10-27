@@ -6957,7 +6957,8 @@ cipher_pref_check() {
      fi
 
      if ( [[ $proto != tls1_3 ]] || "$HAS_TLS13" ) && ( [[ $proto != ssl3 ]] || "$HAS_SSL3" ); then
-          if [[ $proto == tls1_2 ]] && "$SERVER_SIZE_LIMIT_BUG"; then
+          if [[ $proto == tls1_2 ]] && "$SERVER_SIZE_LIMIT_BUG" && \
+             [[ "$(count_ciphers "$(actually_supported_osslciphers "ALL:COMPLEMENTOFALL" "" "")")" -gt 127 ]]; then
                order="$(check_tls12_pref "$wide")"
                [[ "${order:0:1}" == \  ]] && order="${order:1}"
                ciphers_found="$order"
