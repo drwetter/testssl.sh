@@ -6828,7 +6828,6 @@ run_server_preference() {
                fi
                ciphers_by_strength "-$proto_ossl" "$proto_hex" "$proto_txt" "$using_sockets" "true"
           else
-               outln " (server order)"
                cipher_pref_check "$proto_ossl" "$proto_hex" "$proto_txt" "$using_sockets" "true"
           fi
      done <<< "$(tm_out " ssl2 22 SSLv2\n ssl3 00 SSLv3\n tls1 01 TLSv1\n tls1_1 02 TLSv1.1\n tls1_2 03 TLSv1.2\n tls1_3 04 TLSv1.3\n")"
@@ -6942,16 +6941,19 @@ cipher_pref_check() {
      local -i i nr_ciphers nr_nonossl_ciphers num_bundles bundle_size bundle end_of_bundle success
      local -i nr_ciphers_found
      local hexc ciphers_to_test cipher_list chacha20_ciphers non_chacha20_ciphers
+     local first_cipher first_chacha_cipher
      local -a normalized_hexcode ciph kx enc export2 sigalg
      local -a rfc_ciph hexcode ciphers_found="" ciphers_found2
      local -a -i index
-     local ciphers_found_with_sockets=false
+     local ciphers_found_with_sockets=false prioritize_chacha=false
 
      if [[ $proto == ssl3 ]] && ! "$HAS_SSL3" && ! "$using_sockets"; then
+          outln " (server order)"
           prln_local_problem "$OPENSSL doesn't support \"s_client -ssl3\"";
           return 0
      fi
      if [[ $proto == tls1_3 ]] && ! "$HAS_TLS13" && ! "$using_sockets"; then
+          outln " (server order)"
           prln_local_problem "$OPENSSL doesn't support \"s_client -tls1_3\"";
           return 0
      fi
@@ -7195,6 +7197,68 @@ cipher_pref_check() {
           order="$rfc_order"
      fi
 
+     # If the server supports at least one ChaCha20 cipher that is less
+     # preferred than a non-ChaCha20 cipher, then check if the server is
+     # configured to prioritize ChaCha20 if that cipher is listed first
+     # in the ClientHello.
+     first_cipher=""; first_chacha_cipher=""
+     for cipher in $order; do
+          [[ ! "$cipher" =~ CHACHA20 ]] && first_cipher="$cipher" && break
+     done
+     if [[ -n "$first_cipher" ]]; then
+          # Search for first ChaCha20 cipher that comes after $first_cipher in $order.
+          for first_chacha_cipher in ${order#*$first_cipher}; do
+               [[ "$first_chacha_cipher" =~ CHACHA20 ]] && break
+          done
+     fi
+     [[ ! "${first_chacha_cipher}" =~ CHACHA20 ]] && first_chacha_cipher=""
+     if [[ -n "$first_cipher" ]] && [[ -n "$first_chacha_cipher" ]]; then
+          # $first_cipher is the first non-ChaCha20 cipher in $order and
+          # $first_chacha_cipher is the first ChaCha20 that comes after
+          # $first_cipher in $order. Check to see if the server will select
+          # $first_chacha_cipher if it appears before $first_cipher in the
+          # ClientHello.
+          if "$ciphers_found_with_sockets"; then
+               if [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]]; then
+                    first_cipher="$(rfc2hexcode "$first_cipher")"
+                    first_chacha_cipher="$(rfc2hexcode "$first_chacha_cipher")"
+               else
+                    first_cipher="$(openssl2hexcode "$first_cipher")"
+                    first_chacha_cipher="$(openssl2hexcode "$first_chacha_cipher")"
+               fi
+               first_cipher="${first_cipher:2:2},${first_cipher:7:2}"
+               first_chacha_cipher="${first_chacha_cipher:2:2},${first_chacha_cipher:7:2}"
+               tls_sockets "$proto_hex" "$first_chacha_cipher, $first_cipher, 00,ff" "ephemeralkey"
+               if [[ $? -eq 0 ]]; then
+                    cipher="$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")"
+                    [[ "$cipher" =~ CHACHA20 ]] && prioritize_chacha=true
+               else
+                    pr_fixme "something weird happened around line $((LINENO - 5)) "
+               fi
+          else
+               if [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]]; then
+                    first_cipher="$(rfc2openssl "$first_cipher")"
+                    first_chacha_cipher="$(rfc2openssl "$first_chacha_cipher")"
+               fi
+               if [[ $proto != tls1_3 ]]; then
+                    ciphers_to_test="-cipher $first_chacha_cipher:$first_cipher"
+               else
+                    ciphers_to_test="-ciphersuites $first_chacha_cipher:$first_cipher"
+               fi
+               $OPENSSL s_client $(s_client_options "$STARTTLS -"$proto" $BUGS $ciphers_to_test -connect $NODEIP:$PORT $PROXY $SNI") </dev/null 2>>$ERRFILE >$TMPFILE
+               if sclient_connect_successful $? $TMPFILE; then
+                    cipher="$(get_cipher $TMPFILE)"
+                    [[ "$cipher" =~ CHACHA20 ]] && prioritize_chacha=true
+               else
+                    pr_fixme "something weird happened around line $((LINENO - 5)) "
+               fi
+          fi
+     fi
+     if "$prioritize_chacha"; then
+          outln " (server order -- server prioritizes ChaCha ciphers when preferred by clients)"
+     else
+          outln " (server order)"
+     fi
      if [[ -n "$order" ]]; then
           add_proto_offered "$proto" yes
           if "$wide"; then
@@ -7214,6 +7278,7 @@ cipher_pref_check() {
                fi
           fi
           fileout "cipherorder_${proto_text//./_}" "INFO" "$order"
+          [[ -n "$first_cipher" ]] && [[ -n "$first_chacha_cipher" ]] && fileout "prioritize_chacha_${proto_text//./_}" "INFO" "$prioritize_chacha"
      else
           # Order doesn't contain any ciphers, so we can safely unset the protocol and put a dash out
           add_proto_offered "$proto" no
