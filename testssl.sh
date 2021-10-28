@@ -6550,7 +6550,7 @@ run_server_preference() {
 
      "$SSL_NATIVE" && using_sockets=false
 
-     if [[ "$NODNS" == "strict" ]]; then
+     if [[ "$NODNS" == strict ]]; then
         NODEIP="$NODE"
      fi
 
@@ -20380,7 +20380,7 @@ determine_ip_addresses() {
      local ip4=""
      local ip6=""
 
-     if [[ "$NODNS" == "strict" ]]; then
+     if [[ "$NODNS" == strict ]]; then
         # Use a sentinel value; avoid 0.0.0.0 as it can be interpreted as loopback
         CMDLINE_IP='-1.-1.-1.-1'
      fi
@@ -20405,7 +20405,7 @@ determine_ip_addresses() {
                ip4="$NODEIP"
           elif is_ipv6addr "$NODEIP"; then
                ip6="$NODEIP"
-          elif [[ "$NODNS" == "strict" ]]; then
+          elif [[ "$NODNS" == strict ]]; then
                ip4="$NODE"
           else
                fatal "couldn't identify supplied \"CMDLINE_IP\"" $ERR_DNSLOOKUP
@@ -20837,7 +20837,7 @@ determine_optimal_proto() {
 
      "$do_tls_sockets" && return 0
 
-     if [[ "$NODNS" == "strict" ]]; then
+     if [[ "$NODNS" == strict ]]; then
         # The checks all use $NODEIP, so in strict mode we need to set it to $NODE
         # There is no such thing as a real $NODEIP value in strict mode
         # This check and assignment can (and probably should) take place outside of this function
@@ -21148,7 +21148,7 @@ display_rdns_etc() {
      local ip further_ip_addrs=""
      local nodeip="$(tr -d '[]' <<< $NODEIP)"     # for displaying IPv6 addresses we don't need []
 
-     if [[ "$NODNS" == "strict" ]]; then
+     if [[ "$NODNS" == strict ]]; then
        return 0
      fi
 
@@ -21171,7 +21171,7 @@ display_rdns_etc() {
           outln " A record via:          $CORRECT_SPACES /etc/hosts "
      elif "$LOCAL_AAAA"; then
           outln " AAAA record via:       $CORRECT_SPACES /etc/hosts "
-     elif  [[ -n "$CMDLINE_IP" ]] && [[ "$NODNS" != "strict" ]]; then
+     elif  [[ -n "$CMDLINE_IP" ]] && [[ "$NODNS" != strict ]]; then
           if is_ipv6addr $"$CMDLINE_IP"; then
                outln " AAAA record via:       $CORRECT_SPACES supplied IP \"$CMDLINE_IP\""
           else
@@ -22242,7 +22242,7 @@ parse_cmd_line() {
                -n|--nodns|-n=*|--nodns=*)
                     NODNS="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
-                    if [[ "$NODNS" != none ]] && [[ "$NODNS" != min ]] && [[ "$NODNS" != "strict" ]]; then
+                    if [[ "$NODNS" != none ]] && [[ "$NODNS" != min ]] && [[ "$NODNS" != strict ]]; then
                          fatal "Value for nodns switch can be either \"min\" or \"none\"" $ERR_CMDLINE
                     fi
                     ;;
@@ -22786,9 +22786,9 @@ parse_cmd_line() {
      fi
 
      # Now spot some incompatibilities in cmdlines
-     [[ $CMDLINE_IP == one ]] && ( [[ "$NODNS" == none ]] || [[ "$NODNS" == "strict" ]] ) && fatal "\"--ip=one\" and \"--nodns=$NODNS\" don't work together" $ERR_CMDLINE
+     [[ $CMDLINE_IP == one ]] && ( [[ "$NODNS" == none ]] || [[ "$NODNS" == strict ]] ) && fatal "\"--ip=one\" and \"--nodns=$NODNS\" don't work together" $ERR_CMDLINE
      [[ $CMDLINE_IP == one ]] && ( is_ipv4addr "$URI" || is_ipv6addr "$URI" )  && fatal "\"--ip=one\" plus supplying an IP address doesn't work" $ERR_CMDLINE
-     "$do_mx_all_ips" && ( [[ "$NODNS" == none ]] || [[ "$NODNS" == "strict" ]] ) && fatal "\"--mx\" and \"--nodns=none\" don't work together" $ERR_CMDLINE
+     "$do_mx_all_ips" && ( [[ "$NODNS" == none ]] || [[ "$NODNS" == strict ]] ) && fatal "\"--mx\" and \"--nodns=none\" don't work together" $ERR_CMDLINE
      [[ -n "$CONNECT_TIMEOUT" ]] && [[ "$MASS_TESTING_MODE" == parallel ]] && fatal "Parallel mass scanning and specifying connect timeouts currently don't work together" $ERR_CMDLINE
 
      if [[ -d $ADDTL_CA_FILES ]]; then
