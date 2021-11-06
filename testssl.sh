@@ -22019,7 +22019,12 @@ run_rating() {
           fileout "cipher_strength_score_weighted" "INFO" "$c3_wscore"
 
           ## Calculate final score and grade
-          let final_score=$c1_wscore+$c2_wscore+$c3_wscore
+          # If any category resulted in a score of 0, push final grade to 0
+          if [[ $c1_score -eq 0 || $c2_score -eq 0 || $c3_score -eq 0 ]]; then
+               let final_score=0
+          else
+               let final_score=$c1_wscore+$c2_wscore+$c3_wscore
+          fi
 
           pr_bold " Final Score                  "; outln $final_score
           fileout "final_score" "INFO" "$final_score"
