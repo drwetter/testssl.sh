@@ -1116,6 +1116,9 @@ set_ciph_str_score() {
 
      [[ $size -gt $CIPH_STR_BEST ]] && let CIPH_STR_BEST=$size
      [[ $size -lt $CIPH_STR_WORST ]] && let CIPH_STR_WORST=$size
+
+     [[ $size -lt 112 || $size == "None" ]] && set_grade_cap "F" "Using cipher suites weaker than 112 bits"
+
      return 0
 }
 
@@ -6855,7 +6858,7 @@ check_tls12_pref() {
      done
      ciphers_to_test="$non_chacha20_ciphers$chacha20_ciphers"
      ciphers_to_test="${ciphers_to_test%:}"
-     
+
      while true; do
           $OPENSSL s_client $(s_client_options "$STARTTLS -tls1_2 $BUGS -cipher "$ciphers_to_test$tested_cipher" -connect $NODEIP:$PORT $PROXY $SNI") </dev/null 2>>$ERRFILE >$TMPFILE
           if sclient_connect_successful $? $TMPFILE ; then
@@ -10071,7 +10074,7 @@ run_server_defaults() {
                done <<< "$CLIENT_AUTH_CA_LIST"
                fi
      fi
-     
+
 
      if [[ -n "$SNI" ]] && [[ $certs_found -ne 0 ]] && [[ ! -e $HOSTCERT.nosni ]]; then
           # no cipher suites specified here. We just want the default vhost subject
@@ -20791,7 +20794,7 @@ sclient_auth() {
      local re='Master-Key: ([^\
 ]*)'
      local connect_success=false
-     
+
      [[ $1 -eq 0 ]] && connect_success=true
      ! "$connect_success" && [[ "$server_hello" =~ $re ]] && \
           [[ -n "${BASH_REMATCH[1]}" ]] && connect_success=true
@@ -20809,7 +20812,7 @@ sclient_auth() {
           [[ $1 -eq 0 ]] && return 0
           if [[ ! "$server_hello" =~ Session-ID:\ [a-fA-F0-9]{2,64} ]]; then   # probably no SSL session
                # do another sanity check to be sure
-               if [[ "$server_hello" =~ \-\-\-BEGIN\ CERTIFICATE\-\-\-.*\-\-\-END\ CERTIFICATE\-\-\- ]]; then 
+               if [[ "$server_hello" =~ \-\-\-BEGIN\ CERTIFICATE\-\-\-.*\-\-\-END\ CERTIFICATE\-\-\- ]]; then
                     CLIENT_AUTH="none"
                     NO_SSL_SESSIONID=true  # NO_SSL_SESSIONID is preset globally to false for all other cases
                     return 0
@@ -21169,7 +21172,7 @@ determine_service() {
                               else
                                    # If the XMPP name cannot be provided using -xmpphost,
                                    # then it needs to be provided to the -connect option
-                                   NODEIP="$NODE" 
+                                   NODEIP="$NODE"
                               fi
                          fi
                          if [[ "$protocol" == xmpp-server ]] && ! "$HAS_XMPP_SERVER"; then
@@ -21453,7 +21456,7 @@ create_mass_testing_cmdline() {
                     MASS_TESTING_CMDLINE[nr_cmds]="--htmlfile-parent=$outfile_arg"
                     # next is the filename itself, as no '=' was supplied
                     [[ "$cmd" == --htmlfile ]] && skip_next=true
-                    [[ "$cmd" == -oH ]] && skip_next=true   
+                    [[ "$cmd" == -oH ]] && skip_next=true
                elif ( [[ "$cmd" =~ --logfile ]] || [[ "$cmd" =~ -oL ]] ); then
                     outfile_arg="$(parse_opt_equal_sign "$cmd" "${CMDLINE_ARRAY[i+1]}")"
                     MASS_TESTING_CMDLINE[nr_cmds]="--logfile-parent=$outfile_arg"
@@ -22001,7 +22004,7 @@ run_rating() {
           # Determine the score for the worst key
           if [[ $c3_worst_cb -gt 0 && $c3_worst_cb -lt 128 ]]; then
                c3_worst=20
-          elif [[ $c3_worst_cb -lt 256 ]]; then
+          elif [[ $c3_worst_cb -ge 128 && $c3_worst_cb -lt 256 ]]; then
                c3_worst=80
           elif [[ $c3_worst_cb -ge 256 ]]; then
                c3_worst=100
@@ -22016,7 +22019,12 @@ run_rating() {
           fileout "cipher_strength_score_weighted" "INFO" "$c3_wscore"
 
           ## Calculate final score and grade
-          let final_score=$c1_wscore+$c2_wscore+$c3_wscore
+          # If any category resulted in a score of 0, push final grade to 0
+          if [[ $c1_score -eq 0 || $c2_score -eq 0 || $c3_score -eq 0 ]]; then
+               let final_score=0
+          else
+               let final_score=$c1_wscore+$c2_wscore+$c3_wscore
+          fi
 
           pr_bold " Final Score                  "; outln $final_score
           fileout "final_score" "INFO" "$final_score"
