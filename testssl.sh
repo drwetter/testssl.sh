@@ -7626,7 +7626,7 @@ determine_tls_extensions() {
      fi
 
      # Keep it "on file" for debugging purposes
-     debugme1 safe_echo "$TLS_EXTENSIONS" 2>&1 >"$TEMPDIR/$NODE.$NODEIP.tls_extensions.txt"
+     [[ "$DEBUG" -ge 1 ]] && safe_echo "$TLS_EXTENSIONS" >"$TEMPDIR/$NODE.$NODEIP.tls_extensions.txt"
 
      return $success
 }
@@ -10530,7 +10530,7 @@ run_fs() {
      CURVES_OFFERED="$curves_offered"
      CURVES_OFFERED=$(strip_trailing_space "$CURVES_OFFERED")
      # Keep it "on file" for debugging purposes
-     debugme1 safe_echo "$CURVES_OFFERED" 2>&1 >"$TEMPDIR/$NODE.$NODEIP.curves_offered.txt"
+     [[ "$DEBUG" -ge 1 ]] && safe_echo "$CURVES_OFFERED" >"$TEMPDIR/$NODE.$NODEIP.curves_offered.txt"
 
      # find out what groups are supported.
      if "$using_sockets" && ( "$fs_tls13_offered" || "$ffdhe_offered" ); then
