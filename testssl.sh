@@ -6820,8 +6820,8 @@ run_server_preference() {
           # TODO: Also the fact that a protocol is not supported seems not to be saved by cipher_pref_check()
           # (./testssl.sh --wide -p -P -E  vs ./testssl.sh --wide -P -E )
           if [[ $proto_ossl == ssl2 ]] || \
-                    ( [[ $proto_ossl != tls1_3 ]] && ! "$has_cipher_order" ]] ) || \
-                    ( [[ $proto_ossl == tls1_3 ]] && ! "$has_tls13_cipher_order" ]] ); then
+                    ( [[ $proto_ossl != tls1_3 ]] && ! "$has_cipher_order" ) || \
+                    ( [[ $proto_ossl == tls1_3 ]] && ! "$has_tls13_cipher_order" ); then
                if [[ $proto_ossl == ssl2 ]]; then
                     outln " (listed by strength)"
                elif [[ $proto_ossl == tls1_3 ]]; then
@@ -6943,10 +6943,10 @@ cipher_pref_check() {
      local tested_cipher cipher order="" rfc_cipher rfc_order
      local -i i nr_ciphers nr_nonossl_ciphers num_bundles bundle_size bundle end_of_bundle success
      local -i nr_ciphers_found
-     local hexc ciphers_to_test cipher_list chacha20_ciphers non_chacha20_ciphers
+     local hexc ciphers_to_test cipher_list="" chacha20_ciphers non_chacha20_ciphers
      local first_cipher first_chacha_cipher
      local -a normalized_hexcode ciph kx enc export2 sigalg
-     local -a rfc_ciph hexcode ciphers_found="" ciphers_found2
+     local -a rfc_ciph hexcode ciphers_found ciphers_found2
      local -a -i index
      local ciphers_found_with_sockets=false prioritize_chacha=false
 
@@ -6966,17 +6966,15 @@ cipher_pref_check() {
              [[ "$(count_ciphers "$(actually_supported_osslciphers "ALL:COMPLEMENTOFALL" "" "")")" -gt 127 ]]; then
                order="$(check_tls12_pref "$wide")"
                [[ "${order:0:1}" == \  ]] && order="${order:1}"
-               ciphers_found="$order"
+               cipher_list="$order"
           fi
           if "$wide" || [[ -z "$order" ]]; then
                # Place ChaCha20 ciphers at the end of the list to avoid accidentally
                # triggering the server's PrioritizeChaCha setting.
-               cipher_list=""; chacha20_ciphers=""; non_chacha20_ciphers=""
+               chacha20_ciphers=""; non_chacha20_ciphers=""
                if [[ $proto == tls1_3 ]]; then
                     cipher_list="$(colon_to_spaces "$TLS13_OSSL_CIPHERS")"
-               elif [[ -n "$ciphers_found" ]]; then
-                    cipher_list="$ciphers_found"
-               else
+               elif [[ -z "$cipher_list" ]]; then
                     cipher_list="$(colon_to_spaces "$(actually_supported_osslciphers "ALL:COMPLEMENTOFALL" "" "")")"
                fi
                for cipher in $cipher_list; do
@@ -7012,7 +7010,7 @@ cipher_pref_check() {
                          ciph[nr_ciphers_found]="${TLS_CIPHER_OSSL_NAME[i]}"
                          kx[nr_ciphers_found]="${TLS_CIPHER_KX[i]}"
                          [[ $proto == tls1_3 ]] && kx[nr_ciphers_found]="$(read_dhtype_from_file $TMPFILE)"
-                         if ( [[ ${kx[nr_ciphers_found]} == Kx=ECDH ]] || [[ ${kx[nr_ciphers_found]} == Kx=DH ]] || [[ ${kx[nr_ciphers_found]} == Kx=EDH ]] ); then
+                         if [[ ${kx[nr_ciphers_found]} == Kx=ECDH ]] || [[ ${kx[nr_ciphers_found]} == Kx=DH ]] || [[ ${kx[nr_ciphers_found]} == Kx=EDH ]]; then
                               kx[nr_ciphers_found]+=" $(read_dhbits_from_file "$TMPFILE" quiet)"
                          fi
                          enc[nr_ciphers_found]="${TLS_CIPHER_ENC[i]}"
@@ -7170,7 +7168,7 @@ cipher_pref_check() {
                     ciph[nr_ciphers_found]="${TLS_CIPHER_OSSL_NAME[i]}"
                     kx[nr_ciphers_found]="${TLS_CIPHER_KX[i]}"
                     [[ $proto == tls1_3 ]] && kx[nr_ciphers_found]="$(read_dhtype_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")"
-                    if ( [[ ${kx[nr_ciphers_found]} == Kx=ECDH ]] || [[ ${kx[nr_ciphers_found]} == Kx=DH ]] || [[ ${kx[nr_ciphers_found]} == Kx=EDH ]] ); then
+                    if [[ ${kx[nr_ciphers_found]} == Kx=ECDH ]] || [[ ${kx[nr_ciphers_found]} == Kx=DH ]] || [[ ${kx[nr_ciphers_found]} == Kx=EDH ]]; then
                          kx[nr_ciphers_found]+=" $(read_dhbits_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" quiet)"
                     fi
                     enc[nr_ciphers_found]="${TLS_CIPHER_ENC[i]}"
@@ -7469,7 +7467,7 @@ tls_time() {
 
      pr_bold " TLS clock skew" ; out "$spaces"
 
-     if ( [[ "$STARTTLS_PROTOCOL" =~ ldap ]] || [[ "$STARTTLS_PROTOCOL" =~ irc ]] ); then
+     if [[ "$STARTTLS_PROTOCOL" =~ ldap ]] || [[ "$STARTTLS_PROTOCOL" =~ irc ]]; then
           prln_local_problem "STARTTLS/$STARTTLS_PROTOCOL and --ssl-native collide here"
           return 1
      fi
@@ -7753,7 +7751,7 @@ extract_stapled_ocsp() {
           ocsp="${ocsp%%<<<*}"
           ocsp="$(strip_spaces "$(newline_to_spaces "$ocsp")")"
           ocsp="${ocsp:8}"
-     elif [[ "$response" =~ "TLS server extension \"status request\" (id=5), len=0" ]]; then
+     elif [[ "$response" =~ TLS\ server\ extension\ \"status\ request\"\ \(id=5\)\,\ len=0 ]]; then
           # This is not OpenSSL 1.1.0 or 1.1.1, and the response
           # is TLS 1.2 or earlier.
           ocsp="${response%%OCSP response:*}"
@@ -7761,7 +7759,7 @@ extract_stapled_ocsp() {
           ocsp="16${ocsp#*16}"
           ocsp="$(strip_spaces "$(newline_to_spaces "$ocsp")")"
           ocsp="${ocsp:8}"
-     elif [[ "$response" =~ "TLS server extension \"status request\" (id=5), len=" ]]; then
+     elif [[ "$response" =~ TLS\ server\ extension\ \"status\ request\"\ \(id=5\)\,\ len= ]]; then
           # This is OpenSSL 1.1.1 and the response is TLS 1.3.
           ocsp="${response##*TLS server extension \"status request\" (id=5), len=}"
           ocsp="${ocsp%%<<<*}"
@@ -7829,7 +7827,7 @@ get_server_certificate() {
                success=$?
           else
                # For STARTTLS protocols not being implemented yet via sockets this is a bypass otherwise it won't be usable at all (e.g. LDAP)
-               if ( [[ "$STARTTLS" =~ ldap ]] || [[ "$STARTTLS" =~ irc ]] ); then
+               if [[ "$STARTTLS" =~ ldap ]] || [[ "$STARTTLS" =~ irc ]]; then
                     return 1
                elif [[ "$1" =~ tls1_3_RSA ]]; then
                     tls_sockets "04" "$TLS13_CIPHER" "all+" "00,12,00,00, 00,05,00,05,01,00,00,00,00, 00,0d,00,10,00,0e,08,04,08,05,08,06,04,01,05,01,06,01,02,01"
