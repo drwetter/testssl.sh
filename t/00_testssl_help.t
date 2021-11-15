@@ -4,6 +4,7 @@
 
 use strict;
 use Test::More;
+use File::stat;
 
 my $tests = 0;
 my $fileout="";
@@ -20,6 +21,15 @@ my $error_regexp4='command not found';
 my $error_regexp5='(syntax error|unexpected token)';
 
 printf "\n%s\n", "Testing whether just calling \"./testssl.sh\" produces no error ...";
+my $info    = stat($prg);
+my $retMode = $info->mode;
+
+is($retMode & 0400, 0400, "Checking \"./testssl.sh\" for read permission"); 
+$tests++;
+
+is($retMode & 0100, 0100, "Checking \"./testssl.sh\" for execute permission"); 
+$tests++;
+
 $fileout = `timeout 10 bash $prg 2>&1`;
 my $retval=$?;
 
