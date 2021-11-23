@@ -5630,7 +5630,7 @@ sub_cipherlists() {
                elif [[ -n "$7" ]]; then
                     sslv2_sockets "$7" "true"
                     if [[ $? -eq 3 ]] && [[ "$V2_HELLO_CIPHERSPEC_LENGTH" -ne 0 ]]; then
-                         sslv2_cipherlist="$(strip_spaces "${6//,/}")"
+                         sslv2_cipherlist="$(strip_spaces "${7//,/}")"
                          len=${#sslv2_cipherlist}
                          detected_ssl2_ciphers="$(grep "Supported cipher: " "$TEMPDIR/$NODEIP.parse_sslv2_serverhello.txt")"
                          for (( i=0; i<len; i=i+6 )); do
