@@ -10417,7 +10417,9 @@ fd_socket() {
                fi
           done
      # For the following execs: 2>/dev/null would remove a potential error message, but disables debugging.
-     # First we check whether a socket connect timeout was specified
+     # First we check whether a socket connect timeout was specified. We exec the connect in a subshell,
+     # then we'll see whether we can connect. If not we take the emergency exit. If we're still alive we'll
+     # proceed with the "usual case", see below.
      elif [[ -n "$CONNECT_TIMEOUT" ]]; then
           if ! $TIMEOUT_CMD $CONNECT_TIMEOUT bash -c "exec 5<>/dev/tcp/$nodeip/$PORT"; then
                ((NR_SOCKET_FAIL++))
@@ -10426,8 +10428,9 @@ fd_socket() {
                pr_warning "Unable to open a socket to $NODEIP:$PORT. "
                return 6
           fi
+     fi
      # Now comes the the usual case
-     elif ! exec 5<>/dev/tcp/$nodeip/$PORT; then
+     if ! exec 5<>/dev/tcp/$nodeip/$PORT && [[ -z "$PROXY" ]]; then
           ((NR_SOCKET_FAIL++))
           connectivity_problem $NR_SOCKET_FAIL $MAX_SOCKET_FAIL "TCP connect problem" "repeated TCP connect problems, giving up"
           outln
@@ -20040,7 +20043,6 @@ parse_cmd_line() {
      [[ $CMDLINE_IP == one ]] && [[ "$NODNS" == none ]] && fatal "\"--ip=one\" and \"--nodns=none\" don't work together" $ERR_CMDLINE
      [[ $CMDLINE_IP == one ]] && ( is_ipv4addr "$URI" || is_ipv6addr "$URI" )  && fatal "\"--ip=one\" plus supplying an IP address doesn't work" $ERR_CMDLINE
      "$do_mx_all_ips" && [[ "$NODNS" == none ]] && fatal "\"--mx\" and \"--nodns=none\" don't work together" $ERR_CMDLINE
-     [[ -n "$CONNECT_TIMEOUT" ]] && [[ "$MASS_TESTING_MODE" == parallel ]] && fatal "Parallel mass scanning and specifying connect timeouts currently don't work together" $ERR_CMDLINE
 
      ADDITIONAL_CA_FILES="${ADDITIONAL_CA_FILES//,/ }"
      for fname in $ADDITIONAL_CA_FILES; do
