@@ -509,15 +509,15 @@ set_severity_level() {
 show_finding() {
      local severity=$1
 
-     ( [[ "$severity" == DEBUG ]] ) ||
+     [[ "$severity" == DEBUG ]] ||
      ( [[ "$severity" == INFO ]] && [[ $SEVERITY_LEVEL -le $INFO ]] ) ||
      ( [[ "$severity" == OK ]] && [[ $SEVERITY_LEVEL -le $OK ]] ) ||
      ( [[ "$severity" == LOW ]] && [[ $SEVERITY_LEVEL -le $LOW ]] ) ||
      ( [[ "$severity" == MEDIUM ]] && [[ $SEVERITY_LEVEL -le $MEDIUM ]] ) ||
      ( [[ "$severity" == HIGH ]] && [[ $SEVERITY_LEVEL -le $HIGH ]] ) ||
      ( [[ "$severity" == CRITICAL ]] && [[ $SEVERITY_LEVEL -le $CRITICAL ]] ) ||
-     ( [[ "$severity" == WARN ]] ) ||
-     ( [[ "$severity" == FATAL ]] )
+     [[ "$severity" == WARN ]] ||
+     [[ "$severity" == FATAL ]]
 }
 
 ########### Output functions
@@ -1084,23 +1084,23 @@ set_key_str_score() {
 
      if [[ $type == EC || $type == EdDSA ]]; then
           if [[ $size -lt 110 ]] && [[ $KEY_EXCH_SCORE -ge 20 ]]; then
-               let KEY_EXCH_SCORE=20
+               KEY_EXCH_SCORE=20
           elif [[ $size -lt 123 ]] && [[ $KEY_EXCH_SCORE -ge 40 ]]; then
-               let KEY_EXCH_SCORE=40
+               KEY_EXCH_SCORE=40
           elif [[ $size -lt 163 ]] && [[ $KEY_EXCH_SCORE -ge 80 ]]; then
-               let KEY_EXCH_SCORE=80
+               KEY_EXCH_SCORE=80
           elif [[ $size -lt 225 ]] && [[ $KEY_EXCH_SCORE -ge 90 ]]; then
-               let KEY_EXCH_SCORE=90
+               KEY_EXCH_SCORE=90
           fi
      else
           if [[ $size -lt 512 ]] && [[ $KEY_EXCH_SCORE -ge 20 ]]; then
-               let KEY_EXCH_SCORE=20
+               KEY_EXCH_SCORE=20
           elif [[ $size -lt 1024 ]] && [[ $KEY_EXCH_SCORE -ge 40 ]]; then
-               let KEY_EXCH_SCORE=40
+               KEY_EXCH_SCORE=40
           elif [[ $size -lt 2048 ]] && [[ $KEY_EXCH_SCORE -ge 80 ]]; then
-               let KEY_EXCH_SCORE=80
+               KEY_EXCH_SCORE=80
           elif [[ $size -lt 4096 ]] && [[ $KEY_EXCH_SCORE -ge 90 ]]; then
-               let KEY_EXCH_SCORE=90
+               KEY_EXCH_SCORE=90
           fi
      fi
      return 0
@@ -1114,8 +1114,8 @@ set_ciph_str_score() {
 
      "$do_rating" || return 0
 
-     [[ $size -gt $CIPH_STR_BEST ]] && let CIPH_STR_BEST=$size
-     [[ $size -lt $CIPH_STR_WORST ]] && let CIPH_STR_WORST=$size
+     [[ $size -gt $CIPH_STR_BEST ]] && CIPH_STR_BEST=$size
+     [[ $size -lt $CIPH_STR_WORST ]] && CIPH_STR_WORST=$size
 
      [[ $size -lt 112 || $size == None ]] && set_grade_cap "F" "Using cipher suites weaker than 112 bits"
 
@@ -1991,11 +1991,11 @@ check_revocation_ocsp() {
           response="$(grep -F "$HOSTCERT: " "$tmpfile")"
           response="${response#$HOSTCERT: }"
           response="${response%\.}"
-          if [[ "$response" =~ "good" ]]; then
+          if [[ "$response" =~ good ]]; then
                out ", "
                pr_svrty_good "not revoked"
                fileout "$jsonID" "OK" "not revoked"
-          elif [[ "$response" =~ "revoked" ]]; then
+          elif [[ "$response" =~ revoked ]]; then
                out ", "
                pr_svrty_critical "revoked"
                fileout "$jsonID" "CRITICAL" "revoked"
@@ -2139,14 +2139,14 @@ s_client_options() {
      local ciphers="notpresent" tls13_ciphers="notpresent"
 
      # Extract the TLSv1.3 ciphers and the non-TLSv1.3 ciphers
-     if [[ " $options " =~ " -cipher " ]]; then
+     if [[ " $options " =~ \ -cipher\  ]]; then
           ciphers="${options#* -cipher }"
           ciphers="${ciphers%% *}"
           options="${options//-cipher $ciphers/}"
           ciphers="${ciphers##\'}"
           ciphers="${ciphers%%\'}"
      fi
-     if [[ " $options " =~ " -ciphersuites " ]]; then
+     if [[ " $options " =~ \ -ciphersuites\  ]]; then
           tls13_ciphers="${options#* -ciphersuites }"
           tls13_ciphers="${tls13_ciphers%% *}"
           options="${options//-ciphersuites $tls13_ciphers/}"
@@ -2163,7 +2163,7 @@ s_client_options() {
      # server_name extension unless the -noservername option is provided. So, if
      # the command line doesn't include -servername and the -noservername option is
      # supported, then add -noservername to the options.
-     "$HAS_NOSERVERNAME" && [[ ! " $options " =~ " -servername " ]] && options+=" -noservername"
+     "$HAS_NOSERVERNAME" && [[ ! " $options " =~ \ -servername\  ]] && options+=" -noservername"
 
      # Newer versions of OpenSSL have dropped support for the -no_ssl2 option, so
      # remove any -no_ssl2 option if the option isn't supported. (Since versions of
@@ -2176,7 +2176,7 @@ s_client_options() {
      # 1.1.1 compression is only offered if the "-comp" option is provided.
      # OpenSSL 1.0.0, 1.0.1, and 1.0.2 offer compression unless the "-no_comp" option is provided.
      # OpenSSL 0.9.8 does not support either the "-comp" or the "-no_comp" option.
-     if [[ " $options " =~ " -comp " ]]; then
+     if [[ " $options " =~ \ -comp\  ]]; then
           # Compression is needed for the test. So, remove "-comp" if it isn't supported, but
           # otherwise make no changes.
           ! "$HAS_COMP" && options="${options//-comp/}"
@@ -2225,7 +2225,7 @@ s_client_options() {
      # OpenSSL's name for secp256r1 is prime256v1. So whenever we encounter this
      # (e.g. client simulations) we replace it with the name which OpenSSL understands
      # This shouldn't be needed. We have this here as a last resort
-     if [[ "$1" =~ " -curves " ]]; then
+     if [[ "$1" =~ \ -curves\  ]]; then
           ! "$HAS_CURVES" && options="${options// -curves / -groups }"
           [[ "$1" =~ secp192r1 ]] && options="${options//secp192r1/prime192v1}"
           [[ "$1" =~ secp256r1 ]] && options="${options//secp256r1/prime256v1}"
@@ -2622,7 +2622,7 @@ run_hsts() {
      match_httpheader_key "Strict-Transport-Security" "HSTS" "$spaces" "true"
      if [[ $? -ne 0 ]]; then
           echo "$HEADERVALUE" >$TMPFILE
-          hsts_age_sec=$(sed -e 's/[^0-9]*//g' <<< $HEADERVALUE)
+          hsts_age_sec="${HEADERVALUE//[^0-9]/}"
           debugme echo "hsts_age_sec: $hsts_age_sec"
           if [[ -n $hsts_age_sec ]]; then
                hsts_age_days=$(( hsts_age_sec / 86400))
@@ -4913,7 +4913,7 @@ run_client_simulation() {
                                    # https://github.com/openssl/openssl/blob/master/apps/ecparam.c#L221 + ./ssl/t1_lib.c
                                    [[ "$curve" =~ secp256r1 ]] && curve="${curve//secp256r1/prime256v1}"
                                    [[ "$curve" =~ secp192r1 ]] && curve="${curve//secp192r1/prime192v1}"
-                                   [[ "$OSSL_SUPPORTED_CURVES" =~ " $curve " ]] && supported_curves+=":$curve"
+                                   [[ "$OSSL_SUPPORTED_CURVES" =~ \ $curve\  ]] && supported_curves+=":$curve"
                               done
                               curves[i]=""
                               [[ -n "$supported_curves" ]] && curves[i]="-curves ${supported_curves:1}"
@@ -5062,7 +5062,6 @@ locally_supported() {
 run_prototest_openssl() {
      local -i ret=0
      local protos proto
-     local passed_check=false
 
      $OPENSSL s_client "$1" 2>&1 | grep -aiq "unknown option" && return 7
      case "$1" in
@@ -5894,7 +5893,7 @@ sub_cipherlists() {
                          len=${#sslv2_cipherlist}
                          detected_ssl2_ciphers="$(grep "Supported cipher: " "$TEMPDIR/$NODEIP.parse_sslv2_serverhello.txt")"
                          for (( i=0; i<len; i+=6 )); do
-                              [[ "$detected_ssl2_ciphers" =~ "x${sslv2_cipherlist:i:6}" ]] && sclient_success=0 && break
+                              [[ "$detected_ssl2_ciphers" =~ x${sslv2_cipherlist:i:6} ]] && sclient_success=0 && break
                          done
                     fi
                fi
@@ -8235,7 +8234,7 @@ compare_server_name_to_cert() {
      while read cn; do
           # If the CN contains any characters that are not valid for a DNS name,
           # then assume it does not contain a DNS name.
-          [[ -n $(sed 's/^[_\.a-zA-Z0-9*\-]*//' <<< "$cn") ]] && continue
+          [[ -n "${cn//[_\.a-zA-Z0-9*\-]/}" ]] && continue
 
           # Check whether the CN matches the servername
           [[ $(toupper "$cn") == "$servername" ]] && cn_match=4 && break
@@ -8639,7 +8638,7 @@ certificate_info() {
      local -i lineno_matched=0
      local cert_keyusage cert_ext_keyusage short_keyAlgo
      local outok=true
-     local days2expire secs2warn ocsp_uri crl
+     local days2expire ocsp_uri crl
      local startdate enddate issuer_CN issuer_C issuer_O issuer sans san all_san="" cn
      local issuer_DC issuerfinding cn_nosni=""
      local cert_fingerprint_sha1 cert_fingerprint_sha2 cert_serial cert
@@ -9168,7 +9167,7 @@ certificate_info() {
      if [[ $trust_sni -eq 0 ]]; then
           pr_svrty_high "$trustfinding"
           trust_sni_finding="HIGH"
-     elif ( [[ $trust_sni -eq 4 ]] || [[ $trust_sni -eq 8 ]] ); then
+     elif [[ $trust_sni -eq 4 ]] || [[ $trust_sni -eq 8 ]]; then
           if [[ $SERVICE == HTTP ]] || "$ASSUME_HTTP"; then
                # https://bugs.chromium.org/p/chromium/issues/detail?id=308330
                # https://bugzilla.mozilla.org/show_bug.cgi?id=1245280
@@ -9509,7 +9508,7 @@ certificate_info() {
      jsonID="DNS_CAArecord"
      caa_node="$NODE"
      caa=""
-     while ( [[ -z "$caa" ]] &&  [[ ! -z "$caa_node" ]] ); do
+     while [[ -z "$caa" ]] &&  [[ -n "$caa_node" ]]; do
           caa="$(get_caa_rr_record $caa_node)"
           [[ $caa_node =~ '.'$ ]] || caa_node+="."
           caa_node=${caa_node#*.}
@@ -9852,7 +9851,7 @@ run_server_defaults() {
                                         success[n]=0
                                    else
                                         while read -r san; do
-                                             [[ -n "$san" ]] && [[ " $sans_sni " =~ " $san " ]] && success[n]=0 && break
+                                             [[ -n "$san" ]] && [[ " $sans_sni " =~ \ $san\  ]] && success[n]=0 && break
                                         done <<< "$sans_nosni"
                                    fi
                               fi
@@ -10249,7 +10248,7 @@ run_fs() {
                fileout "$jsonID" "WARN" "tests skipped as you only have $nr_supported_ciphers FS ciphers on the client site. ($CLIENT_MIN_FS are required)"
                return 1
           fi
-          $OPENSSL s_client $(s_client_options "-cipher $fs_cipher_list -ciphersuites "ALL" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
+          $OPENSSL s_client $(s_client_options "-cipher $fs_cipher_list -ciphersuites ALL $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
           sclient_connect_successful $? $TMPFILE
           sclient_success=$?
           [[ $sclient_success -eq 0 ]] && [[ $(grep -ac "BEGIN CERTIFICATE" $TMPFILE) -eq 0 ]] && sclient_success=1
@@ -10408,7 +10407,7 @@ run_fs() {
           for curve in "${curves_ossl[@]}"; do
                ossl_supported[nr_curves]=false
                supported_curve[nr_curves]=false
-               [[ "$OSSL_SUPPORTED_CURVES" =~ " $curve " ]] && ossl_supported[nr_curves]=true && nr_ossl_curves+=1
+               [[ "$OSSL_SUPPORTED_CURVES" =~ \ $curve\  ]] && ossl_supported[nr_curves]=true && nr_ossl_curves+=1
                nr_curves+=1
           done
 
@@ -10803,7 +10802,7 @@ starttls_io() {
      # This seems a bit dangerous but works. No blockings yet. "if=nonblock" doesn't work on BSDs
      buffer="$(dd bs=512 count=1 <&5 2>/dev/null)"
 
-     for ((i=1; i < $nr_waits; i++ )); do
+     for ((i=1; i < nr_waits; i++ )); do
           [[ "$DEBUG" -ge 2 ]] && echo -en "\nS: " && echo $buffer
           if [[ "$buffer" =~ $2 ]]; then
                debugme echo "     ---> reply matched \"$2\""
@@ -11024,7 +11023,7 @@ starttls_postgres_dialog() {
 
      debugme echo "=== starting postgres STARTTLS dialog ==="
      socksend "${starttls_init}" 0                          && debugme echo "${debugpad}initiated STARTTLS" &&
-     starttls_io "" S 1                                     && debugme echo "${debugpad}received ack (="S") for STARTTLS"
+     starttls_io "" S 1                                     && debugme echo "${debugpad}received ack (=\"S\") for STARTTLS"
      ret=$?
      debugme echo "=== finished postgres STARTTLS dialog with ${ret} ==="
      return $ret
@@ -11626,7 +11625,7 @@ parse_sslv2_serverhello() {
                echo "SSLv2 cipher spec length:  0x$v2_hello_cipherspec_length"
           fi
 
-          if "$parse_complete" && [[ 2*$(hex2dec "$v2_hello_length") -ne ${#v2_hello_ascii}-4 ]]; then
+          if "$parse_complete" && [[ $((2*$(hex2dec "$v2_hello_length"))) -ne $((${#v2_hello_ascii}-4)) ]]; then
                ret=7
           fi
      fi
@@ -11947,7 +11946,7 @@ derive-handshake-traffic-keys() {
      fi
      if [[ "$cipher" == *AES_128* ]]; then
           key_len=16
-     elif ( [[ "$cipher" == *AES_256* ]] || [[ "$cipher" == *CHACHA20_POLY1305* ]] ); then
+     elif [[ "$cipher" == *AES_256* ]] || [[ "$cipher" == *CHACHA20_POLY1305* ]]; then
           key_len=32
      else
           return 1
@@ -12038,7 +12037,7 @@ derive-application-traffic-keys() {
      fi
      if [[ "$cipher" == *AES_128* ]]; then
           key_len=16
-     elif ( [[ "$cipher" == *AES_256* ]] || [[ "$cipher" == *CHACHA20_POLY1305* ]] ); then
+     elif [[ "$cipher" == *AES_256* ]] || [[ "$cipher" == *CHACHA20_POLY1305* ]]; then
           key_len=32
      else
           return 1
@@ -12907,7 +12906,7 @@ gcm() {
                tag[i]=0x${base_ectr:$((2*i)):2}
           done
 
-          if ( [[ $input_len -ne 0 ]] || [[ $aad_len -ne 0 ]] ); then
+          if [[ $input_len -ne 0 ]] || [[ $aad_len -ne 0 ]]; then
                buf="$(printf "%016X" $aad_len)$(printf "%016X" $input_len)"
                for (( i=0; i < 16; i++ )); do
                     gcm_ctx_buf[i]="$(printf "%02X" $((0x${gcm_ctx_buf[i]} ^ 0x${buf:$((2*i)):2})))"
@@ -13989,7 +13988,7 @@ parse_tls_serverhello() {
                          tls_extensions_len+=$tls_encryptedextensions_ascii_len-4
                          tls_encryptedextensions_ascii_len=$tls_encryptedextensions_ascii_len/2-2
                          offset=$((extns_offset+4))
-                         tls_serverhello_ascii="${tls_serverhello_ascii:0:extns_offset}$(printf "%04X" $((0x${tls_serverhello_ascii:extns_offset:4}+$tls_encryptedextensions_ascii_len)))${tls_serverhello_ascii:offset}${tls_encryptedextensions_ascii:4}"
+                         tls_serverhello_ascii="${tls_serverhello_ascii:0:extns_offset}$(printf "%04X" $((0x${tls_serverhello_ascii:extns_offset:4}+tls_encryptedextensions_ascii_len)))${tls_serverhello_ascii:offset}${tls_encryptedextensions_ascii:4}"
                     fi
                     if [[ -n "$tls_certificate_ascii" ]]; then
                          # In TLS 1.3, the Certificate message begins with a zero length certificate_request_context.
@@ -14600,9 +14599,9 @@ sslv2_sockets() {
      local ret
      local cipher_suites="$1"
      local client_hello len_client_hello
-     local len_ciph_suites_byte len_ciph_suites
+     local len_ciph_suites
      local server_hello sock_reply_file2 foo
-     local -i response_len server_hello_len
+     local -i len_ciph_suites_byte response_len server_hello_len
      local parse_complete=false
 
      # this could be empty so we use '=='
@@ -14632,7 +14631,7 @@ sslv2_sockets() {
      cipher_suites="$NW_STR"       # we don't have the leading \x here so string length is two byte less, see next
      len_ciph_suites_byte=${#cipher_suites}
 
-     let "len_ciph_suites_byte += 2"
+     len_ciph_suites_byte+=2
      len_ciph_suites=$(printf "%02x\n" $(( len_ciph_suites_byte / 4 )))
      len_client_hello=$(printf "%02x\n" $((0x$len_ciph_suites + 0x19)))
 
@@ -14773,9 +14772,9 @@ prepare_tls_clienthello() {
      local servername_hexstr len_servername len_servername_hex
      local hexdump_format_str part1 part2
      local all_extensions=""
-     local -i i j len_extension len_padding_extension len_all len_session_id
+     local -i i j len_ciph_suites_byte len_extension len_padding_extension len_all len_session_id
      local len_sni_listlen len_sni_ext len_extension_hex len_padding_extension_hex
-     local cipher_suites len_ciph_suites len_ciph_suites_byte len_ciph_suites_word
+     local cipher_suites len_ciph_suites len_ciph_suites_word
      local len_client_hello_word len_all_word
      local ecc_cipher_suite_found=false
      local extension_signature_algorithms extension_heartbeat session_id
@@ -14791,7 +14790,7 @@ prepare_tls_clienthello() {
 
      cipher_suites="$2"                      # we don't have the leading \x here so string length is two byte less, see next
      len_ciph_suites_byte=${#cipher_suites}
-     let "len_ciph_suites_byte += 2"
+     len_ciph_suites_byte+=2
 
      # we have additional 2 chars \x in each 2 byte string and 2 byte ciphers, so we need to divide by 4:
      len_ciph_suites=$(printf "%02x\n" $(( len_ciph_suites_byte / 4 )))
@@ -14967,7 +14966,7 @@ prepare_tls_clienthello() {
                [[ $? -ne 0 ]] && return 1
           fi
 
-          if [[ -n "$SNI" ]] && [[ ! "$extra_extensions_list" =~ " 0000 " ]]; then
+          if [[ -n "$SNI" ]] && [[ ! "$extra_extensions_list" =~ \ 0000\  ]]; then
                all_extensions="
                 00, 00                  # extension server_name
                ,00, $len_sni_ext        # length SNI EXT
@@ -14976,7 +14975,7 @@ prepare_tls_clienthello() {
                ,00, $len_servername_hex # server_name length. We assume len(hostname) < FF - 9
                ,$servername_hexstr"     # server_name target
           fi
-          if [[ 0x$tls_low_byte -ge 0x04 ]] && [[ ! "$extra_extensions_list" =~ " 002b " ]]; then
+          if [[ 0x$tls_low_byte -ge 0x04 ]] && [[ ! "$extra_extensions_list" =~ \ 002b\  ]]; then
                # Add supported_versions extension listing all TLS/SSL versions
                # from the one specified in $tls_low_byte to SSLv3.
                for (( i=0x$tls_low_byte; i >=0; i=i-1 )); do
@@ -14995,7 +14994,7 @@ prepare_tls_clienthello() {
                done
                [[ -n "$all_extensions" ]] && all_extensions+=","
                # FIXME: Adjust the lengths ("+15" and "+14") when the draft versions of TLSv1.3 are removed.
-               if [[ "$KEY_SHARE_EXTN_NR" == "33" ]]; then
+               if [[ "$KEY_SHARE_EXTN_NR" == 33 ]]; then
                     all_extensions+="00, 2b, 00, $(printf "%02x" $((2*0x$tls_low_byte+15))), $(printf "%02x" $((2*0x$tls_low_byte+14)))$extension_supported_versions"
                else
                     all_extensions+="00, 2b, 00, $(printf "%02x" $((2*0x$tls_low_byte+11))), $(printf "%02x" $((2*0x$tls_low_byte+10)))$extension_supported_versions"
@@ -15006,45 +15005,45 @@ prepare_tls_clienthello() {
           # OpenSSL, Firefox, and Chrome include it in TLS 1.3 ClientHello messages, and there is at
           # least one server that will fail the connection if it is absent
           # (see https://github.com/drwetter/testssl.sh/issues/990).
-          if [[ "0x$tls_low_byte" -ge 0x04 ]] && [[ ! "$extra_extensions_list" =~ " 002d " ]]; then
+          if [[ "0x$tls_low_byte" -ge 0x04 ]] && [[ ! "$extra_extensions_list" =~ \ 002d\  ]]; then
                [[ -n "$all_extensions" ]] && all_extensions+=","
                all_extensions+="$extn_psk_mode"
           fi
 
-          if [[ ! "$extra_extensions_list" =~ " 0023 " ]]; then
+          if [[ ! "$extra_extensions_list" =~ \ 0023\  ]]; then
                [[ -n "$all_extensions" ]] && all_extensions+=","
                all_extensions+="$extension_session_ticket"
           fi
 
           # If the ClientHello will include the ALPN extension, then don't include the NPN extension.
-          if [[ ! "$extra_extensions_list" =~ " 3374 " ]] && [[ ! "$extra_extensions_list" =~ " 0010 " ]]; then
+          if [[ ! "$extra_extensions_list" =~ \ 3374\  ]] && [[ ! "$extra_extensions_list" =~ \ 0010\  ]]; then
                [[ -n "$all_extensions" ]] && all_extensions+=","
                all_extensions+="$extension_next_protocol"
           fi
 
           # RFC 5246 says that clients MUST NOT offer the signature algorithms
           # extension if they are offering TLS versions prior to 1.2.
-          if [[ "0x$tls_low_byte" -ge 0x03 ]] && [[ ! "$extra_extensions_list" =~ " 000d " ]]; then
+          if [[ "0x$tls_low_byte" -ge 0x03 ]] && [[ ! "$extra_extensions_list" =~ \ 000d\  ]]; then
                [[ -n "$all_extensions" ]] && all_extensions+=","
                all_extensions+="$extension_signature_algorithms"
           fi
 
-          if [[ -n "$extension_supported_groups" ]] && [[ ! "$extra_extensions_list" =~ " 000a " ]]; then
+          if [[ -n "$extension_supported_groups" ]] && [[ ! "$extra_extensions_list" =~ \ 000a\  ]]; then
                [[ -n "$all_extensions" ]] && all_extensions+=","
                all_extensions+="$extension_supported_groups"
           fi
 
-          if [[ -n "$extensions_key_share" ]] && [[ ! "$extra_extensions_list" =~ " 00$KEY_SHARE_EXTN_NR " ]]; then
+          if [[ -n "$extensions_key_share" ]] && [[ ! "$extra_extensions_list" =~ \ 00$KEY_SHARE_EXTN_NR\  ]]; then
                [[ -n "$all_extensions" ]] && all_extensions+=","
                all_extensions+="$extensions_key_share"
           fi
 
-          if [[ -n "$extension_supported_point_formats" ]] && [[ ! "$extra_extensions_list" =~ " 000b " ]]; then
+          if [[ -n "$extension_supported_point_formats" ]] && [[ ! "$extra_extensions_list" =~ \ 000b\  ]]; then
                [[ -n "$all_extensions" ]] && all_extensions+=","
                all_extensions+="$extension_supported_point_formats"
           fi
 
-          if [[ "0x$tls_low_byte" -ge 0x04 ]] && [[ ! "$extra_extensions_list" =~ " 001b " ]]; then
+          if [[ "0x$tls_low_byte" -ge 0x04 ]] && [[ ! "$extra_extensions_list" =~ \ 001b\  ]]; then
                # If the response needs to be decrypted, then indicate support
                # for ZLIB certificate compression if $OPENSSL can decompress
                # the result. If the response does not need to be decrypted,
@@ -15068,7 +15067,7 @@ prepare_tls_clienthello() {
 
           # Make sure that a non-empty extension goes last (either heartbeat or padding).
           # See PR #792 and https://www.ietf.org/mail-archive/web/tls/current/msg19720.html.
-          if [[ ! "$extra_extensions_list" =~ " 000f " ]]; then
+          if [[ ! "$extra_extensions_list" =~ \ 000f\  ]]; then
                [[ -n "$all_extensions" ]] && all_extensions+=","
                all_extensions+="$extension_heartbeat"
           fi
@@ -15085,7 +15084,7 @@ prepare_tls_clienthello() {
           len_all=$((0x$len_ciph_suites + 0x2b + 0x$len_extension_hex + 0x2))
           "$offer_compression" && len_all+=2
           [[ 0x$tls_low_byte -gt 0x03 ]] && len_all+=32 # TLSv1.3 ClientHello includes a 32-byte session id
-          if [[ $len_all -ge 256 ]] && [[ $len_all -le 511 ]] && [[ ! "$extra_extensions_list" =~ " 0015 " ]]; then
+          if [[ $len_all -ge 256 ]] && [[ $len_all -le 511 ]] && [[ ! "$extra_extensions_list" =~ \ 0015\  ]]; then
                if [[ $len_all -ge 508 ]]; then
                     len_padding_extension=1 # Final extension cannot be empty: see PR #792
                else
@@ -15099,7 +15098,7 @@ prepare_tls_clienthello() {
                done
                len_extension=$len_extension+$len_padding_extension+0x4
                len_extension_hex=$(printf "%02x\n" $len_extension)
-          elif [[ ! "$extra_extensions_list" =~ " 0015 " ]] && ( [[ $((len_all%256)) -eq 10 ]] || [[ $((len_all%256)) -eq 14 ]] ); then
+          elif [[ ! "$extra_extensions_list" =~ \ 0015\  ]] && ( [[ $((len_all%256)) -eq 10 ]] || [[ $((len_all%256)) -eq 14 ]] ); then
                # Some servers fail if the length of the ClientHello is 522, 778, 1034, 1290, ... bytes.
                # A few servers also fail if the length is 526, 782, 1038, 1294, ... bytes.
                # So, if the ClientHello would be one of these length, add a 5-byte padding extension.
@@ -15123,7 +15122,7 @@ prepare_tls_clienthello() {
      fi
 
      # RFC 3546 doesn't specify SSLv3 to have SNI, openssl just ignores the switch if supplied
-     if [[ "$tls_low_byte" == "00" ]]; then
+     if [[ "$tls_low_byte" == 00 ]]; then
           len_all=$((0x$len_ciph_suites + len_session_id + 0x27))
      else
           len_all=$((0x$len_ciph_suites + len_session_id + 0x27 + 0x$len_extension_hex + 0x2))
@@ -15749,7 +15748,7 @@ run_heartbleed(){
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for heartbleed vulnerability " && outln
      pr_bold " Heartbleed"; out " ($cve)                "
 
-     if ( [[ "$STARTTLS_PROTOCOL" =~ ldap ]] || [[ "$STARTTLS_PROTOCOL" =~ irc ]] ); then
+     if [[ "$STARTTLS_PROTOCOL" =~ ldap ]] || [[ "$STARTTLS_PROTOCOL" =~ irc ]]; then
           prln_local_problem "STARTTLS/$STARTTLS_PROTOCOL and --ssl-native collide here"
           return 1
      fi
@@ -15859,7 +15858,7 @@ run_ccs_injection(){
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for CCS injection vulnerability " && outln
      pr_bold " CCS"; out " ($cve)                       "
 
-     if ( [[ "$STARTTLS_PROTOCOL" =~ ldap ]] || [[ "$STARTTLS_PROTOCOL" =~ irc ]] ); then
+     if [[ "$STARTTLS_PROTOCOL" =~ ldap ]] || [[ "$STARTTLS_PROTOCOL" =~ irc ]]; then
           prln_local_problem "STARTTLS/$STARTTLS_PROTOCOL and --ssl-native collide here"
           return 1
      fi
@@ -17222,14 +17221,14 @@ run_freak() {
 
      if [[ $DEBUG -ge 2 ]]; then
           if "$using_sockets"; then
-               for hexc in $(sed 's/, / /g' <<< "$exportrsa_tls_cipher_list_hex, $exportrsa_ssl2_cipher_list_hex"); do
+               for hexc in ${exportrsa_tls_cipher_list_hex//, / } ${exportrsa_ssl2_cipher_list_hex//, / }; do
                     if [[ ${#hexc} -eq 5 ]]; then
                          hexc="0x${hexc:0:2},0x${hexc:3:2}"
                     else
                          hexc="0x${hexc:0:2},0x${hexc:3:2},0x${hexc:6:2}"
                     fi
                     for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
-                         [[ "$hexc" == "${TLS_CIPHER_HEXCODE[i]}" ]] && break
+                         [[ "$hexc" == ${TLS_CIPHER_HEXCODE[i]} ]] && break
                     done
                     [[ $i -eq $TLS_NR_CIPHERS ]] && tm_out "$hexc " || tm_out "${TLS_CIPHER_OSSL_NAME[i]} "
                done
@@ -17398,10 +17397,10 @@ run_logjam() {
 
      if [[ $DEBUG -ge 2 ]]; then
           if "$using_sockets"; then
-               for hexc in $(sed 's/, / /g' <<< "$exportdh_cipher_list_hex"); do
+               for hexc in ${exportdh_cipher_list_hex//, / }; do
                     hexc="0x${hexc:0:2},0x${hexc:3:2}"
                     for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
-                         [[ "$hexc" == "${TLS_CIPHER_HEXCODE[i]}" ]] && break
+                         [[ "$hexc" == ${TLS_CIPHER_HEXCODE[i]} ]] && break
                     done
                     [[ $i -eq $TLS_NR_CIPHERS ]] && tm_out "$hexc " || tm_out "${TLS_CIPHER_OSSL_NAME[i]} "
                done
@@ -17550,7 +17549,7 @@ run_drown() {
           cert_fingerprint_sha2=${cert_fingerprint_sha2/SHA256 /}
      fi
 
-     if ( [[ "$STARTTLS_PROTOCOL" =~ ldap ]] || [[ "$STARTTLS_PROTOCOL" =~ irc ]] ); then
+     if [[ "$STARTTLS_PROTOCOL" =~ ldap ]] || [[ "$STARTTLS_PROTOCOL" =~ irc ]]; then
           prln_local_problem "STARTTLS/$STARTTLS_PROTOCOL and --ssl-native collide here"
           return 1
      fi
@@ -17955,7 +17954,7 @@ run_winshock() {
           outln
           return 0
      fi
-     if ( [[ "$STARTTLS_PROTOCOL" =~ ldap ]] || [[ "$STARTTLS_PROTOCOL" =~ irc ]] ); then
+     if [[ "$STARTTLS_PROTOCOL" =~ ldap ]] || [[ "$STARTTLS_PROTOCOL" =~ irc ]]; then
           prln_local_problem "STARTTLS/$STARTTLS_PROTOCOL and --ssl-native collide here"
           return 1
      fi
@@ -18936,7 +18935,7 @@ run_robot() {
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for Return of Bleichenbacher's Oracle Threat (ROBOT) vulnerability " && outln
      pr_bold " ROBOT                                     "
 
-     if ( [[ "$STARTTLS_PROTOCOL" =~ ldap ]] || [[ "$STARTTLS_PROTOCOL" =~ irc ]] ); then
+     if [[ "$STARTTLS_PROTOCOL" =~ ldap ]] || [[ "$STARTTLS_PROTOCOL" =~ irc ]]; then
           prln_local_problem "STARTTLS/$STARTTLS_PROTOCOL and --ssl-native collide here"
           return 1
      fi
@@ -19892,7 +19891,7 @@ prepare_arrays() {
                if [[ ${#hexc} -eq 9 ]]; then
                     # >= SSLv3 ciphers
                     if [[ $OSSL_VER_MAJOR -lt 1 ]]; then
-                         [[ ":${ossl_supported_tls}:" =~ ":${TLS_CIPHER_OSSL_NAME[i]}:" ]] && TLS_CIPHER_OSSL_SUPPORTED[i]=true
+                         [[ ":${ossl_supported_tls}:" =~ :${TLS_CIPHER_OSSL_NAME[i]}: ]] && TLS_CIPHER_OSSL_SUPPORTED[i]=true
                     else
                          ossl_ciph="$(awk '/'"$hexc"'/ { print $3 }' <<< "$ossl_supported_tls")"
                          if [[ -n "$ossl_ciph" ]]; then
@@ -19902,7 +19901,7 @@ prepare_arrays() {
                          fi
                     fi
                elif [[ $OSSL_VER_MAJOR -lt 1 ]]; then
-                    [[ ":${ossl_supported_sslv2}:" =~ ":${TLS_CIPHER_OSSL_NAME[i]}:" ]] && TLS_CIPHER_OSSL_SUPPORTED[i]=true
+                    [[ ":${ossl_supported_sslv2}:" =~ :${TLS_CIPHER_OSSL_NAME[i]}: ]] && TLS_CIPHER_OSSL_SUPPORTED[i]=true
                else
                     [[ "$ossl_supported_sslv2" =~ $hexc ]] && TLS_CIPHER_OSSL_SUPPORTED[i]=true
                fi
@@ -21459,7 +21458,7 @@ create_mass_testing_cmdline() {
                     # next is the filename itself, as no '=' was supplied
                     [[ "$cmd" == --htmlfile ]] && skip_next=true
                     [[ "$cmd" == -oH ]] && skip_next=true
-               elif ( [[ "$cmd" =~ --logfile ]] || [[ "$cmd" =~ -oL ]] ); then
+               elif [[ "$cmd" =~ --logfile ]] || [[ "$cmd" =~ -oL ]]; then
                     outfile_arg="$(parse_opt_equal_sign "$cmd" "${CMDLINE_ARRAY[i+1]}")"
                     MASS_TESTING_CMDLINE[nr_cmds]="--logfile-parent=$outfile_arg"
                     # next is the filename itself, as no '=' was supplied
@@ -21897,11 +21896,12 @@ run_mass_testing_parallel() {
 }
 
 run_rating() {
-     local final_score pre_cap_grade final_grade
-     local c1_score c2_score c3_score c1_wscore c2_wscore c3_wscore
-     local c1_worst c1_best
-     local c3_worst c3_best c3_worst_cb c3_best_cb
-     local old_ifs=$IFS sorted_reasons sorted_warnings reason_nr=0 warning_nr=0
+     local pre_cap_grade final_grade
+     local -i c1_score c2_score c3_score c1_wscore c2_wscore c3_wscore final_score
+     local -i c1_worst c1_best
+     local -i c3_worst c3_best c3_worst_cb c3_best_cb
+     local old_ifs=$IFS sorted_reasons sorted_warnings
+     local -i reason_nr=0 warning_nr=0
 
      outln "\n";
      pr_headlineln " Rating (experimental) "
@@ -21965,8 +21965,8 @@ run_rating() {
                c1_worst=100
           fi
 
-          let c1_score="($c1_best+$c1_worst)/2" # Gets the category score
-          let c1_wscore=$c1_score*30/100 # Gets the weighted score for category (30%)
+          c1_score=$(( (c1_best+c1_worst)/2 )) # Gets the category score
+          c1_wscore=$((c1_score*30/100)) # Gets the weighted score for category (30%)
 
           pr_bold " Protocol Support "; out "(weighted)  "; outln "$c1_score ($c1_wscore)"
           fileout "protocol_support_score" "INFO" "$c1_score"
@@ -21979,8 +21979,8 @@ run_rating() {
                set_grade_cap "B" "Using a weak public key and/or ephemeral key"
           fi
 
-          let c2_score=$KEY_EXCH_SCORE
-          let c2_wscore=$c2_score*30/100
+          c2_score=$KEY_EXCH_SCORE
+          c2_wscore=$((c2_score*30/100))
 
           pr_bold " Key Exchange "; out "    (weighted)  "; outln "$c2_score ($c2_wscore)"
           fileout "key_exchange_score" "INFO" "$c2_score"
@@ -22013,8 +22013,8 @@ run_rating() {
           else
                c3_worst=0
           fi
-          let c3_score="($c3_best+$c3_worst)/2" # Gets the category score
-          let c3_wscore=$c3_score*40/100        # Gets the weighted score for category (40%)
+          c3_score=$(( (c3_best+c3_worst)/2 )) # Gets the category score
+          c3_wscore=$((c3_score*40/100))       # Gets the weighted score for category (40%)
 
           pr_bold " Cipher Strength "; out " (weighted)  "; outln "$c3_score ($c3_wscore)"
           fileout "cipher_strength_score" "INFO" "$c3_score"
@@ -22023,9 +22023,9 @@ run_rating() {
           ## Calculate final score and grade
           # If any category resulted in a score of 0, push final grade to 0
           if [[ $c1_score -eq 0 || $c2_score -eq 0 || $c3_score -eq 0 ]]; then
-               let final_score=0
+               final_score=0
           else
-               let final_score=$c1_wscore+$c2_wscore+$c3_wscore
+               final_score=$((c1_wscore+c2_wscore+c3_wscore))
           fi
 
           pr_bold " Final Score                  "; outln $final_score
@@ -22090,7 +22090,7 @@ run_rating() {
           else
                outln "                              $reason"
           fi
-          let reason_nr++
+          ((reason_nr++))
           fileout "grade_cap_reason_${reason_nr}" "INFO" "$reason"
      done
 
@@ -22100,7 +22100,7 @@ run_rating() {
           else
                prln_svrty_medium "                              $warning"
           fi
-          let warning_nr++
+          ((warning_nr++))
           fileout "grade_cap_warning_${warning_nr}" "INFO" "$warning"
      done
 
@@ -22113,18 +22113,18 @@ run_rating() {
 # Returns "0" if rating is enabled, and "1" if rating is disabled
 set_rating_state() {
      local gbl
-     local nr_enabled=0
+     local -i nr_enabled=0
 
      # All of these should be enabled
      for gbl in do_protocols do_cipherlists do_fs do_server_defaults do_header \
           do_heartbleed do_ccs_injection do_ticketbleed do_robot do_renego \
           do_crime do_ssl_poodle do_tls_fallback_scsv do_drown do_beast \
           do_rc4 do_logjam; do
-          "${!gbl}" && let nr_enabled++
+          "${!gbl}" && ((nr_enabled++))
      done
 
      # ... at least one of these has to be set
-     [[ "$do_allciphers" || "$do_cipher_per_proto" ]] && let nr_enabled++
+     [[ "$do_allciphers" || "$do_cipher_per_proto" ]] && ((nr_enabled++))
 
      # ... else we can't do rating
      if [[ $nr_enabled -lt 18 ]]; then
@@ -22223,13 +22223,13 @@ set_scanning_defaults() {
 # returns number of $do variables set = number of run_funcs() to perform
 count_do_variables() {
      local gbl
-     local true_nr=0
+     local -i true_nr=0
 
      for gbl in do_allciphers do_vulnerabilities do_beast do_lucky13 do_breach do_ccs_injection do_ticketbleed do_cipher_per_proto do_crime \
                do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_fs do_protocols do_rc4 do_starttls_injection do_grease do_robot do_renego \
                do_cipherlists do_server_defaults do_server_preference do_ssl_poodle do_tls_fallback_scsv do_winshock \
                do_sweet32 do_client_simulation do_cipher_match do_tls_sockets do_mass_testing do_display_only do_rating; do
-                    "${!gbl}" && let true_nr++
+                    "${!gbl}" && ((true_nr++))
      done
      return $true_nr
 }
@@ -22473,75 +22473,75 @@ parse_cmd_line() {
                     ;;
                -H|--heartbleed)
                     do_heartbleed=true
-                    let "VULN_COUNT++"
+                    ((VULN_COUNT++))
                     ;;
                -I|--ccs|--ccs[-_]injection)
                     do_ccs_injection=true
-                    let "VULN_COUNT++"
+                    ((VULN_COUNT++))
                     ;;
                -T|--ticketbleed)
                     do_ticketbleed=true
-                    let "VULN_COUNT++"
+                    ((VULN_COUNT++))
                     ;;
                -BB|--BB|--robot)
                     do_robot=true
                     ;;
                -R|--renegotiation)
                     do_renego=true
-                    let "VULN_COUNT++"
+                    ((VULN_COUNT++))
                     ;;
                -C|--compression|--crime)
                     do_crime=true
-                    let "VULN_COUNT++"
+                    ((VULN_COUNT++))
                     ;;
                -B|--breach)
                     do_breach=true
-                    let "VULN_COUNT++"
+                    ((VULN_COUNT++))
                     ;;
                -O|--poodle)
                     do_ssl_poodle=true
                     do_tls_fallback_scsv=true
-                    let "VULN_COUNT++"
+                    ((VULN_COUNT++))
                     ;;
                -Z|--tls[_-]fallback|tls[_-]fallback[_-]scs)
                     do_tls_fallback_scsv=true
-                    let "VULN_COUNT++"
+                    ((VULN_COUNT++))
                     ;;
                -W|--sweet32)
                     do_sweet32=true
-                    let "VULN_COUNT++"
+                    ((VULN_COUNT++))
                     ;;
                -F|--freak)
                     do_freak=true
-                    let "VULN_COUNT++"
+                    ((VULN_COUNT++))
                     ;;
                -D|--drown)
                     do_drown=true
-                    let "VULN_COUNT++"
+                    ((VULN_COUNT++))
                     ;;
                -J|--logjam)
                     do_logjam=true
-                    let "VULN_COUNT++"
+                    ((VULN_COUNT++))
                     ;;
                -A|--beast)
                     do_beast=true
-                    let "VULN_COUNT++"
+                    ((VULN_COUNT++))
                     ;;
                -L|--lucky13)
                     do_lucky13=true
-                    let "VULN_COUNT++"
+                    ((VULN_COUNT++))
                     ;;
                -WS|--winshock)
                     do_winshock=true
-                    let "VULN_COUNT++"
+                    ((VULN_COUNT++))
                     ;;
                -4|--rc4|--appelbaum)
                     do_rc4=true
-                    let "VULN_COUNT++"
+                    ((VULN_COUNT++))
                     ;;
                -SI|--SI|--starttls[-_]injection)
                     do_starttls_injection=true
-                    let "VULN_COUNT++"
+                    ((VULN_COUNT++))
                     ;;
                -f|--fs|--nsa|--forward-secrecy)
                     do_fs=true
@@ -22604,7 +22604,7 @@ parse_cmd_line() {
                     FNAME="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     IKNOW_FNAME=true
-                    WARNINGS=batch           # set this implicitly!
+                    WARNINGS="batch"           # set this implicitly!
                     do_mass_testing=true
                     ;;
                --mode|--mode=*)
@@ -22935,7 +22935,7 @@ parse_cmd_line() {
      done
 
      if "$do_starttls_injection" && [[ "$STARTTLS_PROTOCOL" =~ smtp ]]; then
-          let "VULN_COUNT++"
+          ((VULN_COUNT++))
      fi
 
      count_do_variables
