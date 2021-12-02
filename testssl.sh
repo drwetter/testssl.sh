@@ -1175,7 +1175,7 @@ fileout_section_header() {
 
 # arg1: whether to end object too
 fileout_section_footer() {
-     "$do_pretty_json" && printf "\n                    ]" >> "$JSONFILE"
+     "$do_pretty_json" && FIRST_FINDING=false && printf "\n                    ]" >> "$JSONFILE"
      "$do_pretty_json" && "$1" && echo -e "\n          }" >> "$JSONFILE"
      SECTION_FOOTER_NEEDED=false
 }
