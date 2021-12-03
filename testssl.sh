@@ -230,7 +230,7 @@ else
 fi
 DISPLAY_CIPHERNAMES="openssl"           # display OpenSSL ciphername (but both OpenSSL and RFC ciphernames in wide mode)
 declare UA_STD="TLS tester from $SWURL"
-declare -r UA_SNEAKY="Mozilla/5.0 (X11; Linux x86_64; rv:52.0) Gecko/20100101 Firefox/52.0"
+declare -r UA_SNEAKY="Mozilla/5.0 (X11; Linux x86_64; rv:94.0) Gecko/20100101 Firefox/94.0"
 SSL_RENEG_ATTEMPTS=${SSL_RENEG_ATTEMPTS:-6}       # number of times to check SSL Renegotiation
 
 ########### Initialization part, further global vars just being declared here
@@ -1117,7 +1117,7 @@ set_ciph_str_score() {
      [[ $size -gt $CIPH_STR_BEST ]] && let CIPH_STR_BEST=$size
      [[ $size -lt $CIPH_STR_WORST ]] && let CIPH_STR_WORST=$size
 
-     [[ $size -lt 112 || $size == "None" ]] && set_grade_cap "F" "Using cipher suites weaker than 112 bits"
+     [[ $size -lt 112 || $size == None ]] && set_grade_cap "F" "Using cipher suites weaker than 112 bits"
 
      return 0
 }
