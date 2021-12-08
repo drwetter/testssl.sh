@@ -1154,8 +1154,8 @@ fileout_json_section() {
            2) echo -e ",\n                    \"protocols\"         : [" ;;
            3) echo -e ",\n                    \"grease\"            : [" ;;
            4) echo -e ",\n                    \"ciphers\"           : [" ;;
-           5) echo -e ",\n                    \"fs\"                : [" ;;
-           6) echo -e ",\n                    \"serverPreferences\" : [" ;;
+           5) echo -e ",\n                    \"serverPreferences\" : [" ;;
+           6) echo -e ",\n                    \"fs\"                : [" ;;
            7) echo -e ",\n                    \"serverDefaults\"    : [" ;;
            8) echo -e ",\n                    \"headerResponse\"    : [" ;;
            9) echo -e ",\n                    \"vulnerabilities\"   : [" ;;
@@ -23062,6 +23062,7 @@ lets_roll() {
           fi
           if "$do_cipher_match"; then
                # we will have an invalid JSON with no if statement
+               ((section_number++))
                fileout_section_header $section_number false
                run_cipher_match ${single_cipher}
                stopwatch run_cipher_match
