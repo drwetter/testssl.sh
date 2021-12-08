@@ -20161,6 +20161,7 @@ lets_roll() {
           fi
           if "$do_cipher_match"; then
                # we will have an invalid JSON with no if statement
+               ((section_number++))
                fileout_section_header $section_number false
                run_cipher_match ${single_cipher}
                stopwatch run_cipher_match
