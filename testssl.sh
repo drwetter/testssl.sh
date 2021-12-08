@@ -20077,8 +20077,26 @@ reset_hostdepended_vars() {
      PROTOS_OFFERED=""
      CURVES_OFFERED=""
      OPTIMAL_PROTO=""
+     STARTTLS_OPTIMAL_PROTO=""
      ALL_FAILED_SOCKETS=true
      SERVER_SIZE_LIMIT_BUG=false
+     NR_SOCKET_FAIL=0
+     NR_OSSL_FAIL=0
+     NR_HEADER_FAIL=0
+     TLS12_CIPHER_OFFERED=""
+     KNOWN_OSSL_PROB=false
+     TLS13_ONLY=false
+     CLIENT_AUTH=false
+     NO_SSL_SESSIONID=false
+     DH_GROUP_OFFERED=""
+     DH_GROUP_LEN_P=0
+     KEY_SHARE_EXTN_NR="33"
+     BAD_SERVER_HELLO_CIPHER=false
+     GOST_STATUS_PROBLEM=false
+     SERVICE=""
+     CERT_FINGERPRINT_SHA2=""
+     RSA_CERT_FINGERPRINT_SHA2=""
+     TLS_TIME=""
 }
 
 # Rough estimate, in the future we maybe want to make use of nano secs (%N). Note this
@@ -20230,10 +20248,6 @@ lets_roll() {
      outln
      calc_scantime
      datebanner " Done"
-
-     # reset the failed connect counter as we are finished
-     NR_SOCKET_FAIL=0
-     NR_OSSL_FAIL=0
 
      "$MEASURE_TIME" && printf "$1: %${COLUMNS}s\n" "$SCAN_TIME"
      [[ -e "$MEASURE_TIME_FILE" ]] && echo "Total : $SCAN_TIME " >> "$MEASURE_TIME_FILE"
