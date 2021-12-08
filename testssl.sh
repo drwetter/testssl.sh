@@ -2231,6 +2231,7 @@ s_client_options() {
           [[ "$1" =~ secp192r1 ]] && options="${options//secp192r1/prime192v1}"
           [[ "$1" =~ secp256r1 ]] && options="${options//secp256r1/prime256v1}"
      fi
+     # $keyopts may be set as an environment variable to enable client authentication (see PR #1383)
      tm_out "$options $keyopts"
 }
 
