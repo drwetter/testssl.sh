@@ -129,8 +129,9 @@ declare -r SWCONTACT="dirk aet testssl dot sh"
      SWURL="https://testssl.sh/"
 if git rev-parse --is-inside-work-tree &>/dev/null; then
      declare -r GIT_REL="$(git log --format='%h %ci' -1 2>/dev/null | awk '{ print $1" "$2" "$3 }')"
-     declare -r GIT_REL_SHORT="$(git log --format='%h %ci' -1 2>/dev/null | awk '{ print $1 }')"
-     declare -r REL_DATE="$(git log --format='%h %ci' -1 2>/dev/null | awk '{ print $2 }')"
+     declare -r GIT_REL_SHORT="${GIT_REL%% *}"
+     declare -r REL_DATE_TIME="${GIT_REL#* }"
+     declare -r REL_DATE="${REL_DATE_TIME% *}"
 fi
 declare -r PROG_NAME="$(basename "$0")"
 declare -r RUN_DIR="$(dirname "$0")"
