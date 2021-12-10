@@ -394,6 +394,7 @@ TLS_NOW=""                              # Similar
 TLS_DIFFTIME_SET=false                  # Tells TLS functions to measure the TLS difftime or not
 NOW_TIME=""
 HTTP_TIME=""
+HTTP_AGE=0
 REQHEADERS=()
 GET_REQ11=""
 START_TIME=0                            # time in epoch when the action started
@@ -2369,6 +2370,7 @@ run_http_header() {
           tm_out "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") >$HEADERFILE 2>$ERRFILE
           NOW_TIME=$(date "+%s")
           HTTP_TIME=$(awk -F': ' '/^date:/ { print $2 }  /^Date:/ { print $2 }' $HEADERFILE)
+          grep -q -i '^Age: [1-9][[:digit:]]*' $HEADERFILE && HTTP_AGE=$(strip_lf "$(awk -F': ' '/^[aA][gG][eE]: / { print $2 }' $HEADERFILE)")
           HAD_SLEPT=0
      else
           # 1st GET request hung and needed to be killed. Check whether it succeeded anyway:
@@ -2376,6 +2378,7 @@ run_http_header() {
                # correct by seconds we slept, HAD_SLEPT comes from wait_kill()
                NOW_TIME=$(($(date "+%s") - HAD_SLEPT))
                HTTP_TIME=$(awk -F': ' '/^date:/ { print $2 }  /^Date:/ { print $2 }' $HEADERFILE)
+               grep -q -i '^Age: [1-9][[:digit:]]*' $HEADERFILE && HTTP_AGE=$(strip_lf "$(awk -F': ' '/^[aA][gG][eE]: / { print $2 }' $HEADERFILE)")
           else
                prln_warning " likely HTTP header requests failed (#lines: $(wc -l $HEADERFILE | awk '{ print $1 }'))"
                [[ "$DEBUG" -lt 1 ]] && outln "Rerun with DEBUG>=1 and inspect $HEADERFILE\n"
@@ -2407,7 +2410,7 @@ run_http_header() {
      fi
 
      # Populate vars for HTTP time
-     debugme echo "NOW_TIME: $NOW_TIME | HTTP_TIME: $HTTP_TIME"
+     debugme echo "NOW_TIME: $NOW_TIME | HTTP_AGE: $HTTP_AGE | HTTP_TIME: $HTTP_TIME"
 
      # Quit on first empty line to catch 98% of the cases. Next pattern is there because the SEDs tested
      # so far seem not to be fine with header containing x0d x0a (CRLF) which is the usual case.
@@ -2530,7 +2533,7 @@ run_http_date() {
                fileout "$jsonID" "INFO" "$HTTP_TIME - $(TZ=GMT date "+%a, %d %b %Y %T %Z")"
           else
                HTTP_TIME="$(parse_date "$HTTP_TIME" "+%s" "%a, %d %b %Y %T %Z" 2>>$ERRFILE)"
-               difftime=$((HTTP_TIME - NOW_TIME))
+               difftime=$((HTTP_TIME + HTTP_AGE - NOW_TIME))
                [[ $difftime != "-"* ]] && [[ $difftime != "0" ]] && difftime="+$difftime"
                # process was killed, so we need to add an error
                [[ $HAD_SLEPT -ne 0 ]] && difftime="$difftime (± 1.5)"
