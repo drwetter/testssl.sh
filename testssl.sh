@@ -394,6 +394,7 @@ TLS_NOW=""                              # Similar
 TLS_DIFFTIME_SET=false                  # Tells TLS functions to measure the TLS difftime or not
 NOW_TIME=""
 HTTP_TIME=""
+HTTP_AGE=""                             # Age Header, see https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Age + RFC 7234
 REQHEADERS=()
 GET_REQ11=""
 START_TIME=0                            # time in epoch when the action started
@@ -403,7 +404,7 @@ LAST_TIME=0                             # only used for performance measurements
 SERVER_COUNTER=0                        # Counter for multiple servers
 
 TLS_LOW_BYTE=""                         # For "secret" development stuff, see -q below
-HEX_CIPHER=""                           # "
+HEX_CIPHER=""                           #                -- " --
 
 GRADE_CAP=""                            # Keeps track of the current grading cap
 GRADE_CAP_REASONS=()                    # Keeps track of all the reasons why grades are capped
@@ -2369,6 +2370,7 @@ run_http_header() {
           tm_out "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") >$HEADERFILE 2>$ERRFILE
           NOW_TIME=$(date "+%s")
           HTTP_TIME=$(awk -F': ' '/^date:/ { print $2 }  /^Date:/ { print $2 }' $HEADERFILE)
+          HTTP_AGE=$(awk -F': ' '/^[aA][gG][eE]: / { print $2 }' $HEADERFILE)
           HAD_SLEPT=0
      else
           # 1st GET request hung and needed to be killed. Check whether it succeeded anyway:
@@ -2376,6 +2378,7 @@ run_http_header() {
                # correct by seconds we slept, HAD_SLEPT comes from wait_kill()
                NOW_TIME=$(($(date "+%s") - HAD_SLEPT))
                HTTP_TIME=$(awk -F': ' '/^date:/ { print $2 }  /^Date:/ { print $2 }' $HEADERFILE)
+               HTTP_AGE=$(awk -F': ' '/^[aA][gG][eE]: / { print $2 }' $HEADERFILE)
           else
                prln_warning " likely HTTP header requests failed (#lines: $(wc -l $HEADERFILE | awk '{ print $1 }'))"
                [[ "$DEBUG" -lt 1 ]] && outln "Rerun with DEBUG>=1 and inspect $HEADERFILE\n"
@@ -2407,7 +2410,9 @@ run_http_header() {
      fi
 
      # Populate vars for HTTP time
-     debugme echo "NOW_TIME: $NOW_TIME | HTTP_TIME: $HTTP_TIME"
+     [[ -n "$HTTP_AGE" ]] && HTTP_AGE="$(strip_lf "$HTTP_AGE")"
+     [[ -n "$HTTP_TIME" ]] && HTTP_TIME="$(strip_lf "$HTTP_TIME")"
+     debugme echo "NOW_TIME: $NOW_TIME | HTTP_AGE: $HTTP_AGE | HTTP_TIME: $HTTP_TIME"
 
      # Quit on first empty line to catch 98% of the cases. Next pattern is there because the SEDs tested
      # so far seem not to be fine with header containing x0d x0a (CRLF) which is the usual case.
@@ -2522,26 +2527,36 @@ run_http_date() {
      fi
      pr_bold " HTTP clock skew              "
      if [[ -n "$HTTP_TIME" ]]; then
-          HTTP_TIME="$(strip_lf "$HTTP_TIME")"
           if "$HAS_OPENBSDDATE"; then
                # We won't normalize the date under an OpenBSD thus no subtraction is feasible
                outln "remote: $HTTP_TIME"
                out "${spaces}local:  $(LC_ALL=C TZ=GMT date "+%a, %d %b %Y %T %Z")"
                fileout "$jsonID" "INFO" "$HTTP_TIME - $(TZ=GMT date "+%a, %d %b %Y %T %Z")"
           else
+               # modifying the global from string to a number
                HTTP_TIME="$(parse_date "$HTTP_TIME" "+%s" "%a, %d %b %Y %T %Z" 2>>$ERRFILE)"
-               difftime=$((HTTP_TIME - NOW_TIME))
+               difftime=$((HTTP_TIME + HTTP_AGE - NOW_TIME))
                [[ $difftime != "-"* ]] && [[ $difftime != "0" ]] && difftime="+$difftime"
                # process was killed, so we need to add an error
                [[ $HAD_SLEPT -ne 0 ]] && difftime="$difftime (± 1.5)"
                out "$difftime sec from localtime";
                fileout "$jsonID" "INFO" "$difftime seconds from localtime"
           fi
+          if [[ -n "$HTTP_TIME" ]]; then
+               # out " (HTTP header time: $HTTP_TIME)"
+               fileout "HTTP_headerTime" "INFO" "$HTTP_TIME"
+          fi
+          if [[ -n "$HTTP_AGE" ]]; then
+               outln
+               pr_bold " HTTP Age"
+               out " (RFC 7234)          $HTTP_AGE"
+               fileout "HTTP_headerAge" "INFO" "$HTTP_AGE seconds"
+          fi
      else
           out "Got no HTTP time, maybe try different URL?";
           fileout "$jsonID" "INFO" "Got no HTTP time, maybe try different URL?"
      fi
-     debugme tm_out ", HTTP_TIME in epoch: $HTTP_TIME"
+     debugme tm_out ", HTTP_TIME + HTTP_AGE in epoch: $HTTP_TIME / $HTTP_AGE"
      outln
      match_ipv4_httpheader "$1"
      return 0
