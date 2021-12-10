@@ -394,7 +394,7 @@ TLS_NOW=""                              # Similar
 TLS_DIFFTIME_SET=false                  # Tells TLS functions to measure the TLS difftime or not
 NOW_TIME=""
 HTTP_TIME=""
-HTTP_AGE=""                             # There's sometimes an Age Header, see https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Age + RFC 7234
+HTTP_AGE=""                             # Age Header, see https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Age + RFC 7234
 REQHEADERS=()
 GET_REQ11=""
 START_TIME=0                            # time in epoch when the action started
@@ -2535,7 +2535,6 @@ run_http_date() {
           else
                # modifying the global from string to a number
                HTTP_TIME="$(parse_date "$HTTP_TIME" "+%s" "%a, %d %b %Y %T %Z" 2>>$ERRFILE)"
-               HTTP_TIME="$(strip_lf "$HTTP_TIME")"
                difftime=$((HTTP_TIME + HTTP_AGE - NOW_TIME))
                [[ $difftime != "-"* ]] && [[ $difftime != "0" ]] && difftime="+$difftime"
                # process was killed, so we need to add an error
@@ -2548,7 +2547,9 @@ run_http_date() {
                fileout "HTTP_headerTime" "INFO" "$HTTP_TIME"
           fi
           if [[ -n "$HTTP_AGE" ]]; then
-               out " (Age: $HTTP_AGE)"
+               outln
+               pr_bold " HTTP Age"
+               out " (RFC 7234)          $HTTP_AGE"
                fileout "HTTP_headerAge" "INFO" "$HTTP_AGE seconds"
           fi
      else
