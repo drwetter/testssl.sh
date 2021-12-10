@@ -50,6 +50,10 @@ $master_socket_csv=~ s/HTTP_clock_skew.*\n//g;
 $socket_csv=~ s/censys.io.*\n//g;
 $master_socket_csv=~ s/censys.io.*\n//g;
 
+# HTTP time
+$socket_csv=~ s/HTTP_headerTime.*\n//g;
+$master_socket_csv=~ s/HTTP_headerTime.*\n//g;
+
 
 # Compare the differences to the master file -- and print differences if there were detected.
 #
