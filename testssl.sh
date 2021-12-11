@@ -853,17 +853,18 @@ is_number() {
           return 1
 }
 
-strip_quote() {
-     # remove color codes (see https://www.commandlinefu.com/commands/view/3584/remove-color-codes-special-characters-with-sed)
-     #  \', leading and all trailing spaces
-     sed -e "s,$(echo -e "\033")\[[0-9;]*[a-zA-Z],,g" \
-          -e "s/\"/\\'/g" \
-          -e 's/^ *//g' \
-          -e 's/ *$//g' <<< "$1"
-}
-
-# " deconfuse vim\'s syntax highlighting ;-)
-
+strip_quote() (
+     # Note: parens in function definition here force this into a separate
+     # shell, preventing extglob from affecting the code outside this function
+     shopt -s extglob
+     # Remove color codes
+     OUT=${1//$'\e['*([0-9;])[a-zA-Z]}
+     # Replace quotes
+     OUT=${OUT//\"/\'}
+     strip_leading_space "$(
+          strip_trailing_space "$OUT"
+     )"
+)
 
 is_ipv4addr() {
      local octet="(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])"
