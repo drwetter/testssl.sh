@@ -12,7 +12,8 @@ on:
       - '**.html'
       - 'LICENSE'
       - 'Dockerfile'
-    pull_request:
+  pull_request:
+    paths-ignore:
       - 'utils/**'
       - 'docs/**'
       - 'bin/**'
