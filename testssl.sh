@@ -344,6 +344,7 @@ HAS_XMPP_SERVER=false
 HAS_POSTGRES=false
 HAS_MYSQL=false
 HAS_LMTP=false
+HAS_SIEVE=false
 HAS_NNTP=false
 HAS_IRC=false
 HAS_CHACHA20=false
@@ -11005,6 +11006,22 @@ starttls_imap_dialog() {
      return $ret
 }
 
+# argv1: payload for STARTTLS injection test
+#
+starttls_sieve_dialog() {
+     local -i ret=0
+     local starttls="STARTTLS"
+
+     [[ -n "$1" ]] && starttls="$starttls\r\n$1"            # this adds a payload if supplied
+     debugme echo "=== starting sieve STARTTLS dialog ==="
+     starttls_full_read '^"' '^OK '   '"STARTTLS"'          "received server capabilities and checked STARTTLS availability" &&
+     starttls_just_send "$starttls"                         "initiated STARTTLS" &&
+     starttls_full_read '^OK ' '^OK ' ''                    "received ack for STARTTLS"
+     ret=$?
+     debugme echo "=== finished sieve STARTTLS dialog with ${ret} ==="
+     return $ret
+}
+
 starttls_xmpp_dialog() {
      local -i ret=0
 
@@ -11160,6 +11177,9 @@ fd_socket() {
                     ;;
                imap|imaps) # IMAP, https://tools.ietf.org/html/rfc2595, https://tools.ietf.org/html/rfc3501
                     starttls_imap_dialog "$payload"
+                    ;;
+               sieve) # MANAGESIEVE, https://tools.ietf.org/html/rfc5804
+                    starttls_sieve_dialog "$payload"
                     ;;
                irc|ircs) # IRC, https://ircv3.net/specs/extensions/tls-3.1.html, https://ircv3.net/specs/core/capability-negotiation.html
                     fatal "FIXME: IRC+STARTTLS not yet supported" $ERR_NOSUPPORT
@@ -19399,6 +19419,7 @@ find_openssl_binary() {
      HAS_POSTGRES=false
      HAS_MYSQL=false
      HAS_LMTP=false
+     HAS_SIEVE=false
      HAS_NNTP=false
      HAS_IRC=false
      HAS_CHACHA20=false
@@ -19473,6 +19494,7 @@ find_openssl_binary() {
      grep -q 'postgres' $s_client_starttls_has && HAS_POSTGRES=true
      grep -q 'mysql' $s_client_starttls_has && HAS_MYSQL=true
      grep -q 'lmtp' $s_client_starttls_has && HAS_LMTP=true
+     grep -q 'sieve' $s_client_starttls_has && HAS_SIEVE=true
      grep -q 'nntp' $s_client_starttls_has && HAS_NNTP=true
      grep -q 'irc' $s_client_starttls_has && HAS_IRC=true
 
@@ -19638,7 +19660,7 @@ help() {
   and [options] is/are:
 
      -t, --starttls <protocol>     Does a run against a STARTTLS enabled service which is one of ftp, smtp, lmtp, pop3, imap,
-                                   xmpp, xmpp-server, telnet, ldap, nntp, postgres, mysql
+                                   sieve, xmpp, xmpp-server, telnet, ldap, nntp, postgres, mysql
      --xmpphost <to_domain>        For STARTTLS xmpp or xmpp-server checks it supplies the domainname (like SNI)
      --mx <domain/host>            Tests MX records from high to low priority (STARTTLS, port 25)
      --file/-iL <fname>            Mass testing option: Reads one testssl.sh command line per line from <fname>.
@@ -19824,6 +19846,7 @@ HAS_XMPP_SERVER2: $HAS_XMPP_SERVER2
 HAS_POSTGRES: $HAS_POSTGRES
 HAS_MYSQL: $HAS_MYSQL
 HAS_LMTP: $HAS_LMTP
+HAS_SIEVE: $HAS_SIEVE
 HAS_NNTP: $HAS_NNTP
 HAS_IRC: $HAS_IRC
 HAS_UDS: $HAS_UDS
@@ -21117,7 +21140,7 @@ determine_optimal_proto() {
 }
 
 
-# arg1 (optional): ftp smtp, lmtp, pop3, imap, xmpp, xmpp-server, telnet, ldap, postgres, mysql, irc, nntp (maybe with trailing s)
+# arg1 (optional): ftp smtp, lmtp, pop3, imap, sieve, xmpp, xmpp-server, telnet, ldap, postgres, mysql, irc, nntp (maybe with trailing s)
 #
 determine_service() {
      local ua
@@ -21158,14 +21181,14 @@ determine_service() {
           # returns always 0:
           service_detection $OPTIMAL_PROTO
      else # STARTTLS
-          if [[ "$1" == postgres ]]; then
-               protocol="postgres"
+          if [[ "$1" == postgres ]] || [[ "$1" == sieve ]]; then
+               protocol="$1"
           else
                protocol=${1%s}     # strip trailing 's' in ftp(s), smtp(s), pop3(s), etc
           fi
 
           case "$protocol" in
-               ftp|smtp|lmtp|pop3|imap|xmpp|xmpp-server|telnet|ldap|postgres|mysql|nntp)
+               ftp|smtp|lmtp|pop3|imap|sieve|xmpp|xmpp-server|telnet|ldap|postgres|mysql|nntp)
                     STARTTLS="-starttls $protocol"
                     if [[ "$protocol" == xmpp ]] || [[ "$protocol" == xmpp-server ]]; then
                          if [[ -n "$XMPP_HOST" ]]; then
@@ -21213,6 +21236,11 @@ determine_service() {
                          if ! "$HAS_LMTP"; then
                               fatal "Your $OPENSSL does not support the \"-starttls lmtp\" option" $ERR_OSSLBIN
                          fi
+                    elif [[ "$protocol" == sieve ]]; then
+                         # Check if openssl version supports sieve.
+                         if ! "$HAS_SIEVE"; then
+                              fatal "Your $OPENSSL does not support the \"-starttls sieve\" option" $ERR_OSSLBIN
+                         fi
                     elif [[ "$protocol" == nntp ]]; then
                          # Check if openssl version supports lmtp.
                          if ! "$HAS_NNTP"; then
@@ -21230,7 +21258,7 @@ determine_service() {
                     outln
                     ;;
                *)   outln
-                    fatal "momentarily only ftp, smtp, lmtp, pop3, imap, xmpp, xmpp-server, telnet, ldap, nntp, postgres and mysql allowed" $ERR_CMDLINE
+                    fatal "momentarily only ftp, smtp, lmtp, pop3, imap, sieve, xmpp, xmpp-server, telnet, ldap, nntp, postgres and mysql allowed" $ERR_CMDLINE
                     ;;
           esac
           # It comes handy later also for STARTTLS injection to define this global. When we do banner grabbing
@@ -21622,6 +21650,7 @@ ports2starttls() {
           3306)     echo "-t mysql " ;;
           5222)     echo "-t xmpp " ;;   # domain of jabber server maybe needed
           5432)     echo "-t postgres " ;;
+          4190)     echo "-t sieve " ;;
           563)                ;;  # NNTPS
           636)                ;;  # LDAP
           1443|8443|443|981)  ;;  # HTTPS
@@ -22418,7 +22447,7 @@ parse_cmd_line() {
                     STARTTLS_PROTOCOL="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     case $STARTTLS_PROTOCOL in
-                         ftp|smtp|lmtp|pop3|imap|xmpp|xmpp-server|telnet|ldap|irc|nntp|postgres|mysql) ;;
+                         ftp|smtp|lmtp|pop3|imap|sieve|xmpp|xmpp-server|telnet|ldap|irc|nntp|postgres|mysql) ;;
                          ftps|smtps|lmtps|pop3s|imaps|xmpps|telnets|ldaps|ircs|nntps|mysqls) ;;
                          *)   tmln_magenta "\nunrecognized STARTTLS protocol \"$1\", see help" 1>&2
                               help 1 ;;

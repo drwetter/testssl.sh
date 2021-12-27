@@ -86,6 +86,16 @@ unlike($openssl_out, qr/$openssl_regex_bl/, "");
 $tests++;
 
 
+$uri="mail.tigertech.net:4190";
+
+# unlink "tmp.json";
+printf "\n%s\n", "STARTTLS MANAGE(SIEVE) unit tests via sockets --> $uri ...";
+$socket_out = `./testssl.sh $check2run -t sieve $uri 2>&1`;
+# $socket_json = json('tmp.json');
+unlike($openssl_out, qr/$openssl_regex_bl/, "");
+$tests++;
+
+
 $uri="jabber.org:5222";
 
 # unlink "tmp.json";
