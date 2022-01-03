@@ -20373,7 +20373,7 @@ get_a_record() {
           fi
      fi
      if [[ -z "$ip4" ]] && "$HAS_DIG"; then
-          ip4=$(filter_ip4_address $(dig $DIG_R +short +timeout=2 +tries=2 $noidnout -t a "$1" 2>/dev/null | awk '/^[0-9]/ { print $1 }'))
+          ip4=$(filter_ip4_address $(dig +search $DIG_R +short +timeout=2 +tries=2 $noidnout -t a "$1" 2>/dev/null | awk '/^[0-9]/ { print $1 }'))
      fi
      if [[ -z "$ip4" ]] && "$HAS_HOST"; then
           ip4=$(filter_ip4_address $(host -t a "$1" 2>/dev/null | awk '/address/ { print $NF }'))
@@ -20416,7 +20416,7 @@ get_aaaa_record() {
                     fatal "Local hostname given but no 'avahi-resolve' or 'dig' available." $ERR_DNSBIN
                fi
           elif "$HAS_DIG"; then
-               ip6=$(filter_ip6_address $(dig $DIG_R +short +timeout=2 +tries=2 $noidnout -t aaaa "$1" 2>/dev/null | awk '/^[0-9]/ { print $1 }'))
+               ip6=$(filter_ip6_address $(dig +search $DIG_R +short +timeout=2 +tries=2 $noidnout -t aaaa "$1" 2>/dev/null | awk '/^[0-9]/ { print $1 }'))
           elif "$HAS_HOST"; then
                ip6=$(filter_ip6_address $(host -t aaaa "$1" | awk '/address/ { print $NF }'))
           elif "$HAS_DRILL"; then
@@ -20452,7 +20452,7 @@ get_caa_rr_record() {
      # caa_property then has key/value pairs, see https://tools.ietf.org/html/rfc6844#section-3
      OPENSSL_CONF=""
      if "$HAS_DIG"; then
-          raw_caa="$(dig $DIG_R +short +timeout=3 +tries=3 $noidnout type257 "$1" 2>/dev/null | awk '{ print $1" "$2" "$3 }')"
+          raw_caa="$(dig $DIG_R +search +short +timeout=3 +tries=3 $noidnout type257 "$1" 2>/dev/null | awk '{ print $1" "$2" "$3 }')"
           # empty if no CAA record
      elif "$HAS_DRILL"; then
           raw_caa="$(drill $1 type257 | awk '/'"^${1}"'.*CAA/ { print $5,$6,$7 }')"
@@ -20523,7 +20523,7 @@ get_mx_record() {
      if "$HAS_HOST"; then
           mx="$(host -t MX "$1" 2>/dev/null | awk '/is handled by/ { print $(NF-1), $NF }')"
      elif "$HAS_DIG"; then
-          mx="$(dig $DIG_R +short $noidnout -t MX "$1" 2>/dev/null | awk '/^[0-9]/ { print $1" "$2 }')"
+          mx="$(dig $DIG_R +search +short $noidnout -t MX "$1" 2>/dev/null | awk '/^[0-9]/ { print $1" "$2 }')"
      elif "$HAS_DRILL"; then
           mx="$(drill mx $1 | awk '/IN[ \t]MX[ \t]+/ { print $(NF-1), $NF }')"
      elif "$HAS_NSLOOKUP"; then
@@ -20550,7 +20550,7 @@ get_txt_record() {
      if "$HAS_HOST"; then
           record="$(host -t TXT "$1" 2>/dev/null | awk -F\" '/descriptive text/ { print $(NF-1) }')"
      elif "$HAS_DIG"; then
-          record="$(dig $DIG_R +short $noidnout -t TXT "$1" 2>/dev/null)"
+          record="$(dig $DIG_R +search +short $noidnout -t TXT "$1" 2>/dev/null)"
      elif "$HAS_DRILL"; then
           record="$(drill txt $1 | awk -F\" '/^[a-z0-9].*TXT/ { print $(NF-1) }')"
      elif "$HAS_NSLOOKUP"; then
