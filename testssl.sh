@@ -21086,7 +21086,7 @@ determine_optimal_proto() {
                if [[ -z "$URL_PATH" ]] || [[ "$URL_PATH" == "/" ]]; then
                     $OPENSSL s_client $(s_client_options "$proto $BUGS -connect "$NODEIP:$PORT" -msg $PROXY $SNI") </dev/null >$TMPFILE 2>>$ERRFILE
                else
-                    safe_echo "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$proto $BUGS -connect "$NODEIP:$PORT" -msg $PROXY $SNI -prexit -enable_pha") </dev/null >$TMPFILE 2>>$ERRFILE
+                    safe_echo "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$proto $BUGS -connect "$NODEIP:$PORT" -msg $PROXY $SNI -ign_eof -enable_pha") >$TMPFILE 2>>$ERRFILE
                fi
                
                if sclient_auth $? $TMPFILE; then
