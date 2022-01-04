@@ -10101,9 +10101,13 @@ run_server_defaults() {
 
      jsonID="clientAuth"
      pr_bold " Client Authentication        "
-     outln "$CLIENT_AUTH"
+     if [[ "$CLIENT_AUTH" == unknown ]]; then
+          prln_local_problem "$OPENSSL doesn't support \"s_client -enable_pha\""
+     else
+          outln "$CLIENT_AUTH"
+     fi
      fileout "$jsonID" "INFO" "$CLIENT_AUTH"
-     if [[ "$CLIENT_AUTH" != none ]]; then
+     if [[ "$CLIENT_AUTH" == optional ]] || [[ "$CLIENT_AUTH" == required ]]; then
           jsonID="clientAuth_CA_list"
           pr_bold " CA List for Client Auth      "
           out_row_aligned "$CLIENT_AUTH_CA_LIST" "                              "
@@ -21115,11 +21119,14 @@ determine_optimal_proto() {
                     # post-handshake authentication, then test for client
                     # authentication using a protocol version earlier than
                     # TLS 1.3 (unless the server only is TLS 1.3-only).
-                    if [[ "$tmp" == tls1_3 ]] && [[ -n "$URL_PATH" ]] && [[ "$URL_PATH" != / ]] && ! "$HAS_ENABLE_PHA" && \
-                       ( [[ "$(has_server_protocol "tls1_2")" -eq 0 ]] || [[ "$(has_server_protocol "tls1_1")" -eq 0 ]] || \
-                         [[ "$(has_server_protocol "tls1")" -eq 0 ]] || [[ "$(has_server_protocol "ssl3")" -eq 0 ]] ); then
-                         safe_echo "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$BUGS -connect "$NODEIP:$PORT" -msg $PROXY $SNI -ign_eof -no_tls1_3") >$TEMPDIR/client_auth_test.txt 2>>$ERRFILE
-                         sclient_auth $? $TEMPDIR/client_auth_test.txt
+                    if [[ "$tmp" == tls1_3 ]] && [[ -n "$URL_PATH" ]] && [[ "$URL_PATH" != / ]] && ! "$HAS_ENABLE_PHA"; then
+                         if [[ "$(has_server_protocol "tls1_2")" -eq 0 ]] || [[ "$(has_server_protocol "tls1_1")" -eq 0 ]] || \
+                            [[ "$(has_server_protocol "tls1")" -eq 0 ]] || [[ "$(has_server_protocol "ssl3")" -eq 0 ]]; then
+                              safe_echo "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$BUGS -connect "$NODEIP:$PORT" -msg $PROXY $SNI -ign_eof -no_tls1_3") >$TEMPDIR/client_auth_test.txt 2>>$ERRFILE
+                              sclient_auth $? $TEMPDIR/client_auth_test.txt
+                         elif [[ "$CLIENT_AUTH" == none ]]; then
+                              CLIENT_AUTH="unknown"
+                         fi
                     fi
                     break
                fi
