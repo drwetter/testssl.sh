@@ -21082,8 +21082,13 @@ determine_optimal_proto() {
                # Only send $GET_REQ11 in case of a non-empty $URL_PATH, as it
                # is not needed otherwise. Also, sending $GET_REQ11 may cause
                # problems if the server being tested is not an HTTPS server,
-               # and $GET_REQ11 should be empty for non-HTTPS servers.
-               if [[ -z "$URL_PATH" ]] || [[ "$URL_PATH" == "/" ]]; then
+               # and $URL_PATH should be empty for non-HTTPS servers.
+               # With TLS 1.3 it is only possible to test for client authentication
+               # if $OPENSSL supports post-handshake authentication. So, don't send try
+               # to send $GET_REQ11 after a TLS 1.3 ClientHello to a TLS 1.3 server if
+               # $ENABLE_PHA is false.
+               if [[ -z "$URL_PATH" ]] || [[ "$URL_PATH" == / ]] || \
+                  ( "$HAS_TLS13" && ! "$HAS_ENABLE_PHA" && ( [[ -z "$proto" ]] || [[ "$proto" == -tls1_3 ]] ) && [[ $(has_server_protocol "tls1_3") -ne 1 ]] ); then
                     $OPENSSL s_client $(s_client_options "$proto $BUGS -connect "$NODEIP:$PORT" -msg $PROXY $SNI") </dev/null >$TMPFILE 2>>$ERRFILE
                else
                     safe_echo "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$proto $BUGS -connect "$NODEIP:$PORT" -msg $PROXY $SNI -ign_eof -enable_pha") >$TMPFILE 2>>$ERRFILE
@@ -21105,6 +21110,17 @@ determine_optimal_proto() {
                          OPTIMAL_PROTO="$proto"
                     fi
                     all_failed=false
+                    # If a $URL_PATH is specified and a TLS 1.3 server is being
+                    # tested using an $OPENSSL that supports TLS 1.3 but not
+                    # post-handshake authentication, then test for client
+                    # authentication using a protocol version earlier than
+                    # TLS 1.3 (unless the server only is TLS 1.3-only).
+                    if [[ "$tmp" == tls1_3 ]] && [[ -n "$URL_PATH" ]] && [[ "$URL_PATH" != / ]] && ! "$HAS_ENABLE_PHA" && \
+                       ( [[ "$(has_server_protocol "tls1_2")" -eq 0 ]] || [[ "$(has_server_protocol "tls1_1")" -eq 0 ]] || \
+                         [[ "$(has_server_protocol "tls1")" -eq 0 ]] || [[ "$(has_server_protocol "ssl3")" -eq 0 ]] ); then
+                         safe_echo "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$BUGS -connect "$NODEIP:$PORT" -msg $PROXY $SNI -ign_eof -no_tls1_3") >$TEMPDIR/client_auth_test.txt 2>>$ERRFILE
+                         sclient_auth $? $TEMPDIR/client_auth_test.txt
+                    fi
                     break
                fi
           done
