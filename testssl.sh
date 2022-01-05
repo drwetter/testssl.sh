@@ -5055,17 +5055,38 @@ run_client_simulation() {
      return $ret
 }
 
+# generic function whether $1 is supported by s_client.
+# Currently only used for protocols that's why we saved -connect $NXCONNECT. 
+sclient_supported() {
+     case "$1" in
+          -ssl2)
+               "$HAS_SSL2" || return 7
+               ;;
+          -ssl3)
+               "$HAS_SSL3" || return 7
+               ;;
+          -tls1_3)
+               "$HAS_TLS13" || return 7
+               ;;
+          *)   if $OPENSSL s_client "$1" </dev/null 2>&1 | grep -aiq "unknown option"; then
+                    return 7
+               fi
+               ;;
+     esac
+     return 0
+}
+
 # generic function whether $1 is supported by s_client ($2: string to display)
-# Currently only used for protocols that's why we saved -connect $NXCONNECT.
 #TODO: we need to consider to remove the two instances from where this is called.
 #
 locally_supported() {
+     local -i ret
+
      [[ -n "$2" ]] && out "$2 "
-     if $OPENSSL s_client "$1" 2>&1 | grep -aiq "unknown option"; then
-          prln_local_problem "$OPENSSL doesn't support \"s_client $1\""
-          return 7
-     fi
-     return 0
+     sclient_supported "$1"
+     ret=$?
+     [[ $ret -eq 7 ]] && prln_local_problem "$OPENSSL doesn't support \"s_client $1\""
+     return $ret
 }
 
 
@@ -5082,7 +5103,7 @@ run_prototest_openssl() {
      local -i ret=0
      local protos proto
 
-     $OPENSSL s_client "$1" 2>&1 | grep -aiq "unknown option" && return 7
+     sclient_supported "$1" || return 7
      case "$1" in
           -ssl2) protos="-ssl2" ;;
           -ssl3) protos="-ssl3" ;;
@@ -19432,10 +19453,10 @@ find_openssl_binary() {
 
      $OPENSSL ciphers -s 2>&1 | grep -aiq "unknown option" || OSSL_CIPHERS_S="-s"
 
-     $OPENSSL s_client -ssl2  2>&1 | grep -aiq "unknown option" || HAS_SSL2=true
-     $OPENSSL s_client -ssl3  2>&1 | grep -aiq "unknown option" || HAS_SSL3=true
-     $OPENSSL s_client -tls1_3 2>&1 | grep -aiq "unknown option" || HAS_TLS13=true
-     $OPENSSL s_client -no_ssl2 2>&1 | grep -aiq "unknown option" || HAS_NO_SSL2=true
+     $OPENSSL s_client -ssl2 </dev/null 2>&1 | grep -aiq "unknown option" || HAS_SSL2=true
+     $OPENSSL s_client -ssl3 </dev/null 2>&1 | grep -aiq "unknown option" || HAS_SSL3=true
+     $OPENSSL s_client -tls1_3 </dev/null 2>&1 | grep -aiq "unknown option" || HAS_TLS13=true
+     $OPENSSL s_client -no_ssl2 </dev/null 2>&1 | grep -aiq "unknown option" || HAS_NO_SSL2=true
 
      $OPENSSL genpkey -algorithm X448 2>&1 | grep -aq "not found" || HAS_X448=true
      $OPENSSL genpkey -algorithm X25519 2>&1 | grep -aq "not found" || HAS_X25519=true
@@ -19445,34 +19466,34 @@ find_openssl_binary() {
      # Below and at other occurrences we do a little trick using "$NXCONNECT" to avoid plain and
      # link level DNS lookups. See issue #1418 and https://tools.ietf.org/html/rfc6761#section-6.4
      if "$HAS_TLS13"; then
-          $OPENSSL s_client -tls1_3 -sigalgs PSS+SHA256:PSS+SHA384 -connect $NXCONNECT 2>&1 | grep -aiq "unknown option" || HAS_SIGALGS=true
+          $OPENSSL s_client -tls1_3 -sigalgs PSS+SHA256:PSS+SHA384 -connect $NXCONNECT </dev/null 2>&1 | grep -aiq "unknown option" || HAS_SIGALGS=true
      fi
 
-     $OPENSSL s_client -noservername 2>&1 | grep -aiq "unknown option" || HAS_NOSERVERNAME=true
-     $OPENSSL s_client -ciphersuites 2>&1 | grep -aiq "unknown option" || HAS_CIPHERSUITES=true
+     $OPENSSL s_client -noservername </dev/null 2>&1 | grep -aiq "unknown option" || HAS_NOSERVERNAME=true
+     $OPENSSL s_client -ciphersuites </dev/null 2>&1 | grep -aiq "unknown option" || HAS_CIPHERSUITES=true
 
      $OPENSSL ciphers @SECLEVEL=0:ALL > /dev/null 2> /dev/null && HAS_SECLEVEL=true
 
-     $OPENSSL s_client -comp 2>&1 | grep -aiq "unknown option" || HAS_COMP=true
-     $OPENSSL s_client -no_comp 2>&1 | grep -aiq "unknown option" || HAS_NO_COMP=true
+     $OPENSSL s_client -comp </dev/null 2>&1 | grep -aiq "unknown option" || HAS_COMP=true
+     $OPENSSL s_client -no_comp </dev/null 2>&1 | grep -aiq "unknown option" || HAS_NO_COMP=true
 
      OPENSSL_NR_CIPHERS=$(count_ciphers "$(actually_supported_osslciphers 'ALL:COMPLEMENTOFALL' 'ALL')")
 
      # The following statement works with OpenSSL 1.0.2, 1.1.1 and 3.0 and LibreSSL 3.4
-     if $OPENSSL s_client -curves 2>&1 | grep -aiq "unknown option"; then
+     if $OPENSSL s_client -curves </dev/null 2>&1 | grep -aiq "unknown option"; then
           # This is e.g. for LibreSSL (tested with version 3.4.1): WSL users will get "127.0.0.1:0" here,
           # all other "invalid.:0". We need a port here, in any case!
           # The $OPENSSL connect call deliberately fails: when the curve isn't available with
           # "getaddrinfo: Name or service not known", newer LibreSSL with "Failed to set groups".
           for curve in "${curves_ossl[@]}"; do
-               $OPENSSL s_client -groups $curve -connect ${NXCONNECT%:*}:0 2>&1 | grep -Eiaq "Error with command|unknown option|Failed to set groups"
+               $OPENSSL s_client -groups $curve -connect ${NXCONNECT%:*}:0 </dev/null 2>&1 | grep -Eiaq "Error with command|unknown option|Failed to set groups"
                [[ $? -ne 0 ]] && OSSL_SUPPORTED_CURVES+=" $curve "
           done
      else
           HAS_CURVES=true
           for curve in "${curves_ossl[@]}"; do
                # Same as above, we just don't need a port for invalid.
-               $OPENSSL s_client -curves $curve -connect $NXCONNECT 2>&1 | grep -Eiaq "Error with command|unknown option"
+               $OPENSSL s_client -curves $curve -connect $NXCONNECT </dev/null 2>&1 | grep -Eiaq "Error with command|unknown option"
                [[ $? -ne 0 ]] && OSSL_SUPPORTED_CURVES+=" $curve "
           done
      fi
@@ -19480,7 +19501,7 @@ find_openssl_binary() {
      # For the following we feel safe enough to query the s_client help functions.
      # That was not good enough for the previous lookups
      $OPENSSL s_client -help 2>$s_client_has
-     $OPENSSL s_client -starttls foo 2>$s_client_starttls_has
+     $OPENSSL s_client -starttls foo </dev/null 2>$s_client_starttls_has
 
      grep -q '\-proxy' $s_client_has && HAS_PROXY=true
      grep -qw '\-alpn' $s_client_has && HAS_ALPN=true
