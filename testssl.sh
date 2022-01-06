@@ -4810,7 +4810,7 @@ run_client_simulation() {
 #
 locally_supported() {
      [[ -n "$2" ]] && out "$2 "
-     if $OPENSSL s_client "$1" 2>&1 | grep -aiq "unknown option"; then
+     if $OPENSSL s_client "$1" </dev/null 2>&1 | grep -aiq "unknown option"; then
           prln_local_problem "$OPENSSL doesn't support \"s_client $1\""
           return 7
      fi
@@ -4832,7 +4832,7 @@ run_prototest_openssl() {
      local protos proto
      local passed_check=false
 
-     $OPENSSL s_client "$1" 2>&1 | grep -aiq "unknown option" && return 7
+     $OPENSSL s_client "$1" </dev/null 2>&1 | grep -aiq "unknown option" && return 7
      case "$1" in
           -ssl2) protos="-ssl2" ;;
           -ssl3) protos="-ssl3" ;;
@@ -17138,10 +17138,10 @@ find_openssl_binary() {
      # This and all other occurrences we do a little trick using "invalid." to avoid plain and
      # link level DNS lookups. See issue #1418 and https://tools.ietf.org/html/rfc6761#section-6.4
 
-     $OPENSSL s_client -ssl2  2>&1 | grep -aiq "unknown option" || HAS_SSL2=true
-     $OPENSSL s_client -ssl3  2>&1 | grep -aiq "unknown option" || HAS_SSL3=true
-     $OPENSSL s_client -tls1_3 2>&1 | grep -aiq "unknown option" || HAS_TLS13=true
-     $OPENSSL s_client -no_ssl2 2>&1 | grep -aiq "unknown option" || HAS_NO_SSL2=true
+     $OPENSSL s_client -ssl2 </dev/null 2>&1 | grep -aiq "unknown option" || HAS_SSL2=true
+     $OPENSSL s_client -ssl3 </dev/null 2>&1 | grep -aiq "unknown option" || HAS_SSL3=true
+     $OPENSSL s_client -tls1_3 </dev/null 2>&1 | grep -aiq "unknown option" || HAS_TLS13=true
+     $OPENSSL s_client -no_ssl2 </dev/null 2>&1 | grep -aiq "unknown option" || HAS_NO_SSL2=true
 
      $OPENSSL genpkey -algorithm X448 2>&1 | grep -aq "not found" || HAS_X448=true
      $OPENSSL genpkey -algorithm X25519 2>&1 | grep -aq "not found" || HAS_X25519=true
@@ -17149,29 +17149,29 @@ find_openssl_binary() {
      $OPENSSL pkey -help 2>&1 | grep -q Error || HAS_PKEY=true
      $OPENSSL pkeyutl 2>&1 | grep -q Error || HAS_PKUTIL=true
 
-     $OPENSSL s_client -noservername 2>&1 | grep -aiq "unknown option" || HAS_NOSERVERNAME=true
-     $OPENSSL s_client -ciphersuites 2>&1 | grep -aiq "unknown option" || HAS_CIPHERSUITES=true
+     $OPENSSL s_client -noservername </dev/null 2>&1 | grep -aiq "unknown option" || HAS_NOSERVERNAME=true
+     $OPENSSL s_client -ciphersuites </dev/null 2>&1 | grep -aiq "unknown option" || HAS_CIPHERSUITES=true
 
-     $OPENSSL s_client -comp 2>&1 | grep -aiq "unknown option" || HAS_COMP=true
-     $OPENSSL s_client -no_comp 2>&1 | grep -aiq "unknown option" || HAS_NO_COMP=true
+     $OPENSSL s_client -comp </dev/null 2>&1 | grep -aiq "unknown option" || HAS_COMP=true
+     $OPENSSL s_client -no_comp </dev/null 2>&1 | grep -aiq "unknown option" || HAS_NO_COMP=true
 
      OPENSSL_NR_CIPHERS=$(count_ciphers "$(actually_supported_osslciphers 'ALL:COMPLEMENTOFALL' 'ALL')")
 
      # The following statement works with openssl 1.0.2, 1.1.1 and 3.0 as LibreSSL 3.4
-     if $OPENSSL s_client -curves 2>&1 | grep -aiq "unknown option"; then
+     if $OPENSSL s_client -curves </dev/null 2>&1 | grep -aiq "unknown option"; then
           # This is e.g. for LibreSSL (tested with version 3.4.1): WSL users will get "127.0.0.1:0" here,
           # All other "invalid.:0". We need a port here, in any case!
           # The $OPENSSL connect call deliberately fails: when the curve isn't available with
           # "getaddrinfo: Name or service not known", newer LibreSSL with "Failed to set groups".
           for curve in "${curves_ossl[@]}"; do
-               $OPENSSL s_client -groups $curve -connect ${NXCONNECT%:*}:0 2>&1 | grep -Eiaq "Error with command|unknown option|Failed to set groups"
+               $OPENSSL s_client -groups $curve -connect ${NXCONNECT%:*}:0 </dev/null 2>&1 | grep -Eiaq "Error with command|unknown option|Failed to set groups"
                [[ $? -ne 0 ]] && OSSL_SUPPORTED_CURVES+=" $curve "
           done
      else
           HAS_CURVES=true
           for curve in "${curves_ossl[@]}"; do
                # Same as above, we just don't need a port for invalid.
-               $OPENSSL s_client -curves $curve -connect $NXCONNECT 2>&1 | grep -Eiaq "Error with command|unknown option"
+               $OPENSSL s_client -curves $curve -connect $NXCONNECT </dev/null 2>&1 | grep -Eiaq "Error with command|unknown option"
                [[ $? -ne 0 ]] && OSSL_SUPPORTED_CURVES+=" $curve "
           done
      fi
@@ -17185,7 +17185,7 @@ find_openssl_binary() {
      grep -q '\-proxy' $s_client_has && HAS_PROXY=true
      grep -q '\-xmpp' $s_client_has && HAS_XMPP=true
 
-     $OPENSSL s_client -starttls foo 2>$s_client_starttls_has
+     $OPENSSL s_client -starttls foo </dev/null 2>$s_client_starttls_has
      grep -q 'postgres' $s_client_starttls_has && HAS_POSTGRES=true
      grep -q 'mysql' $s_client_starttls_has && HAS_MYSQL=true
      grep -q 'lmtp' $s_client_starttls_has &&  HAS_LMTP=true
