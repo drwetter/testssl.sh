@@ -8,7 +8,7 @@ clean:
 	rm -f $(NAME).$(MANSECTION) $(NAME).$(MANSECTION).html
 
 $(NAME).$(MANSECTION): $(NAME).$(MANSECTION).md
-	$(PANDOC) --standalone $(PANDOCFLAGS) --to man $(NAME).$(MANSECTION).md -o $@
+	$(PANDOC) --standalone --to man $(NAME).$(MANSECTION).md -o $@
 
 $(NAME).$(MANSECTION).html: template.html $(NAME).$(MANSECTION).md
-	$(PANDOC) --standalone $(PANDOCFLAGS) --to html5 --template template.html $(NAME).$(MANSECTION).md -o $@
+	$(PANDOC) --standalone --to html5 --template template.html $(NAME).$(MANSECTION).md -o $@
