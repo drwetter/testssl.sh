@@ -353,6 +353,7 @@ HAS_AES256_GCM=false
 HAS_ZLIB=false
 HAS_UDS=false
 HAS_UDS2=false
+HAS_ENABLE_PHA=false
 HAS_DIG=false
 HAS_DIG_R=true
 DIG_R="-r"
@@ -2174,6 +2175,10 @@ s_client_options() {
      # OpenSSL that don't support -no_ssl2 also don't support SSLv2, the option
      # isn't needed for these versions of OpenSSL.)
      ! "$HAS_NO_SSL2" && options="${options//-no_ssl2/}"
+
+     # The -enable_pha option causes the Post-Handshake Authentication extension to be sent.
+     # It is only supported by OpenSSL 1.1.1 and newer.
+     ! "$HAS_ENABLE_PHA" && options="${options//-enable_pha/}"
 
      # At least one server will fail under some circumstances if compression methods are offered.
      # So, only offer compression methods if necessary for the test. In OpenSSL 1.1.0 and
@@ -10096,9 +10101,13 @@ run_server_defaults() {
 
      jsonID="clientAuth"
      pr_bold " Client Authentication        "
-     outln "$CLIENT_AUTH"
+     if [[ "$CLIENT_AUTH" == unknown ]]; then
+          prln_local_problem "$OPENSSL doesn't support \"s_client -enable_pha\""
+     else
+          outln "$CLIENT_AUTH"
+     fi
      fileout "$jsonID" "INFO" "$CLIENT_AUTH"
-     if [[ "$CLIENT_AUTH" != none ]]; then
+     if [[ "$CLIENT_AUTH" == optional ]] || [[ "$CLIENT_AUTH" == required ]]; then
           jsonID="clientAuth_CA_list"
           pr_bold " CA List for Client Auth      "
           out_row_aligned "$CLIENT_AUTH_CA_LIST" "                              "
@@ -19450,6 +19459,7 @@ find_openssl_binary() {
      HAS_UDS=false
      HAS_UDS2=false
 	 TRUSTED1ST=""
+     HAS_ENABLE_PHA=false
 
      $OPENSSL ciphers -s 2>&1 | grep -aiq "unknown option" || OSSL_CIPHERS_S="-s"
 
@@ -19520,6 +19530,8 @@ find_openssl_binary() {
      grep -q 'irc' $s_client_starttls_has && HAS_IRC=true
 
      grep -q 'Unix-domain socket' $s_client_has && HAS_UDS=true
+
+     grep -q '\-enable_pha' $s_client_has && HAS_ENABLE_PHA=true
 
      # Now check whether the standard $OPENSSL has Unix-domain socket and xmpp-server support. If
      # not check /usr/bin/openssl -- if available. This is more a kludge which we shouldn't use for
@@ -19872,6 +19884,7 @@ HAS_NNTP: $HAS_NNTP
 HAS_IRC: $HAS_IRC
 HAS_UDS: $HAS_UDS
 HAS_UDS2: $HAS_UDS2
+HAS_ENABLE_PHA: $HAS_ENABLE_PHA
 
 HAS_DIG: $HAS_DIG
 HAS_HOST: $HAS_HOST
@@ -21070,7 +21083,32 @@ determine_optimal_proto() {
                     -ssl2)   "$HAS_SSL2" || continue ;;
                     *) ;;
                esac
-               $OPENSSL s_client $(s_client_options "$proto $BUGS -connect "$NODEIP:$PORT" -msg $PROXY $SNI") </dev/null >$TMPFILE 2>>$ERRFILE
+               # Only send $GET_REQ11 in case of a non-empty $URL_PATH, as it
+               # is not needed otherwise. Also, sending $GET_REQ11 may cause
+               # problems if the server being tested is not an HTTPS server,
+               # and $URL_PATH should be empty for non-HTTPS servers.
+               # With TLS 1.3 it is only possible to test for client authentication
+               # if $OPENSSL supports post-handshake authentication. So, don't send try
+               # to send $GET_REQ11 after a TLS 1.3 ClientHello to a TLS 1.3 server if
+               # $ENABLE_PHA is false.
+               if [[ -z "$URL_PATH" ]] || [[ "$URL_PATH" == / ]] || \
+                  ( "$HAS_TLS13" && ! "$HAS_ENABLE_PHA" && ( [[ -z "$proto" ]] || [[ "$proto" == -tls1_3 ]] ) && [[ $(has_server_protocol "tls1_3") -ne 1 ]] ); then
+                    $OPENSSL s_client $(s_client_options "$proto $BUGS -connect "$NODEIP:$PORT" -msg $PROXY $SNI") </dev/null >$TMPFILE 2>>$ERRFILE
+               else
+                    safe_echo "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$proto $BUGS -connect "$NODEIP:$PORT" -msg $PROXY $SNI -ign_eof -enable_pha") >$TMPFILE 2>>$ERRFILE &
+                    wait_kill $! $HEADER_MAXSLEEP
+                    if [[ $? -eq 0 ]]; then
+                         # Issue HTTP GET again as it properly finished within $HEADER_MAXSLEEP and didn't hang.
+                         # Doing it again in the foreground to get an accurate return code.
+                         safe_echo "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$proto $BUGS -connect "$NODEIP:$PORT" -msg $PROXY $SNI -ign_eof -enable_pha") >$TMPFILE 2>>$ERRFILE
+                    else
+                         # Issuing HTTP GET caused $OPENSSL to hang, so just try to determine
+                         # protocol support without also trying to collect information about
+                         # client authentication.
+                         $OPENSSL s_client $(s_client_options "$proto $BUGS -connect "$NODEIP:$PORT" -msg $PROXY $SNI") </dev/null >$TMPFILE 2>>$ERRFILE
+                    fi
+               fi
+               
                if sclient_auth $? $TMPFILE; then
                     # we use the successful handshake at least to get one valid protocol supported -- it saves us time later
                     if [[ -z "$proto" ]]; then
@@ -21087,6 +21125,29 @@ determine_optimal_proto() {
                          OPTIMAL_PROTO="$proto"
                     fi
                     all_failed=false
+                    # If a $URL_PATH is specified and a TLS 1.3 server is being
+                    # tested using an $OPENSSL that supports TLS 1.3 but not
+                    # post-handshake authentication, then test for client
+                    # authentication using a protocol version earlier than
+                    # TLS 1.3 (unless the server only is TLS 1.3-only).
+                    if [[ "$tmp" == tls1_3 ]] && [[ -n "$URL_PATH" ]] && [[ "$URL_PATH" != / ]] && ! "$HAS_ENABLE_PHA"; then
+                         if [[ "$(has_server_protocol "tls1_2")" -eq 0 ]] || [[ "$(has_server_protocol "tls1_1")" -eq 0 ]] || \
+                            [[ "$(has_server_protocol "tls1")" -eq 0 ]] || [[ "$(has_server_protocol "ssl3")" -eq 0 ]]; then
+                              safe_echo "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$BUGS -connect "$NODEIP:$PORT" -msg $PROXY $SNI -ign_eof -no_tls1_3") >$TEMPDIR/client_auth_test.txt 2>>$ERRFILE &
+                              wait_kill $! $HEADER_MAXSLEEP
+                              # If the HTTP properly finished within $HEADER_MAXSLEEP and didn't hang, then
+                              # do it again in the foreground to get an accurate return code. If it did hang,
+                              # there is no way to test for client authentication, so don't try.
+                              if [[ $? -eq 0 ]]; then
+                                   safe_echo "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$BUGS -connect "$NODEIP:$PORT" -msg $PROXY $SNI -ign_eof -no_tls1_3") >$TEMPDIR/client_auth_test.txt 2>>$ERRFILE
+                                   sclient_auth $? $TEMPDIR/client_auth_test.txt
+                              fi
+                         elif [[ "$CLIENT_AUTH" == none ]]; then
+                              # This is a TLS 1.3-only server and $OPENSSL does not support -enable_pha, so it is not
+                              # possible to test for client authentication.
+                              CLIENT_AUTH="unknown"
+                         fi
+                    fi
                     break
                fi
           done
@@ -21188,7 +21249,6 @@ determine_service() {
      if [[ -z "$1" ]]; then
           # no STARTTLS.
           determine_optimal_sockets_params
-          determine_optimal_proto
           $SNEAKY && \
                ua="$UA_SNEAKY" || \
                ua="$UA_STD"
@@ -21199,6 +21259,7 @@ determine_service() {
                reqheader="$(join_by "\r\n" "${REQHEADERS[@]}")\r\n" #Add all required custom http headers to one string with newlines
           fi
           GET_REQ11="GET $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $ua\r\n${basicauth_header}${reqheader}Accept-Encoding: identity\r\nAccept: text/*\r\nConnection: Close\r\n\r\n"
+          determine_optimal_proto
           # returns always 0:
           service_detection $OPTIMAL_PROTO
      else # STARTTLS
