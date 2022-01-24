@@ -11094,6 +11094,29 @@ starttls_postgres_dialog() {
      return $ret
 }
 
+# RFC 2830
+starttls_ldap_dialog() {
+     local debugpad="  > "
+     local -i ret=0
+     local starttls_init=",
+     x30, x1d, x02, x01,                                                             # LDAP extendedReq
+     x01,                                                                            # messageID: 1
+     x77, x18, x80, x16, x31, x2e, x33, x2e, x36, x2e,                               # ProtocolOP: extendedReq
+     x31, x2e, x34, x2e, x31, x2e, x31, x34, x36, x36, x2e, x32, x30, x30, x33, x37" # OID for STATRTTLS = "1.3.6.1.4.1.1466.20037"
+
+     debugme echo "=== starting LDAP STARTTLS dialog ==="
+     socksend "${starttls_init}"   0    && debugme echo "${debugpad}initiated STARTTLS" &&
+     starttls_just_read            1    "read succeeded"
+
+     # response is typically 30 0c 02 01 01 78 07 0a 01 00 04 00 04 00
+     #                                                  ^^ == success!  That [9] should be checked also!
+
+     ret=$?
+     debugme echo "=== finished LDAP STARTTLS dialog with ${ret} ==="
+     return $ret
+
+}
+
 starttls_mysql_dialog() {
      local debugpad="  > "
      local -i ret=0
@@ -11214,8 +11237,10 @@ fd_socket() {
                irc|ircs) # IRC, https://ircv3.net/specs/extensions/tls-3.1.html, https://ircv3.net/specs/core/capability-negotiation.html
                     fatal "FIXME: IRC+STARTTLS not yet supported" $ERR_NOSUPPORT
                     ;;
-               ldap|ldaps) # LDAP, https://tools.ietf.org/html/rfc2830, https://tools.ietf.org/html/rfc4511
-                    fatal "FIXME: LDAP+STARTTLS over sockets not supported yet (try \"--ssl-native\")" $ERR_NOSUPPORT
+               ldap|ldaps) # LDAP, https://tools.ietf.org/html/rfc2830#section-2.1, https://tools.ietf.org/html/rfc4511
+                    # https://ldap.com/ldapv3-wire-protocol-reference-extended/
+                    #fatal "FIXME: LDAP+STARTTLS over sockets not supported yet (try \"--ssl-native\")" $ERR_NOSUPPORT
+                    starttls_ldap_dialog
                     ;;
                acap|acaps) # ACAP = Application Configuration Access Protocol, see https://tools.ietf.org/html/rfc2595
                     fatal "ACAP Easteregg: not implemented -- probably never will" $ERR_NOSUPPORT
@@ -11231,7 +11256,7 @@ fd_socket() {
                     starttls_mysql_dialog
                     ;;
                *) # we need to throw an error here -- otherwise testssl.sh treats the STARTTLS protocol as plain SSL/TLS which leads to FP
-                    fatal "FIXME: STARTTLS protocol $STARTTLS_PROTOCOL is not yet supported" $ERR_NOSUPPORT
+                    fatal "FIXME: STARTTLS protocol $STARTTLS_PROTOCOL is not supported yet" $ERR_NOSUPPORT
           esac
           ret=$?
           case $ret in
