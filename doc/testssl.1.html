@@ -194,7 +194,7 @@ The same can be achieved by setting the environment variable <code>WARNINGS</cod
 
 <h3 id="SPECIAL-INVOCATIONS">SPECIAL INVOCATIONS</h3>
 
-<p><code>-t &lt;protocol&gt;, --starttls &lt;protocol&gt;</code>    does a default run against a STARTTLS enabled <code>protocol</code>. <code>protocol</code> must be one of <code>ftp</code>, <code>smtp</code>,  <code>pop3</code>, <code>imap</code>, <code>xmpp</code>, <code>sieve</code>, <code>xmpp-server</code>, <code>telnet</code>, <code>ldap</code>, <code>irc</code>, <code>lmtp</code>, <code>nntp</code>, <code>postgres</code>, <code>mysql</code>. For the latter four you need e.g. the supplied OpenSSL or OpenSSL version 1.1.1. Please note: MongoDB doesn't offer a STARTTLS connection, LDAP currently only works with <code>--ssl-native</code>. <code>telnet</code> and <code>irc</code> is WIP.</p>
+<p><code>-t &lt;protocol&gt;, --starttls &lt;protocol&gt;</code>    does a default run against a STARTTLS enabled <code>protocol</code>. <code>protocol</code> must be one of <code>ftp</code>, <code>smtp</code>,  <code>pop3</code>, <code>imap</code>, <code>xmpp</code>, <code>sieve</code>, <code>xmpp-server</code>, <code>telnet</code>, <code>ldap</code>, <code>irc</code>, <code>lmtp</code>, <code>nntp</code>, <code>postgres</code>, <code>mysql</code>. For the latter four you need e.g. the supplied OpenSSL or OpenSSL version 1.1.1. Please note: MongoDB doesn't offer a STARTTLS connection, IRC currently only works with <code>--ssl-native</code>. <code>telnet</code> and <code>irc</code> are WIP.</p>
 
 <p><code>--xmpphost &lt;jabber_domain&gt;</code> is an additional option for STARTTLS enabled XMPP: It expects the jabber domain as a parameter. This is only needed if the domain is different from the URI supplied.</p>
 
@@ -580,8 +580,9 @@ This is to prevent giving out a misleading or wrong grade.</p>
 
 <ul>
   <li>RFC 2246: The TLS Protocol Version 1.0</li>
-  <li>RFC 2818: HTTP Over TLS</li>
   <li>RFC 2595: Using TLS with IMAP, POP3 and ACAP</li>
+  <li>RFC 2818: HTTP Over TLS</li>
+  <li>RFC 2830: Lightweight Directory Access Protocol (v3): Extension for Transport Layer Security</li>
   <li>RFC 3207: SMTP Service Extension for Secure SMTP over Transport Layer Security</li>
   <li>RFC 3501: INTERNET MESSAGE ACCESS PROTOCOL - VERSION 4rev1</li>
   <li>RFC 4346: The Transport Layer Security (TLS) Protocol Version 1.1</li>
@@ -592,6 +593,7 @@ This is to prevent giving out a misleading or wrong grade.</p>
   <li>RFC 5280: Internet X.509 Public Key Infrastructure Certificate and Certificate Revocation List (CRL) Profile</li>
   <li>RFC 5321: Simple Mail Transfer Protocol</li>
   <li>RFC 5746: Transport Layer Security (TLS) Renegotiation Indication Extension</li>
+  <li>RFC 5804: A Protocol for Remotely Managing Sieve Scripts</li>
   <li>RFC 6066: Transport Layer Security (TLS) Extensions: Extension Definitions</li>
   <li>RFC 6101: The Secure Sockets Layer (SSL) Protocol Version 3.0</li>
   <li>RFC 6120: Extensible Messaging and Presence Protocol (XMPP): Core</li>

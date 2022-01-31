@@ -115,7 +115,7 @@ The same can be achieved by setting the environment variable `WARNINGS`.
 
 ### SPECIAL INVOCATIONS
 
-`-t <protocol>, --starttls <protocol>`    does a default run against a STARTTLS enabled `protocol`. `protocol` must be one of `ftp`, `smtp`,  `pop3`, `imap`, `xmpp`, `sieve`, `xmpp-server`, `telnet`, `ldap`, `irc`, `lmtp`, `nntp`, `postgres`, `mysql`. For the latter four you need e.g. the supplied OpenSSL or OpenSSL version 1.1.1. Please note: MongoDB doesn't offer a STARTTLS connection, LDAP currently only works with `--ssl-native`. `telnet` and `irc` is WIP.
+`-t <protocol>, --starttls <protocol>`    does a default run against a STARTTLS enabled `protocol`. `protocol` must be one of `ftp`, `smtp`,  `pop3`, `imap`, `xmpp`, `sieve`, `xmpp-server`, `telnet`, `ldap`, `irc`, `lmtp`, `nntp`, `postgres`, `mysql`. For the latter four you need e.g. the supplied OpenSSL or OpenSSL version 1.1.1. Please note: MongoDB doesn't offer a STARTTLS connection, IRC currently only works with `--ssl-native`. `telnet` and `irc` are WIP.
 
 `--xmpphost <jabber_domain>` is an additional option for STARTTLS enabled XMPP: It expects the jabber domain as a parameter. This is only needed if the domain is different from the URI supplied.
 
@@ -473,8 +473,9 @@ Please note that for plain TLS-encrypted ports you must not specify the protocol
 ## RFCs and other standards
 
 * RFC 2246: The TLS Protocol Version 1.0
-* RFC 2818: HTTP Over TLS
 * RFC 2595: Using TLS with IMAP, POP3 and ACAP
+* RFC 2818: HTTP Over TLS
+* RFC 2830: Lightweight Directory Access Protocol (v3): Extension for Transport Layer Security
 * RFC 3207: SMTP Service Extension for Secure SMTP over Transport Layer Security
 * RFC 3501: INTERNET MESSAGE ACCESS PROTOCOL - VERSION 4rev1
 * RFC 4346: The Transport Layer Security (TLS) Protocol Version 1.1
@@ -485,6 +486,7 @@ Please note that for plain TLS-encrypted ports you must not specify the protocol
 * RFC 5280: Internet X.509 Public Key Infrastructure Certificate and Certificate Revocation List (CRL) Profile
 * RFC 5321: Simple Mail Transfer Protocol
 * RFC 5746: Transport Layer Security (TLS) Renegotiation Indication Extension
+* RFC 5804: A Protocol for Remotely Managing Sieve Scripts
 * RFC 6066: Transport Layer Security (TLS) Extensions: Extension Definitions
 * RFC 6101: The Secure Sockets Layer (SSL) Protocol Version 3.0
 * RFC 6120: Extensible Messaging and Presence Protocol (XMPP): Core

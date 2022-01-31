@@ -82,7 +82,7 @@ A typical internal conversion to testssl\.sh file format from nmap's grep(p)able
 .P
 \fB\-\-reqheader <header>\fR This can be used to add additional HTTP request headers in the correct format \fBHeadername: headercontent\fR\. This parameter can be called multiple times if required\. For example: \fB\-\-reqheader 'Proxy\-Authorization: Basic dGVzdHNzbDpydWxlcw==' \-\-reqheader 'ClientID: 0xDEADBEAF'\fR\. REQHEADER is the corresponding environment variable\.
 .SS "SPECIAL INVOCATIONS"
-\fB\-t <protocol>, \-\-starttls <protocol>\fR does a default run against a STARTTLS enabled \fBprotocol\fR\. \fBprotocol\fR must be one of \fBftp\fR, \fBsmtp\fR, \fBpop3\fR, \fBimap\fR, \fBxmpp\fR, \fBsieve\fR, \fBxmpp\-server\fR, \fBtelnet\fR, \fBldap\fR, \fBirc\fR, \fBlmtp\fR, \fBnntp\fR, \fBpostgres\fR, \fBmysql\fR\. For the latter four you need e\.g\. the supplied OpenSSL or OpenSSL version 1\.1\.1\. Please note: MongoDB doesn't offer a STARTTLS connection, LDAP currently only works with \fB\-\-ssl\-native\fR\. \fBtelnet\fR and \fBirc\fR is WIP\.
+\fB\-t <protocol>, \-\-starttls <protocol>\fR does a default run against a STARTTLS enabled \fBprotocol\fR\. \fBprotocol\fR must be one of \fBftp\fR, \fBsmtp\fR, \fBpop3\fR, \fBimap\fR, \fBxmpp\fR, \fBsieve\fR, \fBxmpp\-server\fR, \fBtelnet\fR, \fBldap\fR, \fBirc\fR, \fBlmtp\fR, \fBnntp\fR, \fBpostgres\fR, \fBmysql\fR\. For the latter four you need e\.g\. the supplied OpenSSL or OpenSSL version 1\.1\.1\. Please note: MongoDB doesn't offer a STARTTLS connection, IRC currently only works with \fB\-\-ssl\-native\fR\. \fBtelnet\fR and \fBirc\fR are WIP\.
 .P
 \fB\-\-xmpphost <jabber_domain>\fR is an additional option for STARTTLS enabled XMPP: It expects the jabber domain as a parameter\. This is only needed if the domain is different from the URI supplied\.
 .P
@@ -478,9 +478,11 @@ Please note that for plain TLS\-encrypted ports you must not specify the protoco
 .IP "\[ci]" 4
 RFC 2246: The TLS Protocol Version 1\.0
 .IP "\[ci]" 4
+RFC 2595: Using TLS with IMAP, POP3 and ACAP
+.IP "\[ci]" 4
 RFC 2818: HTTP Over TLS
 .IP "\[ci]" 4
-RFC 2595: Using TLS with IMAP, POP3 and ACAP
+RFC 2830: Lightweight Directory Access Protocol (v3): Extension for Transport Layer Security
 .IP "\[ci]" 4
 RFC 3207: SMTP Service Extension for Secure SMTP over Transport Layer Security
 .IP "\[ci]" 4
@@ -501,6 +503,8 @@ RFC 5280: Internet X\.509 Public Key Infrastructure Certificate and Certificate 
 RFC 5321: Simple Mail Transfer Protocol
 .IP "\[ci]" 4
 RFC 5746: Transport Layer Security (TLS) Renegotiation Indication Extension
+.IP "\[ci]" 4
+RFC 5804: A Protocol for Remotely Managing Sieve Scripts
 .IP "\[ci]" 4
 RFC 6066: Transport Layer Security (TLS) Extensions: Extension Definitions
 .IP "\[ci]" 4
