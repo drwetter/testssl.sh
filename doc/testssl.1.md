@@ -1,4 +1,3 @@
-% testssl(1) | General Commands Manual
 
 ## NAME
    testssl.sh -- check encryption of SSL/TLS servers
@@ -55,9 +54,9 @@ linked OpenSSL binaries for major operating systems are supplied in `./bin/`.
 
 8) testing each of 370 preconfigured ciphers
 
-9) client simulation
+8) client simulation
 
-10) rating
+9) rating
 
 
 
@@ -90,15 +89,14 @@ Nmap's output always returns IP addresses and only if there's a PTR DNS record a
 A typical internal conversion to testssl.sh file format from nmap's grep(p)able format could look like:
 
 ```
-  10.10.12.16:443
-  10.10.12.16:1443
-  -t smtp host.example.com:25
-  host.example.com:443
-  host.example.com:631
-  -t ftp 10.10.12.11:21
-  10.10.12.11:8443
+10.10.12.16:443
+10.10.12.16:1443
+-t smtp host.example.com:25
+host.example.com:443
+host.example.com:631
+-t ftp 10.10.12.11:21
+10.10.12.11:8443
 ```
-
 Please note that `fname` has to be in Unix format. DOS carriage returns won't be accepted. Instead of the command line switch the environment variable FNAME will be honored too.
 
 `--mode <serial|parallel>`. Mass testing to be done serial (default) or parallel (`--parallel` is shortcut for the latter, `--serial` is the opposite option). Per default mass testing is being run in serial mode, i.e. one line after the other is processed and invoked. The variable `MASS_TESTING_MODE` can be defined to be either equal `serial` or `parallel`.
@@ -117,7 +115,7 @@ The same can be achieved by setting the environment variable `WARNINGS`.
 
 ### SPECIAL INVOCATIONS
 
-`-t <protocol>, --starttls <protocol>`    does a default run against a STARTTLS enabled `protocol`. `protocol` must be one of `ftp`, `smtp`,  `pop3`, `imap`, `xmpp`, `sieve`, `xmpp-server`, `telnet`, `ldap`, `irc`, `lmtp`, `nntp`, `postgres`, `mysql`. For the latter four you need e.g. the supplied OpenSSL or OpenSSL version 1.1.1. Please note: MongoDB doesn't offer a STARTTLS connection, LDAP currently only works with `--ssl-native`. `telnet` and `irc` is WIP.
+`-t <protocol>, --starttls <protocol>`    does a default run against a STARTTLS enabled `protocol`. `protocol` must be one of `ftp`, `smtp`,  `pop3`, `imap`, `xmpp`, `sieve`, `xmpp-server`, `telnet`, `ldap`, `irc`, `lmtp`, `nntp`, `postgres`, `mysql`. For the latter four you need e.g. the supplied OpenSSL or OpenSSL version 1.1.1. Please note: MongoDB doesn't offer a STARTTLS connection, IRC currently only works with `--ssl-native`. `irc` is WIP.
 
 `--xmpphost <jabber_domain>` is an additional option for STARTTLS enabled XMPP: It expects the jabber domain as a parameter. This is only needed if the domain is different from the URI supplied.
 
@@ -243,7 +241,7 @@ Also for multiple server certificates are being checked for as well as for the c
 
 `-C, --compression, --crime`    Checks for CRIME (*Compression Ratio Info-leak Made Easy*) vulnerability in TLS. CRIME in SPDY is not yet being checked for.
 
-`-B, --breach`                  Checks for BREACH (*Browser Reconnaissance and Exfiltration via Adaptive Compression of Hypertext*) vulnerability. As for this vulnerability HTTP level compression is a prerequisite it'll be not tested if HTTP cannot be detected or the detection is not enforced via `--assume-http`. Please note that only the URL supplied (normally "/" ) is being tested.
+`-B, --breach`                  Checks for BREACH (*Browser Reconnaissance and Exfiltration via Adaptive Compression of Hypertext*) vulnerability. As for this vulnerability HTTP level compression is a prerequisite it'll be not tested if HTTP cannot be detected or the detection is not enforced via ``--assume-http`. Please note that only the URL supplied (normally "/" ) is being tested.
 
 `-O, --poodle`                  Tests for SSL POODLE (*Padding Oracle On Downgraded Legacy Encryption*) vulnerability. It basically checks for the existence of CBC ciphers in SSLv3.
 
@@ -310,9 +308,9 @@ Rating automatically gets disabled, to not give a wrong or misleading grade, whe
 
 `--json`                Logs additionally to JSON file `${NODE}-p${port}${YYYYMMDD-HHMM}.json` in the current working directory of the shell. The resulting JSON file is opposed to `--json-pretty` flat -- which means each section is self contained and has an identifier for each single check, the hostname/IP address, the port, severity and the finding. For vulnerabilities it may contain a CVE and CWE entry too. The output doesn't contain a banner or a footer.
 
-`--jsonfile <jsonfile>` or `-oj <jsonfile>` Instead of the previous option you may want to use this one if you want to log the JSON out put into a directory or if you rather want to specify the log file name yourself. If `jsonfile` is a directory the output will put into `logfile/${NODE}-p${port}${YYYYMMDD-HHMM}.json`. If `jsonfile` is a file it will use that file name, an absolute path is also permitted here.
+`--jsonfile <jsonfile>` or `-oj <jsonfile>` Instead of the previous option you may want to use this one if you want to log the JSON out put into a directory or if you rather want to specify the log file name yourself. If `jsonfile` is a directory the output will put into `logfile/${NODE}-p${port}${YYYYMMDD-HHMM}.json. If `jsonfile` is a file it will use that file name, an absolute path is also permitted here.
 
-`--json-pretty` Logs additionally to JSON file `${NODE}-p${port}${YYYYMMDD-HHMM}.json` in the current working directory of the shell. The resulting JSON file is opposed to `--json` non-flat -- which means it is structured. The structure contains a header similar to the banner on the screen, including the command line, scan host, openssl binary used, testssl version and epoch of the start time. Then for every test section of testssl.sh it contains a separate JSON object/section. Each finding has a key/value pair identifier with the identifier for each single check, the severity and the finding. For vulnerabilities it may contain a CVE and CWE entry too.  The footer lists the scan time in seconds.
+`--json-pretty` Logs additionally to JSON file `${NODE}-p${port}${YYYYMMDD-HHMM}.json in the current working directory of the shell. The resulting JSON file is opposed to `--json` non-flat -- which means it is structured. The structure contains a header similar to the banner on the screen, including the command line, scan host, openssl binary used, testssl version and epoch of the start time. Then for every test section of testssl.sh it contains a separate JSON object/section. Each finding has a key/value pair identifier with the identifier for each single check, the severity and the finding. For vulnerabilities it may contain a CVE and CWE entry too.  The footer lists the scan time in seconds.
 
 `--jsonfile-pretty <jsonfile>` or `-oJ <jsonfile>`  Similar to the aforementioned `--jsonfile` or `--logfile` it logs the output in pretty JSON format (see `--json-pretty`) into a file or a directory. For further explanation see `--jsonfile` or `--logfile`.
 
@@ -336,7 +334,7 @@ Rating automatically gets disabled, to not give a wrong or misleading grade, whe
 
 `--overwrite` Normally, if an output file already exists and it has a file size greater zero, testssl.sh will not allow you to overwrite this file. This option will do that **without any warning**. The environment variable OVERWRITE does the same. Be careful, you have been warned!
 
-`--outprefix <fname_prefix>` Prepend output filename prefix <fname_prefix> before `${NODE}-`. You can use as well the environment variable FNAME_PREFIX. Using this any output files will be named `<fname_prefix>-${NODE}-p${port}${YYYYMMDD-HHMM}.<format>` when no file name of the respective output option was specified. If you do not like the separator '-' you can as well supply a `<fname_prefix>` ending in '.',  '_' or ','. In this case or if you already supplied '-' no additional '-' will be appended to `<fname_prefix>`.
+`--outprefix <fname_prefix>` Prepend output filename prefix <fname_prefix> before '${NODE}-'. You can use as well the environment variable FNAME_PREFIX. Using this any output files will be named `<fname_prefix>-${NODE}-p${port}${YYYYMMDD-HHMM}.<format>` when no file name of the respective output option was specified. If you do not like the separator '-' you can as well supply a `<fname_prefix>` ending in '.',  '_' or ','. In this case or if you already supplied '-' no additional '-' will be appended to `<fname_prefix>`.
 
 A few file output options can also be preset via environment variables.
 
@@ -372,11 +370,9 @@ Except the environment variables mentioned above which can replace command line 
 * TERM_WIDTH is a variable which overrides the auto-determined terminal width size. Setting this variable normally only makes sense if you log the output to a file using the `--log`, `--logfile` or `-oL` option.
 * DEBUG_ALLINONE / SETX: when setting one of those to true testssl.sh falls back to the standard bash behavior, i.e. calling ``bash -x testssl.sh`` it displays the bash debugging output not in an external file `/tmp/testssl-<XX>.log`
 * DEBUGTIME: Profiling option. When using bash's debug mode and when this is set to true, it generates a separate text file with epoch times in `/tmp/testssl-<XX>.time`. They need to be concatenated by `paste /tmp/testssl-<XX>.{time,log}`
-<!---
-* FAST_SOCKET
-* SHOW_SIGALGO
-* FAST
--->
+[comment]: # * FAST_SOCKET
+[comment]: # * SHOW_SIGALGO
+[comment]: # * FAST
 * EXPERIMENTAL=true is an option which is sometimes used in the development process to make testing easier. In released versions this has no effect.
 * ALL_CLIENTS=true runs a client simulation with *all* (currently 126) clients when testing HTTP.
 * UNBRACKTD_IPV6: needs to be set to true for some old versions of OpenSSL (like from Gentoo) which don't support [bracketed] IPv6 addresses
@@ -389,10 +385,8 @@ Except the environment variables mentioned above which can replace command line 
 * STARTTLS_SLEEP is per default set to 10 (seconds). That's the value testssl.sh waits for a string in the STARTTLS handshake before giving up.
 * MAX_PARALLEL is the maximum number of tests to run in parallel in parallel mass testing mode. The default value of 20 may be made larger on systems with faster processors.
 * MAX_WAIT_TEST is the maximum time (in seconds) to wait for a single test in parallel mass testing mode to complete. The default is 1200.
-<!---
-* USLEEP_SND
-* USLEEP_REC
--->
+[comment]: # USLEEP_SND
+[comment]: # USLEEP_REC
 * HSTS_MIN is preset to 179 (days). If you want warnings sooner or later for HTTP Strict Transport Security you can change this.
 * HPKP_MIN is preset to 30 (days). If you want warnings sooner or later for HTTP Public Key Pinning you can change this
 * DAYS2WARN1 is the first threshold when you'll be warning of a certificate expiration of a host, preset to 60 (days). For Let's Encrypt this value will be divided internally by 2.
@@ -404,7 +398,6 @@ Except the environment variables mentioned above which can replace command line 
 * MAX_HEADER_FAIL: A number which tells testssl.sh how often a HTTP GET request over OpenSSL may return an empty file before the program gives up and terminates. The default is 3. Also here you can increase the threshold when you spot messages like *Fatal error: repeated HTTP header connect problems, doesn't make sense to continue*.
 
 ### RATING
-
 This program has a near-complete implementation of SSL Labs's '[SSL Server Rating Guide](https://github.com/ssllabs/research/wiki/SSL-Server-Rating-Guide)'.
 
 This is *not* a 100% reimplementation of the [SSL Lab's SSL Server Test](https://www.ssllabs.com/ssltest/analyze.html), but an implementation of the above rating specification, slight discrepancies may occur. Please note that for now we stick to the SSL Labs rating as good as possible. We are not responsible for their rating. Before filing issues please inspect their Rating Guide.
@@ -413,7 +406,6 @@ Disclaimer: Having a good grade is **NOT** necessarily equal to having good secu
 would lead to a false sense of security - at least until we test for DANE or MTA-STS.
 
 As of writing, these checks are missing:
-
 * GOLDENDOODLE - should be graded **F** if vulnerable
 * Insecure renegotiation - should be graded **F** if vulnerable
 * Padding oracle in AES-NI CBC MAC check (CVE-2016-2107) - should be graded **F** if vulnerable
@@ -427,7 +419,6 @@ As of writing, these checks are missing:
 * Weak key (Debian OpenSSL Flaw) - should give **0** points in `set_key_str_score()`
 
 #### Implementing new grades caps or -warnings
-
 To implement a new grading cap, simply call the `set_grade_cap()` function, with the grade and a reason:
 ```bash
 set_grade_cap "D" "Vulnerable to documentation"
@@ -436,18 +427,14 @@ To implement a new grade warning, simply call the `set_grade_warning()` function
 ```bash
 set_grade_warning "Documentation is always right"
 ```
-
 #### Implementing a new check which contains grade caps
-
 When implementing a new check (be it vulnerability or not) that sets grade caps, the `set_rating_state()` has to be updated (i.e. the `$do_mycheck` variable-name has to be added to the loop, and `$nr_enabled` if-statement has to be incremented)
 
 The `set_rating_state()` automatically disables rating, if all the required checks are *not* enabled.
 This is to prevent giving out a misleading or wrong grade.
 
 #### Implementing a new revision
-
 When a new revision of the rating specification comes around, the following has to be done:
-
 * New grade caps has to be either:
   1. Added to the script wherever relevant, or
   2. Added to the above list of missing checks (if above is not possible)
@@ -486,8 +473,9 @@ Please note that for plain TLS-encrypted ports you must not specify the protocol
 ## RFCs and other standards
 
 * RFC 2246: The TLS Protocol Version 1.0
-* RFC 2818: HTTP Over TLS
 * RFC 2595: Using TLS with IMAP, POP3 and ACAP
+* RFC 2818: HTTP Over TLS
+* RFC 2830: Lightweight Directory Access Protocol (v3): Extension for Transport Layer Security
 * RFC 3207: SMTP Service Extension for Secure SMTP over Transport Layer Security
 * RFC 3501: INTERNET MESSAGE ACCESS PROTOCOL - VERSION 4rev1
 * RFC 4346: The Transport Layer Security (TLS) Protocol Version 1.1
@@ -498,6 +486,7 @@ Please note that for plain TLS-encrypted ports you must not specify the protocol
 * RFC 5280: Internet X.509 Public Key Infrastructure Certificate and Certificate Revocation List (CRL) Profile
 * RFC 5321: Simple Mail Transfer Protocol
 * RFC 5746: Transport Layer Security (TLS) Renegotiation Indication Extension
+* RFC 5804: A Protocol for Remotely Managing Sieve Scripts
 * RFC 6066: Transport Layer Security (TLS) Extensions: Extension Definitions
 * RFC 6101: The Secure Sockets Layer (SSL) Protocol Version 3.0
 * RFC 6120: Extensible Messaging and Presence Protocol (XMPP): Core
