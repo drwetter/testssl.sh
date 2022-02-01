@@ -4728,7 +4728,7 @@ client_simulation_sockets() {
      socksend_clienthello "${data}"
      sleep $USLEEP_SND
 
-     sockread_serverhello 32768
+     sockread 32768
      tls_hello_ascii=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
      tls_hello_ascii="${tls_hello_ascii%%[!0-9A-F]*}"
 
@@ -4758,7 +4758,7 @@ client_simulation_sockets() {
 
           debugme echo -n "requesting more server hello data... "
           socksend "" $USLEEP_SND
-          sockread_serverhello 32768
+          sockread 32768
 
           next_packet=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
           next_packet="${next_packet%%[!0-9A-F]*}"
@@ -7512,7 +7512,7 @@ tls_time() {
 
      pr_bold " TLS clock skew" ; out "$spaces"
 
-     if [[ "$STARTTLS_PROTOCOL" =~ ldap ]] || [[ "$STARTTLS_PROTOCOL" =~ irc ]]; then
+     if [[ "$STARTTLS_PROTOCOL" =~ irc ]]; then
           prln_local_problem "STARTTLS/$STARTTLS_PROTOCOL and --ssl-native collide here"
           return 1
      fi
@@ -7872,7 +7872,7 @@ get_server_certificate() {
                success=$?
           else
                # For STARTTLS protocols not being implemented yet via sockets this is a bypass otherwise it won't be usable at all (e.g. LDAP)
-               if [[ "$STARTTLS" =~ ldap ]] || [[ "$STARTTLS" =~ irc ]]; then
+               if [[ "$STARTTLS" =~ irc ]]; then
                     return 1
                elif [[ "$1" =~ tls1_3_RSA ]]; then
                     tls_sockets "04" "$TLS13_CIPHER" "all+" "00,12,00,00, 00,05,00,05,01,00,00,00,00, 00,0d,00,10,00,0e,08,04,08,05,08,06,04,01,05,01,06,01,02,01"
@@ -11094,6 +11094,36 @@ starttls_postgres_dialog() {
      return $ret
 }
 
+
+# RFC 2830
+starttls_ldap_dialog() {
+     local debugpad="  > "
+     local -i ret=0
+     local result=""
+     local starttls_init=",
+     x30, x1d, x02, x01,                                                             # LDAP extendedReq
+     x01,                                                                            # messageID: 1
+     x77, x18, x80, x16, x31, x2e, x33, x2e, x36, x2e,                               # ProtocolOP: extendedReq
+     x31, x2e, x34, x2e, x31, x2e, x31, x34, x36, x36, x2e, x32, x30, x30, x33, x37" # OID for STATRTTLS = "1.3.6.1.4.1.1466.20037"
+
+     debugme echo "=== starting LDAP STARTTLS dialog ==="
+     socksend "${starttls_init}"   0    && debugme echo "${debugpad}initiated STARTTLS" &&
+     result=$(sockread_fast 256)
+     [[ $DEBUG -ge 6 ]] && safe_echo "$debugpad $result\n"
+
+     # response is typically 30 0c 02 01 01 78 07 0a 01 00 04 00 04 00
+     #                                                  ^^ == success!  [9] is checked below
+     if [[ ${result:18:2} == 00 ]]; then
+          ret=0
+     elif [[ ${result:18:2} == 01 ]]; then
+          ret=1
+     else
+          ret=127
+     fi
+     debugme echo "=== finished LDAP STARTTLS dialog with ${ret} ==="
+     return $ret
+}
+
 starttls_mysql_dialog() {
      local debugpad="  > "
      local -i ret=0
@@ -11214,8 +11244,10 @@ fd_socket() {
                irc|ircs) # IRC, https://ircv3.net/specs/extensions/tls-3.1.html, https://ircv3.net/specs/core/capability-negotiation.html
                     fatal "FIXME: IRC+STARTTLS not yet supported" $ERR_NOSUPPORT
                     ;;
-               ldap|ldaps) # LDAP, https://tools.ietf.org/html/rfc2830, https://tools.ietf.org/html/rfc4511
-                    fatal "FIXME: LDAP+STARTTLS over sockets not supported yet (try \"--ssl-native\")" $ERR_NOSUPPORT
+               ldap|ldaps) # LDAP, https://tools.ietf.org/html/rfc2830#section-2.1, https://tools.ietf.org/html/rfc4511
+                    # https://ldap.com/ldapv3-wire-protocol-reference-extended/
+                    #fatal "FIXME: LDAP+STARTTLS over sockets not supported yet (try \"--ssl-native\")" $ERR_NOSUPPORT
+                    starttls_ldap_dialog
                     ;;
                acap|acaps) # ACAP = Application Configuration Access Protocol, see https://tools.ietf.org/html/rfc2595
                     fatal "ACAP Easteregg: not implemented -- probably never will" $ERR_NOSUPPORT
@@ -11231,7 +11263,7 @@ fd_socket() {
                     starttls_mysql_dialog
                     ;;
                *) # we need to throw an error here -- otherwise testssl.sh treats the STARTTLS protocol as plain SSL/TLS which leads to FP
-                    fatal "FIXME: STARTTLS protocol $STARTTLS_PROTOCOL is not yet supported" $ERR_NOSUPPORT
+                    fatal "FIXME: STARTTLS protocol $STARTTLS_PROTOCOL is not supported yet" $ERR_NOSUPPORT
           esac
           ret=$?
           case $ret in
@@ -11321,9 +11353,11 @@ socksend() {
 }
 
 
-# for SSLv2 to TLS 1.2:
+# Reads from socket. Uses SOCK_REPLY_FILE global to save socket reply
+# Not blocking, polling
 # ARG1: blocksize for reading
-sockread_serverhello() {
+#
+sockread() {
      [[ -z "$2" ]] && maxsleep=$MAX_WAITSOCK || maxsleep=$2
      SOCK_REPLY_FILE=$(mktemp $TEMPDIR/ddreply.XXXXXX) || return 7
      dd bs=$1 of=$SOCK_REPLY_FILE count=1 <&5 2>/dev/null &
@@ -11331,8 +11365,10 @@ sockread_serverhello() {
      return $?
 }
 
-#trying a faster version
+# Reads from socket. Utilises a pipe. Output is ASCII.
+# Faster as previous, blocks however when socket stream is empty
 # ARG1: blocksize for reading
+#
 sockread_fast() {
      dd bs=$1 count=1 <&5 2>/dev/null | hexdump -v -e '16/1 "%02X"'
 }
@@ -14718,7 +14754,7 @@ sslv2_sockets() {
      debugme echo -n "sending client hello... "
      socksend_clienthello "$client_hello"
 
-     sockread_serverhello 32768
+     sockread 32768
      if "$parse_complete"; then
           if [[ -s "$SOCK_REPLY_FILE" ]]; then
                server_hello=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
@@ -14731,7 +14767,7 @@ sslv2_sockets() {
 
                     debugme echo -n "requesting more server hello data... "
                     socksend "" $USLEEP_SND
-                    sockread_serverhello 32768
+                    sockread 32768
 
                     [[ ! -s "$SOCK_REPLY_FILE" ]] && break
                     cat "$SOCK_REPLY_FILE" >> "$sock_reply_file2"
@@ -15451,7 +15487,7 @@ resend_if_hello_retry_request() {
      done
      debugme echo -n "sending client hello... "
      socksend_clienthello "$data" $USLEEP_SND
-     sockread_serverhello 32768
+     sockread 32768
      return 2
 }
 
@@ -15506,7 +15542,7 @@ tls_sockets() {
      # if sending didn't succeed we don't bother
      if [[ $ret -eq 0 ]]; then
           clienthello1="$TLS_CLIENT_HELLO"
-          sockread_serverhello 32768
+          sockread 32768
           "$TLS_DIFFTIME_SET" && TLS_NOW=$(LC_ALL=C date "+%s")
 
           tls_hello_ascii=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
@@ -15546,7 +15582,7 @@ tls_sockets() {
 
                     debugme echo -n "requesting more server hello data... "
                     socksend "" $USLEEP_SND
-                    sockread_serverhello 32768
+                    sockread 32768
 
                     next_packet=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
                     next_packet="${next_packet%%[!0-9A-F]*}"
@@ -15760,7 +15796,7 @@ receive_app_data() {
                if "$FAST_SOCKET"; then
                     res="$(sockread_fast 32768)"
                else
-                    sockread_serverhello 32768
+                    sockread 32768
                     res="$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")"
                fi
                res="${res%%[!0-9A-F]*}"
@@ -15816,7 +15852,7 @@ run_heartbleed(){
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for heartbleed vulnerability " && outln
      pr_bold " Heartbleed"; out " ($cve)                "
 
-     if [[ "$STARTTLS_PROTOCOL" =~ ldap ]] || [[ "$STARTTLS_PROTOCOL" =~ irc ]]; then
+     if [[ "$STARTTLS_PROTOCOL" =~ irc ]]; then
           prln_local_problem "STARTTLS/$STARTTLS_PROTOCOL and --ssl-native collide here"
           return 1
      fi
@@ -15853,7 +15889,7 @@ run_heartbleed(){
 
      [[ $DEBUG -ge 4 ]] && tmln_out "\nsending payload with TLS version $tls_hexcode:"
      socksend "$heartbleed_payload" 1
-     sockread_serverhello 16384 $HEARTBLEED_MAX_WAITSOCK
+     sockread 16384 $HEARTBLEED_MAX_WAITSOCK
      if [[ $? -eq 3 ]]; then
           append=", timed out"
           pr_svrty_best "not vulnerable (OK)"; out "$append"
@@ -15926,7 +15962,7 @@ run_ccs_injection(){
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for CCS injection vulnerability " && outln
      pr_bold " CCS"; out " ($cve)                       "
 
-     if [[ "$STARTTLS_PROTOCOL" =~ ldap ]] || [[ "$STARTTLS_PROTOCOL" =~ irc ]]; then
+     if [[ "$STARTTLS_PROTOCOL" =~ irc ]]; then
           prln_local_problem "STARTTLS/$STARTTLS_PROTOCOL and --ssl-native collide here"
           return 1
      fi
@@ -15990,7 +16026,7 @@ run_ccs_injection(){
      socksend "$client_hello" 1
 
      debugme echo "reading server hello... "
-     sockread_serverhello 32768
+     sockread 32768
      if [[ $DEBUG -ge 4 ]]; then
           hexdump -C "$SOCK_REPLY_FILE" | head -20
           tmln_out "[...]"
@@ -15999,7 +16035,7 @@ run_ccs_injection(){
      rm "$SOCK_REPLY_FILE"
 # ... and then send the change cipher spec message
      socksend "$ccs_message" 1 || ok_ids
-     sockread_serverhello 4096 $CCS_MAX_WAITSOCK
+     sockread 4096 $CCS_MAX_WAITSOCK
      if [[ $DEBUG -ge 3 ]]; then
           tmln_out "\n1st reply: "
           hexdump -C "$SOCK_REPLY_FILE" | head -20
@@ -16009,7 +16045,7 @@ run_ccs_injection(){
      rm "$SOCK_REPLY_FILE"
 
      socksend "$ccs_message" 2 || ok_ids
-     sockread_serverhello 4096 $CCS_MAX_WAITSOCK
+     sockread 4096 $CCS_MAX_WAITSOCK
      retval=$?
 
      tls_hello_ascii=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
@@ -16282,7 +16318,7 @@ run_ticketbleed() {
           if "$FAST_SOCKET"; then
                tls_hello_ascii=$(sockread_fast 32768)
           else
-               sockread_serverhello 32768 $CCS_MAX_WAITSOCK
+               sockread 32768 $CCS_MAX_WAITSOCK
                tls_hello_ascii=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
           fi
           [[ "$DEBUG" -ge 5 ]] && echo "$tls_hello_ascii"
@@ -17617,7 +17653,7 @@ run_drown() {
           cert_fingerprint_sha2=${cert_fingerprint_sha2/SHA256 /}
      fi
 
-     if [[ "$STARTTLS_PROTOCOL" =~ ldap ]] || [[ "$STARTTLS_PROTOCOL" =~ irc ]]; then
+     if [[ "$STARTTLS_PROTOCOL" =~ irc ]]; then
           prln_local_problem "STARTTLS/$STARTTLS_PROTOCOL and --ssl-native collide here"
           return 1
      fi
@@ -18022,7 +18058,7 @@ run_winshock() {
           outln
           return 0
      fi
-     if [[ "$STARTTLS_PROTOCOL" =~ ldap ]] || [[ "$STARTTLS_PROTOCOL" =~ irc ]]; then
+     if [[ "$STARTTLS_PROTOCOL" =~ irc ]]; then
           prln_local_problem "STARTTLS/$STARTTLS_PROTOCOL and --ssl-native collide here"
           return 1
      fi
@@ -19003,7 +19039,7 @@ run_robot() {
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for Return of Bleichenbacher's Oracle Threat (ROBOT) vulnerability " && outln
      pr_bold " ROBOT                                     "
 
-     if [[ "$STARTTLS_PROTOCOL" =~ ldap ]] || [[ "$STARTTLS_PROTOCOL" =~ irc ]]; then
+     if [[ "$STARTTLS_PROTOCOL" =~ irc ]]; then
           prln_local_problem "STARTTLS/$STARTTLS_PROTOCOL and --ssl-native collide here"
           return 1
      fi
@@ -19160,7 +19196,7 @@ run_robot() {
                fi
                debugme echo "reading server error response..."
                start_time=$(LC_ALL=C date "+%s")
-               sockread_serverhello 32768 $robottimeout
+               sockread 32768 $robottimeout
                subret=$?
                if [[ $subret -eq 0 ]]; then
                     end_time=$(LC_ALL=C date "+%s")
@@ -21364,7 +21400,6 @@ determine_sizelimitbug() {
 
      # For STARTTLS protocols not being implemented yet via sockets this is a bypass otherwise it won't be usable at all (e.g. LDAP)
      # Fixme: find out whether we can't skip this in general for STARTTLS
-     [[ "$STARTTLS" =~ ldap ]] && return 0
      [[ "$STARTTLS" =~ irc ]] && return 0
 
      # Only with TLS 1.2 offered at the server side it is possible to hit this bug, in practice. Thus
