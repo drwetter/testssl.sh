@@ -20898,8 +20898,10 @@ extract_calist() {
      return 0
 }
 
-# this is only being called from determine_optimal_proto in order to check whether we have a server
-# with client authentication, a server with no SSL session ID switched off
+# This is only being called from determine_optimal_proto() in order to check whether we have a server with
+# client authentication, a server with no SSL session ID switched off -- and as the name indicates a protocol.
+# ARG1 is the openssl s_client connect return value. (Darwin or LibreSSL may return 1 here)
+# ARG2 is the server hello file name
 #
 sclient_auth() {
      local server_hello="$(cat -v "$2")"
@@ -20908,12 +20910,17 @@ sclient_auth() {
      local connect_success=false
 
      [[ $1 -eq 0 ]] && connect_success=true
+
      ! "$connect_success" && [[ "$server_hello" =~ $re ]] && \
           [[ -n "${BASH_REMATCH[1]}" ]] && connect_success=true
      ! "$connect_success" && \
           [[ "$server_hello" =~ (New|Reused)\,\ (SSLv[23]|TLSv1(\.[0-3])?(\/SSLv3)?)\,\ Cipher\ is\ ([A-Z0-9]+-[A-Za-z0-9\-]+|TLS_[A-Za-z0-9_]+) ]] && \
           connect_success=true
+
      if "$connect_success"; then
+          [[ ! "$server_hello" =~ Session-ID:\ [a-fA-F0-9]{2,64} ]] && NO_SSL_SESSIONID=true
+          # we needed to set this for later
+
           if [[ "$server_hello" =~ \<\<\<\ (SSL\ [23]|TLS\ 1)(\.[0-3])?[\,]?\ Handshake\ \[length\ [0-9a-fA-F]*\]\,\ CertificateRequest ]]; then
                # CertificateRequest message in -msg
                CLIENT_AUTH="required"
@@ -20922,17 +20929,14 @@ sclient_auth() {
                return 0
           fi
           [[ $1 -eq 0 ]] && return 0
-          if [[ ! "$server_hello" =~ Session-ID:\ [a-fA-F0-9]{2,64} ]]; then   # probably no SSL session
-               # do another sanity check to be sure
-               if [[ "$server_hello" =~ \-\-\-BEGIN\ CERTIFICATE\-\-\-.*\-\-\-END\ CERTIFICATE\-\-\- ]]; then
-                    CLIENT_AUTH="none"
-                    NO_SSL_SESSIONID=true  # NO_SSL_SESSIONID is preset globally to false for all other cases
-                    return 0
-               fi
+          if [[ "$server_hello" =~ \-\-\-BEGIN\ CERTIFICATE\-\-\-.*\-\-\-END\ CERTIFICATE\-\-\- ]]; then
+               # This should be already set but just to be sure
+               CLIENT_AUTH="none"
+               return 0
+          else
+               return 1
           fi
      fi
-     # what's left now is: no protocol and ciphersuite specified, handshake returned not successful, session ID empty --> not successful
-     return 1
 }
 
 # Determine the best parameters to use with tls_sockets():
@@ -21144,7 +21148,7 @@ determine_optimal_proto() {
                          $OPENSSL s_client $(s_client_options "$proto $BUGS -connect "$NODEIP:$PORT" -msg $PROXY $SNI") </dev/null >$TMPFILE 2>>$ERRFILE
                     fi
                fi
-               
+
                if sclient_auth $? $TMPFILE; then
                     # we use the successful handshake at least to get one valid protocol supported -- it saves us time later
                     if [[ -z "$proto" ]]; then
