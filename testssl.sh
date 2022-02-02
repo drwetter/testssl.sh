@@ -20900,8 +20900,8 @@ extract_calist() {
 
 # This is only being called from determine_optimal_proto() in order to check whether we have a server with
 # client authentication, a server with no SSL session ID switched off -- and as the name indicates a protocol.
-# ARG1 is the return value von openssl s_client connect. (Darwin or LibreSSL may return 1 here)
-# ARG2 is the file name from server hello
+# ARG1 is the openssl s_client connect return value. (Darwin or LibreSSL may return 1 here)
+# ARG2 is the server hello file name
 #
 sclient_auth() {
      local server_hello="$(cat -v "$2")"
