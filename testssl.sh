@@ -18317,26 +18317,30 @@ check_proxy() {
 }
 
 
-# this is only being called from determine_optimal_proto in order to check whether we have a server
-# with client authentication, a server with no SSL session ID switched off
+# This is only being called from determine_optimal_proto() in order to check whether we have a server with
+# client authentication, a server with no SSL session ID switched off -- and as the name indicates a protocol.
+# ARG1 is the return value of openssl s_client connect. (Darwin or LibreSSL may return 1 here)
+# ARG2 is the file name containing the server hello
 #
 sclient_auth() {
-     [[ $1 -eq 0 ]] && return 0                                            # no client auth (CLIENT_AUTH=false is preset globally)
-     if [[ -n $(awk '/Master-Key: / { print $2 }' "$2") ]]; then           # connect succeeded
-          if grep -q '^<<< .*CertificateRequest' "$2"; then                # CertificateRequest message in -msg
-               CLIENT_AUTH=true
-               return 0
-          fi
-          if [[ -z $(awk '/Session-ID: / { print $2 }' "$2") ]]; then      # probably no SSL session
-               if [[ 2 -eq $(grep -c CERTIFICATE "$2") ]]; then            # do another sanity check to be sure
+     local -i ret=1
+
+     if [[ $1 -eq 0 ]] ; then
+          ret=0                                                            # no client auth (CLIENT_AUTH=false is preset globally)
+     else
+          if [[ -n $(awk '/Master-Key: / { print $2 }' "$2") ]]; then      # connect succeeded
+               if grep -q '^<<< .*CertificateRequest' "$2"; then           # CertificateRequest message in -msg
+                    CLIENT_AUTH=true
+                    ret=0
+               elif [[ 2 -eq $(grep -c CERTIFICATE "$2") ]]; then          # do another sanity check to be sure
                     CLIENT_AUTH=false
-                    NO_SSL_SESSIONID=true                                  # NO_SSL_SESSIONID is preset globally to false for all other cases
-                    return 0
+                    ret=0
                fi
           fi
      fi
-     # what's left now is: master key empty, handshake returned not successful, session ID empty --> not successful
-     return 1
+     [[ $ret -eq 0 ]] && \
+          [[ -z $(awk '/Session-ID: / { print $2 }' "$2") ]] && NO_SSL_SESSIONID=true # NO_SSL_SESSIONID is preset globally first
+     return $ret
 }
 
 # Determine the best parameters to use with tls_sockets():
