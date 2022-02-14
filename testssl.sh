@@ -236,7 +236,7 @@ SSL_RENEG_ATTEMPTS=${SSL_RENEG_ATTEMPTS:-6}       # number of times to check SSL
 
 ########### Initialization part, further global vars just being declared here
 #
-LC_COLLATE=en_US.UTF-8                  # ensures certain regex patterns work as expected and aren't localized, see #1860
+LC_COLLATE=""                           # will ensure certain regex patterns work as expected and aren't localized, see setup_lc_collate()
 SYSTEM2=""                              # currently only being used for WSL = bash on windows
 PRINTF=""                               # which external printf to use. Empty presets the internal one, see #1130
 CIPHERS_BY_STRENGTH_FILE=""
@@ -5315,7 +5315,7 @@ run_protocols() {
                     set_grade_cap "F" "SSLv2 is offered"
                     ;;
                7)   prln_local_problem "$OPENSSL doesn't support \"s_client -ssl2\""
-                    fileout "$jsonID" "INFO" "not tested due to lack of local support"
+                    fileout "$jsonID" "WARN" "not tested due to lack of local support"
                     ((ret++))
                     ;;
           esac
@@ -19680,6 +19680,29 @@ check_bsd_mount() {
      fi
 }
 
+# It's important to avoid certain locales as the impact bash's pattern matching, see #1860
+# and comment in #2100
+#
+setup_lc_collate() {
+     local l=""
+     local msg='locale(1) support for any of "C, POSIX, C.UTF-8, en_US.UTF-8, en_GB.UTF-8" missing'
+     local found=false
+
+     for l in C POSIX C.UTF-8 en_US.UTF-8 en_GB.UTF-8; do
+          locale -a | grep -q $l
+          [[ $? -ne 0 ]] && continue
+          export LC_COLLATE=$l
+          found=true
+          break
+     done
+     if ! "$found"; then
+          prln_local_problem "$msg\n"
+          fileout "$jsonID" "WARN" "$msg"
+          return 1
+     fi
+     return 0
+}
+
 # This sets the PRINTF command for writing into TCP sockets. It is needed because
 # The shell builtin printf flushes the write buffer at every \n, ("\x0a") which
 # in turn means a new TCP fragment. That causes a slight performance penalty and
@@ -23367,7 +23390,7 @@ lets_roll() {
      check_proxy
      check4openssl_oldfarts
      check_bsd_mount
-
+     setup_lc_collate
 
      if "$do_display_only"; then
           prettyprint_local "$PATTERN2SHOW"
