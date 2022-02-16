@@ -6521,17 +6521,22 @@ sub_session_resumption() {
           addcmd+=" $protocol"
      fi
 
-     $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI $addcmd -sess_out $sess_data") </dev/null &>/dev/null
+     $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI $addcmd -sess_out $sess_data") </dev/null &>$tmpfile
      ret1=$?
      if [[ $ret1 -ne 0 ]]; then
-          debugme echo -n "Couldn't connect #1  "
-          return 7
+          # MacOS and LibreSSL return 1 here, that's why we need to check whether the handshake contains e.g. a certificate
+          if [[ ! $(<$tmpfile) =~ -----.*\ CERTIFICATE----- ]]; then
+               debugme echo -n "Couldn't connect #1  "
+               return 7
+          fi
      fi
      if "$byID" && [[ ! "$OSSL_NAME" =~ LibreSSL ]] && \
         ( [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == 1.1.1* ]] || [[ $OSSL_VER_MAJOR == 3 ]] ) && \
         [[ ! -s "$sess_data" ]]; then
           # it seems OpenSSL indicates no Session ID resumption by just not generating output
           debugme echo -n "No session resumption byID (empty file)"
+          # If we want to check the presence of session data:
+          # [[ ! $(<$sess_data) =~ -----.*\ SSL\ SESSION\ PARAMETERS----- ]]
           ret=2
      else
           $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI $addcmd -sess_in $sess_data") </dev/null >$tmpfile 2>$ERRFILE
@@ -6541,8 +6546,10 @@ sub_session_resumption() {
                [[ -s "$sess_data" ]] && echo "not empty" || echo "empty"
           fi
           if [[ $ret2 -ne 0 ]]; then
-               debugme echo -n "Couldn't connect #2  "
-               return 7
+               if [[ ! $(<$tmpfile) =~ -----.*\ CERTIFICATE----- ]]; then
+                    debugme echo -n "Couldn't connect #2  "
+                    return 7
+               fi
           fi
           # "Reused" indicates session material was reused, "New": not
           if grep -aq "^Reused" "$tmpfile"; then
@@ -6553,7 +6560,7 @@ sub_session_resumption() {
                debugme echo -n "Problem with 2nd ServerHello  "
           fi
           # Now get the line and compare the numbers "read" and "written" as a second criteria.
-          # If the "read" number is bigger: a new session ID was probably used
+          # If the "read" number is bigger: a new session ID was probably used.
           rw_line="$(awk '/^SSL handshake has read/ { print $5" "$(NF-1) }' "$tmpfile" )"
           rw_line=($rw_line)
           if [[ "${rw_line[0]}" -gt "${rw_line[1]}" ]]; then
