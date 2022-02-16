@@ -271,6 +271,7 @@ declare -r UA_SNEAKY="Mozilla/5.0 (X11; Linux x86_64; rv:68.0) Gecko/20100101 Fi
 ########### Initialization part, further global vars just being declared here
 #
 LC_COLLATE=""                           # ensures certain regex patterns work as expected and aren't localized, see setup_lc_collate()
+HAS_LOCALE=false
 PRINTF=""                               # which external printf to use. Empty presets the internal one, see #1130
 IKNOW_FNAME=false
 FIRST_FINDING=true                      # is this the first finding we are outputting to file?
@@ -17281,6 +17282,13 @@ setup_lc_collate() {
      local msg='locale(1) support for any of "C, POSIX, C.UTF-8, en_US.UTF-8, en_GB.UTF-8" missing'
      local found=false
 
+     type -p locale &> /dev/null && HAS_LOCALE=true
+     if ! "$HAS_LOCALE"; then
+          # likely docker container or any other minimal environment. This should work(tm)
+          LC_COLLATE=C
+          return 0
+     fi
+
      for l in C POSIX C.UTF-8 en_US.UTF-8 en_GB.UTF-8; do
           locale -a | grep -q $l
           [[ $? -ne 0 ]] && continue
@@ -17290,7 +17298,7 @@ setup_lc_collate() {
      done
      if ! "$found"; then
           prln_local_problem "$msg\n"
-          fileout "$jsonID" "WARN" "$msg"
+          # we can't use fileout yet as it messes up JSON output, see #2103
           return 1
      fi
      return 0
@@ -17551,6 +17559,7 @@ HAS_GNUDATE: $HAS_GNUDATE
 HAS_FREEBSDDATE: $HAS_FREEBSDDATE
 HAS_OPENBSDDATE: $HAS_OPENBSDDATE
 HAS_SED_E: $HAS_SED_E
+HAS_LOCALE: $HAS_LOCALE
 
 SHOW_EACH_C: $SHOW_EACH_C
 SSL_NATIVE: $SSL_NATIVE
