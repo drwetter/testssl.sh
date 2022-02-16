@@ -236,7 +236,8 @@ SSL_RENEG_ATTEMPTS=${SSL_RENEG_ATTEMPTS:-6}       # number of times to check SSL
 
 ########### Initialization part, further global vars just being declared here
 #
-LC_COLLATE=""                           # will ensure certain regex patterns work as expected and aren't localized, see setup_lc_collate()
+LC_COLLATE=""                           # ensures certain regex patterns work as expected and aren't localized, see setup_lc_collate()
+HAS_LOCALE=false
 SYSTEM2=""                              # currently only being used for WSL = bash on windows
 PRINTF=""                               # which external printf to use. Empty presets the internal one, see #1130
 CIPHERS_BY_STRENGTH_FILE=""
@@ -19688,6 +19689,13 @@ setup_lc_collate() {
      local msg='locale(1) support for any of "C, POSIX, C.UTF-8, en_US.UTF-8, en_GB.UTF-8" missing'
      local found=false
 
+     type -p locale &> /dev/null && HAS_LOCALE=true
+     if ! "$HAS_LOCALE"; then
+          # likely docker container or any other minimal environment. This should work(tm)
+          LC_COLLATE=C
+          return 0
+     fi
+
      for l in C POSIX C.UTF-8 en_US.UTF-8 en_GB.UTF-8; do
           locale -a | grep -q $l
           [[ $? -ne 0 ]] && continue
@@ -19697,7 +19705,7 @@ setup_lc_collate() {
      done
      if ! "$found"; then
           prln_local_problem "$msg\n"
-          fileout "$jsonID" "WARN" "$msg"
+          # we can't use fileout yet as it messes up JSON output, see #2103
           return 1
      fi
      return 0
@@ -19971,6 +19979,7 @@ HAS_GNUDATE: $HAS_GNUDATE
 HAS_FREEBSDDATE: $HAS_FREEBSDDATE
 HAS_OPENBSDDATE: $HAS_OPENBSDDATE
 HAS_SED_E: $HAS_SED_E
+HAS_LOCALE: $HAS_LOCALE
 
 SHOW_EACH_C: $SHOW_EACH_C
 SSL_NATIVE: $SSL_NATIVE
