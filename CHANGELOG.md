@@ -10,7 +10,7 @@
 * Better OpenSSL 1.1.1 and higher versions support as well as LibreSSL >3
 * More robustness for OpenBSD and MacOS/Darwin
 * DNS over Proxy and other proxy improvements
-* Dealing with lame DNS repsonses on WSL
+* Dealing with lame DNS responses on WSL
 * Decoding of unencrypted BIG IP cookies
 * Initial client certificate support
 * Warning of 825 day limit for certificates issued after 2018/3/1
