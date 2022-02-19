@@ -8,8 +8,9 @@
 * ROBOT check
 * Better TLS extension support
 * Better OpenSSL 1.1.1 and higher versions support as well as LibreSSL >3
-* More robustness for OpenBSD
+* More robustness for OpenBSD and MacOS/Darwin
 * DNS over Proxy and other proxy improvements
+* Dealing with lame DNS responses on WSL
 * Decoding of unencrypted BIG IP cookies
 * Initial client certificate support
 * Warning of 825 day limit for certificates issued after 2018/3/1
@@ -42,7 +43,7 @@
 * Better parsing of HTTP headers & better output of longer HTTP headers
 * Display more HTTP security headers
 * HTTP Basic Auth support for HTTP header
-* experimental "eTLS" detection
+* Experimental "eTLS" detection
 * Dockerfile and repo @ docker hub with that file (see above)
 * Java Root CA store added
 * Better support for XMPP via STARTTLS & faster
@@ -50,7 +51,7 @@
 * Support for NNTP and LMTP via STARTTLS, fixes for MySQL and PostgresQL
 * Support for SNI and STARTTLS
 * More robustness for any STARTTLS protocol (fall back to plaintext while in TLS caused problems)
-* Renegotiation checks improved, also no false potive for Node.js anymore
+* Renegotiation checks improved, also no false positive for Node.js anymore
 * Major update of client simulations with self-collected up-to-date data
 * Update of CA certificate stores
 * Lots of bug fixes
