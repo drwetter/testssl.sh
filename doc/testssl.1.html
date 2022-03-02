@@ -194,7 +194,7 @@ The same can be achieved by setting the environment variable <code>WARNINGS</cod
 
 <h3 id="SPECIAL-INVOCATIONS">SPECIAL INVOCATIONS</h3>
 
-<p><code>-t &lt;protocol&gt;, --starttls &lt;protocol&gt;</code>    does a default run against a STARTTLS enabled <code>protocol</code>. <code>protocol</code> must be one of <code>ftp</code>, <code>smtp</code>,  <code>pop3</code>, <code>imap</code>, <code>xmpp</code>, <code>sieve</code>, <code>xmpp-server</code>, <code>telnet</code>, <code>ldap</code>, <code>irc</code>, <code>lmtp</code>, <code>nntp</code>, <code>postgres</code>, <code>mysql</code>. For the latter four you need e.g. the supplied OpenSSL or OpenSSL version 1.1.1. Please note: MongoDB doesn't offer a STARTTLS connection, IRC currently only works with <code>--ssl-native</code>. <code>telnet</code> and <code>irc</code> are WIP.</p>
+<p><code>-t &lt;protocol&gt;, --starttls &lt;protocol&gt;</code>    does a default run against a STARTTLS enabled <code>protocol</code>. <code>protocol</code> must be one of <code>ftp</code>, <code>smtp</code>,  <code>pop3</code>, <code>imap</code>, <code>xmpp</code>, <code>sieve</code>, <code>xmpp-server</code>, <code>telnet</code>, <code>ldap</code>, <code>irc</code>, <code>lmtp</code>, <code>nntp</code>, <code>postgres</code>, <code>mysql</code>. For the latter four you need e.g. the supplied OpenSSL or OpenSSL version 1.1.1. Please note: MongoDB doesn't offer a STARTTLS connection, IRC currently only works with <code>--ssl-native</code>. <code>irc</code> is WIP.</p>
 
 <p><code>--xmpphost &lt;jabber_domain&gt;</code> is an additional option for STARTTLS enabled XMPP: It expects the jabber domain as a parameter. This is only needed if the domain is different from the URI supplied.</p>
 
