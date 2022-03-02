@@ -19,7 +19,7 @@ jobs:
 
     steps:
       - name: Source checkout
-        uses: actions/checkout@v2.3.4
+        uses: actions/checkout@v3
 
       - name: Setup QEMU
         id: qemu
