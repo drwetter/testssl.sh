@@ -11168,12 +11168,13 @@ starttls_telnet_dialog() {
      "
      local tnres=""
      local ret=""
+
      socksend "${msg1}"            0    && debugme echo "${debugpad}initiated STARTTLS" &&
      socksend "${msg2}"            1    &&
      tnres=$(sockread_fast 20)          && debugme echo "read succeeded"
      [[ $DEBUG -ge 6 ]] && safe_echo "$debugpad $tnres\n"
      # check for START_TLS and FOLLOWS
-     if [[ ${tnres:10:2} == 2E && ${tnres:12:2} == 01 ]]; then
+     if [[ ${tnres:10:2} == 2E ]] && [[ ${tnres:12:2} == 01 ]]; then
           ret=0
      else
           ret=1
@@ -11293,7 +11294,7 @@ fd_socket() {
                mysql) # MySQL, see https://dev.mysql.com/doc/internals/en/x-protocol-lifecycle-lifecycle.html#x-protocol-lifecycle-tls-extension
                     starttls_mysql_dialog
                     ;;
-               telnet) # captured from a tn3270 negotiation against a z/VM 7.2
+               telnet) # captured from a tn3270 negotiation against z/VM 7.2. Also, see OpenSSL apps/s_client.c for the handling of PROTO_TELNET
                     starttls_telnet_dialog
                     ;;
                *) # we need to throw an error here -- otherwise testssl.sh treats the STARTTLS protocol as plain SSL/TLS which leads to FP
