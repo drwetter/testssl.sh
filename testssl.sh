@@ -13184,9 +13184,10 @@ prepare_tls_clienthello() {
           if [[ 0x$tls_low_byte -le 0x03 ]]; then
                extension_signature_algorithms="
                00, 0d,                    # Type: signature_algorithms , see RFC 5246
-               00, 20, 00,1e,             # lengths
+               00, 30, 00,2e,             # lengths
                06,01, 06,02, 06,03, 05,01, 05,02, 05,03, 04,01, 04,02, 04,03,
-               03,01, 03,02, 03,03, 02,01, 02,02, 02,03"
+               03,01, 03,02, 03,03, 02,01, 02,02, 02,03,
+               08,04, 08,05, 08,06, 08,07, 08,08, 08,09, 08,0a, 08,0b"
           else
                extension_signature_algorithms="
                00, 0d,                    # Type: signature_algorithms , see RFC 8446
