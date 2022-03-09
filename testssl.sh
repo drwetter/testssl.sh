@@ -21004,6 +21004,7 @@ sclient_auth() {
                return 1
           fi
      fi
+     return 1
 }
 
 # Determine the best parameters to use with tls_sockets():
