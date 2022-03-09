@@ -15025,11 +15025,11 @@ prepare_tls_clienthello() {
                # Supported Groups Extension
                extension_supported_groups="
                00, 0a,                    # Type: Supported Elliptic Curves , see RFC 4492
-               00, 3e, 00, 3c,            # lengths
+               00, 42, 00, 40,            # lengths
                00, 0e, 00, 0d, 00, 19, 00, 1c, 00, 1e, 00, 0b, 00, 0c, 00, 1b,
                00, 18, 00, 09, 00, 0a, 00, 1a, 00, 16, 00, 17, 00, 1d, 00, 08,
                00, 06, 00, 07, 00, 14, 00, 15, 00, 04, 00, 05, 00, 12, 00, 13,
-               00, 01, 00, 02, 00, 03, 00, 0f, 00, 10, 00, 11"
+               00, 01, 00, 02, 00, 03, 00, 0f, 00, 10, 00, 11, 01, 00, 01, 01"
           elif [[ 0x$tls_low_byte -gt 0x03 ]]; then
                # Supported Groups Extension
                if [[ ! "$process_full" =~ all ]] || ( "$HAS_X25519" && "$HAS_X448" ); then
