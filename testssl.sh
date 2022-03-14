@@ -11160,7 +11160,7 @@ starttls_mysql_dialog() {
 }
 
 starttls_telnet_dialog() {
-     debugme echo "=== starting telnet STARTTLS dialog ==="
+     local debugpad="  > "
      local tnres=""
      local -i ret=0
      local msg1="
@@ -11169,6 +11169,7 @@ starttls_telnet_dialog() {
      , xff, xfa, x2e, x01, xff, xf0
      "
 
+     debugme echo "=== starting telnet STARTTLS dialog ==="
      socksend "${msg1}"            0    && debugme echo "${debugpad}initiated STARTTLS" &&
      socksend "${msg2}"            1    &&
      tnres=$(sockread_fast 20)          && debugme echo "read succeeded"
