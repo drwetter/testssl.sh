@@ -157,7 +157,7 @@ $tests++;
 
 
 
-$uri="140.238.219.117:119";
+$uri="144.76.182.167:119";
 
 # unlink "tmp.json";
 printf "\n%s\n", "STARTTLS NNTP unit tests via sockets --> $uri ...";
