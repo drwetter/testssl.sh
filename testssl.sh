@@ -6613,9 +6613,7 @@ run_server_preference() {
 
      outln
      pr_headlineln " Testing server's cipher preferences "
-
      outln
-     pr_bold " Has server cipher order?     "
 
      if [[ "$OPTIMAL_PROTO" == -ssl2 ]]; then
           addcmd="$OPTIMAL_PROTO"
@@ -6726,6 +6724,56 @@ run_server_preference() {
      debugme echo "has_cipher_order: $has_cipher_order"
      debugme echo "has_tls13_cipher_order: $has_tls13_cipher_order"
 
+     # restore file from above
+     [[ "$default_proto" == TLSv1.3 ]] && cp "$TEMPDIR/$NODEIP.parse_tls13_serverhello.txt" $TMPFILE
+     cipher1=$(get_cipher $TMPFILE)
+     tmpfile_handle ${FUNCNAME[0]}.txt
+
+     # Sanity check: Handshake with no ciphers and one with forward list didn't overlap
+     if [[ "$cipher0" != $cipher1 ]]; then
+          limitedsense=" (matching cipher in list missing)"
+     fi
+
+     if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]] && ( [[ "$cipher1" == TLS_* ]] || [[ "$cipher1" == SSL_* ]] ); then
+          default_cipher="$(rfc2openssl "$cipher1")"
+     elif [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]] && [[ "$cipher1" != TLS_* ]] && [[ "$cipher1" != SSL_* ]]; then
+          default_cipher="$(openssl2rfc "$cipher1")"
+     fi
+     [[ -z "$default_cipher" ]] && default_cipher="$cipher1"
+
+     "$FAST" && using_sockets=false
+     [[ $TLS_NR_CIPHERS == 0 ]] && using_sockets=false
+
+     neat_header
+     while read proto_ossl proto_hex proto_txt; do
+          pr_underline "$(printf -- "%b" "$proto_txt")"
+          # TODO: If there's no cipher we should consider not displaying the text in the round brackets)
+          # the following takes care of that but only if we know the protocol is not supported
+          if [[ $(has_server_protocol "$proto_ossl") -eq 1 ]]; then
+               outln "\n - "
+               continue
+          fi
+          # TODO: Also the fact that a protocol is not supported seems not to be saved by cipher_pref_check()
+          # (./testssl.sh --wide -p -P -E  vs ./testssl.sh --wide -P -E )
+          if [[ $proto_ossl == ssl2 ]] || \
+                    ( [[ $proto_ossl != tls1_3 ]] && ! "$has_cipher_order" ) || \
+                    ( [[ $proto_ossl == tls1_3 ]] && ! "$has_tls13_cipher_order" ); then
+               if [[ $proto_ossl == ssl2 ]]; then
+                    outln " (listed by strength)"
+               elif [[ $proto_ossl == tls1_3 ]]; then
+                    outln " (no server order, thus listed by strength)"
+               else
+                    prln_svrty_high " (no server order, thus listed by strength)"
+               fi
+               ciphers_by_strength "-$proto_ossl" "$proto_hex" "$proto_txt" "$using_sockets" "true"
+          else
+               cipher_pref_check "$proto_ossl" "$proto_hex" "$proto_txt" "$using_sockets" "true"
+          fi
+     done <<< "$(tm_out " ssl2 22 SSLv2\n ssl3 00 SSLv3\n tls1 01 TLSv1\n tls1_1 02 TLSv1.1\n tls1_2 03 TLSv1.2\n tls1_3 04 TLSv1.3\n")"
+     outln
+
+     pr_bold " Has server cipher order?     "
+     jsonID="cipher_order"
      if "$TLS13_ONLY" && ! "$has_tls13_cipher_order"; then
           out "no (TLS 1.3 only)"
           limitedsense=" (limited sense as client will pick)"
@@ -6807,33 +6855,17 @@ run_server_preference() {
 
      pr_bold " Negotiated cipher            "
      jsonID="cipher_negotiated"
-
-     # restore file from above
-     [[ "$default_proto" == TLSv1.3 ]] && cp "$TEMPDIR/$NODEIP.parse_tls13_serverhello.txt" $TMPFILE
-     cipher1=$(get_cipher $TMPFILE)
-
-     # Sanity check: Handshake with no ciphers and one with forward list didn't overlap
-     if [[ "$cipher0" != $cipher1 ]]; then
-          limitedsense=" (matching cipher in list missing)"
-     fi
-
-     if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]] && ( [[ "$cipher1" == TLS_* ]] || [[ "$cipher1" == SSL_* ]] ); then
-          default_cipher="$(rfc2openssl "$cipher1")"
-     elif [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]] && [[ "$cipher1" != TLS_* ]] && [[ "$cipher1" != SSL_* ]]; then
-          default_cipher="$(openssl2rfc "$cipher1")"
-     fi
-     [[ -z "$default_cipher" ]] && default_cipher="$cipher1"
      pr_cipher_quality "$default_cipher"
      case $? in
-          1)   fileout "$jsonID" "CRITICAL" "$default_cipher$(read_dhbits_from_file "$TMPFILE" "string") $limitedsense"
+          1)   fileout "$jsonID" "CRITICAL" "$default_cipher$(read_dhbits_from_file "$TEMPDIR/$NODEIP.run_server_preference.txt" "string") $limitedsense"
                ;;
-          2)   fileout "$jsonID" "HIGH" "$default_cipher$(read_dhbits_from_file "$TMPFILE" "string") $limitedsense"
+          2)   fileout "$jsonID" "HIGH" "$default_cipher$(read_dhbits_from_file "$TEMPDIR/$NODEIP.run_server_preference.txt" "string") $limitedsense"
                ;;
-          3)   fileout "$jsonID" "MEDIUM" "$default_cipher$(read_dhbits_from_file "$TMPFILE" "string") $limitedsense"
+          3)   fileout "$jsonID" "MEDIUM" "$default_cipher$(read_dhbits_from_file "$TEMPDIR/$NODEIP.run_server_preference.txt" "string") $limitedsense"
                ;;
-          6|7) fileout "$jsonID" "OK" "$default_cipher$(read_dhbits_from_file "$TMPFILE" "string") $limitedsense"
+          6|7) fileout "$jsonID" "OK" "$default_cipher$(read_dhbits_from_file "$TEMPDIR/$NODEIP.run_server_preference.txt" "string") $limitedsense"
                ;;   # best ones
-          4)   fileout "$jsonID" "LOW" "$default_cipher$(read_dhbits_from_file "$TMPFILE" "string") (cbc) $limitedsense"
+          4)   fileout "$jsonID" "LOW" "$default_cipher$(read_dhbits_from_file "$TEMPDIR/$NODEIP.run_server_preference.txt" "string") (cbc) $limitedsense"
                ;;  # it's CBC. --> lucky13
           0)   pr_warning "default cipher empty" ;
                if [[ $OSSL_VER == 1.0.2* ]]; then
@@ -6844,10 +6876,10 @@ run_server_preference() {
                fi
                ret=1
                ;;
-          *)   fileout "$jsonID" "INFO" "$default_cipher$(read_dhbits_from_file "$TMPFILE" "string") $limitedsense"
+          *)   fileout "$jsonID" "INFO" "$default_cipher$(read_dhbits_from_file "$TEMPDIR/$NODEIP.run_server_preference.txt" "string") $limitedsense"
                ;;
      esac
-     read_dhbits_from_file "$TMPFILE"
+     read_dhbits_from_file "$TEMPDIR/$NODEIP.run_server_preference.txt"
 
      if [[ "$cipher0" != $cipher1 ]]; then
           pr_warning " -- inconclusive test, matching cipher in list missing"
@@ -6856,39 +6888,6 @@ run_server_preference() {
      else
           outln "$limitedsense"
      fi
-
-     "$FAST" && using_sockets=false
-     [[ $TLS_NR_CIPHERS == 0 ]] && using_sockets=false
-
-     pr_bold " Cipher per protocol"
-     outln "\n" && neat_header
-     while read proto_ossl proto_hex proto_txt; do
-          pr_underline "$(printf -- "%b" "$proto_txt")"
-          # TODO: If there's no cipher we should consider not displaying the text in the round brackets)
-          # the following takes care of that but only if we know the protocol is not supported
-          if [[ $(has_server_protocol "$proto_ossl") -eq 1 ]]; then
-               outln "\n - "
-               continue
-          fi
-          # TODO: Also the fact that a protocol is not supported seems not to be saved by cipher_pref_check()
-          # (./testssl.sh --wide -p -P -E  vs ./testssl.sh --wide -P -E )
-          if [[ $proto_ossl == ssl2 ]] || \
-                    ( [[ $proto_ossl != tls1_3 ]] && ! "$has_cipher_order" ) || \
-                    ( [[ $proto_ossl == tls1_3 ]] && ! "$has_tls13_cipher_order" ); then
-               if [[ $proto_ossl == ssl2 ]]; then
-                    outln " (listed by strength)"
-               elif [[ $proto_ossl == tls1_3 ]]; then
-                    outln " (no server order, thus listed by strength)"
-               else
-                    prln_svrty_high " (no server order, thus listed by strength)"
-               fi
-               ciphers_by_strength "-$proto_ossl" "$proto_hex" "$proto_txt" "$using_sockets" "true"
-          else
-               cipher_pref_check "$proto_ossl" "$proto_hex" "$proto_txt" "$using_sockets" "true"
-          fi
-     done <<< "$(tm_out " ssl2 22 SSLv2\n ssl3 00 SSLv3\n tls1 01 TLSv1\n tls1_1 02 TLSv1.1\n tls1_2 03 TLSv1.2\n tls1_3 04 TLSv1.3\n")"
-     outln
-
      return $ret
      # end of run_server_preference()
 }
