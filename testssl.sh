@@ -13599,6 +13599,7 @@ parse_tls_serverhello() {
      fi
 
      if [[ $tls_alert_ascii_len -gt 0 ]]; then
+          echo "CONNECTED(00000003)" > $TMPFILE
           debugme echo "TLS alert messages:"
           for (( i=0; i+3 < tls_alert_ascii_len; i+=4 )); do
                tls_err_level=${tls_alert_ascii:i:2}    # 1: warning, 2: fatal
@@ -13798,10 +13799,12 @@ parse_tls_serverhello() {
           [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
           return 1
      fi
-     if [[ $DEBUG -eq 0 ]]; then
-          echo "CONNECTED(00000003)" > $TMPFILE
-     else
-          echo "CONNECTED(00000003)" >> $TMPFILE
+     if [[ $tls_alert_ascii_len -eq 0 ]]; then
+          if [[ $DEBUG -eq 0 ]]; then
+               echo "CONNECTED(00000003)" > $TMPFILE
+          else
+               echo "CONNECTED(00000003)" >> $TMPFILE
+          fi
      fi
 
      # First parse the server hello handshake message
@@ -17096,16 +17099,19 @@ run_tls_poodle() {
 # the countermeasure to protect against protocol downgrade attacks.
 #
 run_tls_fallback_scsv() {
-     local -i ret=0
+     local -i ret=0 debug_level
      local high_proto="" low_proto=""
      local p high_proto_str protos_to_try
+     local using_sockets=true
      local jsonID="fallback_SCSV"
+
+     "$SSL_NATIVE" && using_sockets=false
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for TLS_FALLBACK_SCSV Protection " && outln
      pr_bold " TLS_FALLBACK_SCSV"; out " (RFC 7507)              "
 
      # First check we have support for TLS_FALLBACK_SCSV in our local OpenSSL
-     if ! "$HAS_FALLBACK_SCSV"; then
+     if ! "$HAS_FALLBACK_SCSV" && ! "$using_sockets"; then
           prln_local_problem "$OPENSSL lacks TLS_FALLBACK_SCSV support"
           fileout "$jsonID" "WARN" "$OPENSSL lacks TLS_FALLBACK_SCSV support"
           return 1
@@ -17123,11 +17129,23 @@ run_tls_fallback_scsv() {
                high_proto="$p"
                break
           fi
-          [[ "$p" == ssl3 ]] && ! "$HAS_SSL3" && continue
-          $OPENSSL s_client $(s_client_options "-$p $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
-          if sclient_connect_successful $? $TMPFILE; then
-               high_proto="$p"
-               break
+          
+          if [[ "$p" == ssl3 ]] && ! "$HAS_SSL3"; then
+               "$using_sockets" || continue
+               tls_sockets "00" "$TLS_CIPHER" "" "" "true"
+               if [[ $? -eq 0 ]]; then
+                    high_proto="$p"
+                    add_proto_offered ssl3 yes
+                    break
+               else
+                    add_proto_offered ssl3 no
+               fi
+          else
+               $OPENSSL s_client $(s_client_options "-$p $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
+               if sclient_connect_successful $? $TMPFILE; then
+                    high_proto="$p"
+                    break
+               fi
           fi
      done
      case "$high_proto" in
@@ -17181,15 +17199,26 @@ run_tls_fallback_scsv() {
                low_proto="$p"
                break
           fi
-          [[ "$p" == ssl3 ]] && ! "$HAS_SSL3" && continue
-          $OPENSSL s_client $(s_client_options "-$p $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
-          if sclient_connect_successful $? $TMPFILE; then
-               low_proto="$p"
-               break
+          if [[ "$p" == ssl3 ]] && ! "$HAS_SSL3"; then
+               "$using_sockets" || continue
+               tls_sockets "00" "$TLS_CIPHER" "" "" "true"
+               if [[ $? -eq 0 ]]; then
+                    low_proto="$p"
+                    add_proto_offered ssl3 yes
+                    break
+               else
+                    add_proto_offered ssl3 no
+               fi
+          else
+               $OPENSSL s_client $(s_client_options "-$p $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
+               if sclient_connect_successful $? $TMPFILE; then
+                    low_proto="$p"
+                    break
+               fi
           fi
      done
 
-     if ! "$HAS_SSL3" && \
+     if ! "$HAS_SSL3" && ! "$using_sockets" && \
          ( [[ "$low_proto" == ssl3 ]] || \
            ( [[ "$high_proto" == tls1 ]] && [[ $(has_server_protocol ssl3) -eq 2 ]] ) ); then
           # If the protocol that the server would fall back to is SSLv3, but $OPENSSL does
@@ -17228,7 +17257,33 @@ run_tls_fallback_scsv() {
      debugme echo "Simulating fallback from $high_proto to $low_proto"
 
      # ...and do the test (we need to parse the error here!)
-     $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI $p -fallback_scsv") &>$TMPFILE </dev/null
+     if "$HAS_FALLBACK_SCSV" && sclient_supported "-$low_proto"; then
+          $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI $p -fallback_scsv") &>$TMPFILE </dev/null
+     else
+          # Need to ensure that $TEMPDIR/$NODEIP.parse_tls_serverhello.txt contains the results of the
+          # most recent calls to tls_sockets even if tls_sockets is not successful. Setting $DEBUG to
+          # a non-zero value ensures this. Setting it to 1 prevents any extra information from being
+          # displayed.
+          debug_level="$DEBUG"
+          [[ $DEBUG -eq 0 ]] && DEBUG=1
+          > "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt"
+
+          # tls_sockets() needs to parse the full response since the following code is
+          # looking for "BEGIN CERTIFICATE" when the TLS connection is successful. It
+          # may be possible to speed up this code by having the following code check
+          # the return value from tls_sockets() to determine whether the connection was
+          # successful rather than looking for "BEGIN CERTIFICATE".
+          case "$low_proto" in
+               "tls1_1")
+                    tls_sockets "02" "56,00, $TLS_CIPHER" "all" "" "true" ;;
+               "tls1")
+                    tls_sockets "01" "56,00, $TLS_CIPHER" "all" "" "true" ;;
+               "ssl3")
+                    tls_sockets "00" "56,00, $TLS_CIPHER" "all" "" "true" ;;
+          esac
+          mv "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" "$TMPFILE"
+          DEBUG=$debug_level
+     fi
      if grep -q "CONNECTED(00" "$TMPFILE"; then
           if grep -qa "BEGIN CERTIFICATE" "$TMPFILE"; then
                if [[ -z "$POODLE" ]]; then
