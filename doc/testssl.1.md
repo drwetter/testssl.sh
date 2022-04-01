@@ -233,7 +233,7 @@ Also for multiple server certificates are being checked for as well as for the c
 
 `-C, --compression, --crime`    Checks for CRIME (*Compression Ratio Info-leak Made Easy*) vulnerability in TLS. CRIME in SPDY is not yet being checked for.
 
-`-B, --breach`                  Checks for BREACH (*Browser Reconnaissance and Exfiltration via Adaptive Compression of Hypertext*) vulnerability. As for this vulnerability HTTP level compression is a prerequisite it'll be not tested if HTTP cannot be detected or the detection is not enforced via ``--assume-http`. Please note that only the URL supplied (normally "/" ) is being tested.
+`-B, --breach`                  Checks for BREACH (*Browser Reconnaissance and Exfiltration via Adaptive Compression of Hypertext*) vulnerability. As for this vulnerability HTTP level compression is a prerequisite it'll be not tested if HTTP cannot be detected or the detection is not enforced via `--assume-http`. Please note that only the URL supplied (normally "/" ) is being tested.
 
 `-O, --poodle`                  Tests for SSL POODLE (*Padding Oracle On Downgraded Legacy Encryption*) vulnerability. It basically checks for the existence of CBC ciphers in SSLv3.
 
@@ -296,9 +296,9 @@ Please note that in testssl.sh 3,0 you can still use `rfc` instead of `iana` and
 
 `--json`                Logs additionally to JSON file `${NODE}-p${port}${YYYYMMDD-HHMM}.json` in the current working directory of the shell. The resulting JSON file is opposed to `--json-pretty` flat -- which means each section is self contained and has an identifier for each single check, the hostname/IP address, the port, severity and the finding. For vulnerabilities it may contain a CVE and CWE entry too. The output doesn't contain a banner or a footer.
 
-`--jsonfile <jsonfile>` or `-oj <jsonfile>` Instead of the previous option you may want to use this one if you want to log the JSON out put into a directory or if you rather want to specify the log file name yourself. If `jsonfile` is a directory the output will put into `logfile/${NODE}-p${port}${YYYYMMDD-HHMM}.json. If `jsonfile` is a file it will use that file name, an absolute path is also permitted here.
+`--jsonfile <jsonfile>` or `-oj <jsonfile>` Instead of the previous option you may want to use this one if you want to log the JSON out put into a directory or if you rather want to specify the log file name yourself. If `jsonfile` is a directory the output will put into `logfile/${NODE}-p${port}${YYYYMMDD-HHMM}.json`. If `jsonfile` is a file it will use that file name, an absolute path is also permitted here.
 
-`--json-pretty` Logs additionally to JSON file `${NODE}-p${port}${YYYYMMDD-HHMM}.json in the current working directory of the shell. The resulting JSON file is opposed to `--json` non-flat -- which means it is structured. The structure contains a header similar to the banner on the screen, including the command line, scan host, openssl binary used, testssl version and epoch of the start time. Then for every test section of testssl.sh it contains a separate JSON object/section. Each finding has a key/value pair identifier with the identifier for each single check, the severity and the finding. For vulnerabilities it may contain a CVE and CWE entry too.  The footer lists the scan time in seconds.
+`--json-pretty` Logs additionally to JSON file `${NODE}-p${port}${YYYYMMDD-HHMM}.json` in the current working directory of the shell. The resulting JSON file is opposed to `--json` non-flat -- which means it is structured. The structure contains a header similar to the banner on the screen, including the command line, scan host, openssl binary used, testssl version and epoch of the start time. Then for every test section of testssl.sh it contains a separate JSON object/section. Each finding has a key/value pair identifier with the identifier for each single check, the severity and the finding. For vulnerabilities it may contain a CVE and CWE entry too.  The footer lists the scan time in seconds.
 
 `--jsonfile-pretty <jsonfile>` or `-oJ <jsonfile>`  Similar to the aforementioned `--jsonfile` or `--logfile` it logs the output in pretty JSON format (see `--json-pretty`) into a file or a directory. For further explanation see `--jsonfile` or `--logfile`.
 
@@ -320,7 +320,7 @@ Please note that in testssl.sh 3,0 you can still use `rfc` instead of `iana` and
 
 `--append` Normally, if an output file already exists and it has a file size greater zero, testssl.sh will prompt you to manually remove the file exit with an error. `--append` however will append to this file, without a header. The environment variable APPEND does the same. Be careful using this switch/variable. A complementary option which overwrites an existing file doesn't exist per design.
 
-`--outprefix <fname_prefix>` Prepend output filename prefix <fname_prefix> before '${NODE}-'. You can use as well the environment variable FNAME_PREFIX. Using this any output files will be named `<fname_prefix>-${NODE}-p${port}${YYYYMMDD-HHMM}.<format>` when no file name of the respective output option was specified. If you do not like the separator '-' you can as well supply a `<fname_prefix>` ending in '.',  '_' or ','. In this case or if you already supplied '-' no additional '-' will be appended to `<fname_prefix>`.
+`--outprefix <fname_prefix>` Prepend output filename prefix <fname_prefix> before `${NODE}-`. You can use as well the environment variable FNAME_PREFIX. Using this any output files will be named `<fname_prefix>-${NODE}-p${port}${YYYYMMDD-HHMM}.<format>` when no file name of the respective output option was specified. If you do not like the separator '-' you can as well supply a `<fname_prefix>` ending in '.',  '_' or ','. In this case or if you already supplied '-' no additional '-' will be appended to `<fname_prefix>`.
 
 A few file output options can also be preset via environment variables.
 
@@ -356,9 +356,11 @@ Except the environment variables mentioned above which can replace command line 
 * TERM_WIDTH is a variable which overrides the auto-determined terminal width size. Setting this variable normally only makes sense if you log the output to a file using the `--log`, `--logfile` or `-oL` option.
 * DEBUG_ALLINONE / SETX: when setting one of those to true testssl.sh falls back to the standard bash behavior, i.e. calling ``bash -x testssl.sh`` it displays the bash debugging output not in an external file `/tmp/testssl-<XX>.log`
 * DEBUGTIME: Profiling option. When using bash's debug mode and when this is set to true, it generates a separate text file with epoch times in `/tmp/testssl-<XX>.time`. They need to be concatenated by `paste /tmp/testssl-<XX>.{time,log}`
-[comment]: # * FAST_SOCKET
-[comment]: # * SHOW_SIGALGO
-[comment]: # * FAST
+<!---
+* FAST_SOCKET
+* SHOW_SIGALGO
+* FAST
+-->
 * EXPERIMENTAL=true is an option which is sometimes used in the development process to make testing easier. In released versions this has no effect.
 * ALL_CLIENTS=true runs a client simulation with *all* (currently 126) clients when testing HTTP.
 * UNBRACKTD_IPV6: needs to be set to true for some old versions of OpenSSL (like from Gentoo) which don't support [bracketed] IPv6 addresses
@@ -371,8 +373,10 @@ Except the environment variables mentioned above which can replace command line 
 * STARTTLS_SLEEP is per default set to 10 (seconds). That's the value testssl.sh waits for a string in the STARTTLS handshake before giving up.
 * MAX_PARALLEL is the maximum number of tests to run in parallel in parallel mass testing mode. The default value of 20 may be made larger on systems with faster processors.
 * MAX_WAIT_TEST is the maximum time (in seconds) to wait for a single test in parallel mass testing mode to complete. The default is 1200.
-[comment]: # USLEEP_SND
-[comment]: # USLEEP_REC
+<!---
+* USLEEP_SND
+* USLEEP_REC
+-->
 * HSTS_MIN is preset to 179 (days). If you want warnings sooner or later for HTTP Strict Transport Security you can change this.
 * HPKP_MIN is preset to 30 (days). If you want warnings sooner or later for HTTP Public Key Pinning you can change this
 * DAYS2WARN1 is the first threshold when you'll be warning of a certificate expiration of a host, preset to 60 (days). For Let's Encrypt this value will be divided internally by 2.
