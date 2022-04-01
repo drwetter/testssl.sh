@@ -356,7 +356,7 @@ Security headers (X\-Frame\-Options, X\-XSS\-Protection, Expect\-CT,\.\.\. , CSP
 \fB\-C, \-\-compression, \-\-crime\fR Checks for CRIME (\fICompression Ratio Info\-leak Made Easy\fR) vulnerability in TLS\. CRIME in SPDY is not yet being checked for\.
 .
 .P
-\fB\-B, \-\-breach\fR Checks for BREACH (\fIBrowser Reconnaissance and Exfiltration via Adaptive Compression of Hypertext\fR) vulnerability\. As for this vulnerability HTTP level compression is a prerequisite it\'ll be not tested if HTTP cannot be detected or the detection is not enforced via \fB`\-\-assume\-http\fR\. Please note that only the URL supplied (normally "/" ) is being tested\.
+\fB\-B, \-\-breach\fR Checks for BREACH (\fIBrowser Reconnaissance and Exfiltration via Adaptive Compression of Hypertext\fR) vulnerability\. As for this vulnerability HTTP level compression is a prerequisite it\'ll be not tested if HTTP cannot be detected or the detection is not enforced via \fB\-\-assume\-http\fR\. Please note that only the URL supplied (normally "/" ) is being tested\.
 .
 .P
 \fB\-O, \-\-poodle\fR Tests for SSL POODLE (\fIPadding Oracle On Downgraded Legacy Encryption\fR) vulnerability\. It basically checks for the existence of CBC ciphers in SSLv3\.
@@ -453,10 +453,10 @@ whole 9 yards
 \fB\-\-json\fR Logs additionally to JSON file \fB${NODE}\-p${port}${YYYYMMDD\-HHMM}\.json\fR in the current working directory of the shell\. The resulting JSON file is opposed to \fB\-\-json\-pretty\fR flat \-\- which means each section is self contained and has an identifier for each single check, the hostname/IP address, the port, severity and the finding\. For vulnerabilities it may contain a CVE and CWE entry too\. The output doesn\'t contain a banner or a footer\.
 .
 .P
-\fB\-\-jsonfile <jsonfile>\fR or \fB\-oj <jsonfile>\fR Instead of the previous option you may want to use this one if you want to log the JSON out put into a directory or if you rather want to specify the log file name yourself\. If \fBjsonfile\fR is a directory the output will put into \fBlogfile/${NODE}\-p${port}${YYYYMMDD\-HHMM}\.json\. If\fRjsonfile` is a file it will use that file name, an absolute path is also permitted here\.
+\fB\-\-jsonfile <jsonfile>\fR or \fB\-oj <jsonfile>\fR Instead of the previous option you may want to use this one if you want to log the JSON out put into a directory or if you rather want to specify the log file name yourself\. If \fBjsonfile\fR is a directory the output will put into \fBlogfile/${NODE}\-p${port}${YYYYMMDD\-HHMM}\.json\fR\. If\fRjsonfile` is a file it will use that file name, an absolute path is also permitted here\.
 .
 .P
-\fB\-\-json\-pretty\fR Logs additionally to JSON file \fB${NODE}\-p${port}${YYYYMMDD\-HHMM}\.json in the current working directory of the shell\. The resulting JSON file is opposed to\fR\-\-json` non\-flat \-\- which means it is structured\. The structure contains a header similar to the banner on the screen, including the command line, scan host, openssl binary used, testssl version and epoch of the start time\. Then for every test section of testssl\.sh it contains a separate JSON object/section\. Each finding has a key/value pair identifier with the identifier for each single check, the severity and the finding\. For vulnerabilities it may contain a CVE and CWE entry too\. The footer lists the scan time in seconds\.
+\fB\-\-json\-pretty\fR Logs additionally to JSON file \fB${NODE}\-p${port}${YYYYMMDD\-HHMM}\.json\fR in the current working directory of the shell\. The resulting JSON file is opposed to\fR\-\-json` non\-flat \-\- which means it is structured\. The structure contains a header similar to the banner on the screen, including the command line, scan host, openssl binary used, testssl version and epoch of the start time\. Then for every test section of testssl\.sh it contains a separate JSON object/section\. Each finding has a key/value pair identifier with the identifier for each single check, the severity and the finding\. For vulnerabilities it may contain a CVE and CWE entry too\. The footer lists the scan time in seconds\.
 .
 .P
 \fB\-\-jsonfile\-pretty <jsonfile>\fR or \fB\-oJ <jsonfile>\fR Similar to the aforementioned \fB\-\-jsonfile\fR or \fB\-\-logfile\fR it logs the output in pretty JSON format (see \fB\-\-json\-pretty\fR) into a file or a directory\. For further explanation see \fB\-\-jsonfile\fR or \fB\-\-logfile\fR\.
@@ -489,7 +489,7 @@ whole 9 yards
 \fB\-\-append\fR Normally, if an output file already exists and it has a file size greater zero, testssl\.sh will prompt you to manually remove the file exit with an error\. \fB\-\-append\fR however will append to this file, without a header\. The environment variable APPEND does the same\. Be careful using this switch/variable\. A complementary option which overwrites an existing file doesn\'t exist per design\.
 .
 .P
-\fB\-\-outprefix <fname_prefix>\fR Prepend output filename prefix \fIfname_prefix\fR before \'${NODE}\-\'\. You can use as well the environment variable FNAME_PREFIX\. Using this any output files will be named \fB<fname_prefix>\-${NODE}\-p${port}${YYYYMMDD\-HHMM}\.<format>\fR when no file name of the respective output option was specified\. If you do not like the separator \'\-\' you can as well supply a \fB<fname_prefix>\fR ending in \'\.\', \'_\' or \',\'\. In this case or if you already supplied \'\-\' no additional \'\-\' will be appended to \fB<fname_prefix>\fR\.
+\fB\-\-outprefix <fname_prefix>\fR Prepend output filename prefix \fIfname_prefix\fR before \fB${NODE}\fR\. You can use as well the environment variable FNAME_PREFIX\. Using this any output files will be named \fB<fname_prefix>\-${NODE}\-p${port}${YYYYMMDD\-HHMM}\.<format>\fR when no file name of the respective output option was specified\. If you do not like the separator \'\-\' you can as well supply a \fB<fname_prefix>\fR ending in \'\.\', \'_\' or \',\'\. In this case or if you already supplied \'\-\' no additional \'\-\' will be appended to \fB<fname_prefix>\fR\.
 .
 .P
 A few file output options can also be preset via environment variables\.
