@@ -18728,7 +18728,7 @@ determine_service() {
                               else
                                    # If the XMPP name cannot be provided using -xmpphost,
                                    # then it needs to be provided to the -connect option
-                                   NODEIP="$NODE" 
+                                   NODEIP="$NODE"
                               fi
                          fi
                     elif [[ "$protocol" == postgres ]]; then
