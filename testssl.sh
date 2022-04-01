@@ -5062,7 +5062,7 @@ run_client_simulation() {
 }
 
 # generic function whether $1 is supported by s_client.
-# Currently only used for protocols that's why we saved -connect $NXCONNECT. 
+# Currently only used for protocols that's why we saved -connect $NXCONNECT.
 sclient_supported() {
      case "$1" in
           -ssl2)
@@ -17128,7 +17128,7 @@ run_tls_fallback_scsv() {
                high_proto="$p"
                break
           fi
-          
+
           if [[ "$p" == ssl3 ]] && ! "$HAS_SSL3"; then
                "$using_sockets" || continue
                tls_sockets "00" "$TLS_CIPHER" "" "" "true"
