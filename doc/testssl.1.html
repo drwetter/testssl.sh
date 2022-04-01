@@ -136,9 +136,9 @@ linked OpenSSL binaries for major operating systems are supplied in <code>./bin/
 
 <p>8) testing each of 370 preconfigured ciphers</p>
 
-<p>8) client simulation</p>
+<p>9) client simulation</p>
 
-<p>9) rating</p>
+<p>10) rating</p>
 
 <h2 id="OPTIONS-AND-PARAMETERS">OPTIONS AND PARAMETERS</h2>
 
@@ -332,7 +332,7 @@ Also for multiple server certificates are being checked for as well as for the c
 
 <p><code>-C, --compression, --crime</code>    Checks for CRIME (<em>Compression Ratio Info-leak Made Easy</em>) vulnerability in TLS. CRIME in SPDY is not yet being checked for.</p>
 
-<p><code>-B, --breach</code>                  Checks for BREACH (<em>Browser Reconnaissance and Exfiltration via Adaptive Compression of Hypertext</em>) vulnerability. As for this vulnerability HTTP level compression is a prerequisite it'll be not tested if HTTP cannot be detected or the detection is not enforced via ``--assume-http`. Please note that only the URL supplied (normally "/" ) is being tested.</p>
+<p><code>-B, --breach</code>                  Checks for BREACH (<em>Browser Reconnaissance and Exfiltration via Adaptive Compression of Hypertext</em>) vulnerability. As for this vulnerability HTTP level compression is a prerequisite it'll be not tested if HTTP cannot be detected or the detection is not enforced via <code>--assume-http</code>. Please note that only the URL supplied (normally "/" ) is being tested.</p>
 
 <p><code>-O, --poodle</code>                  Tests for SSL POODLE (<em>Padding Oracle On Downgraded Legacy Encryption</em>) vulnerability. It basically checks for the existence of CBC ciphers in SSLv3.</p>
 
@@ -403,9 +403,10 @@ Rating automatically gets disabled, to not give a wrong or misleading grade, whe
 
 <p><code>--json</code>                Logs additionally to JSON file <code>${NODE}-p${port}${YYYYMMDD-HHMM}.json</code> in the current working directory of the shell. The resulting JSON file is opposed to <code>--json-pretty</code> flat -- which means each section is self contained and has an identifier for each single check, the hostname/IP address, the port, severity and the finding. For vulnerabilities it may contain a CVE and CWE entry too. The output doesn't contain a banner or a footer.</p>
 
-<p><code>--jsonfile &lt;jsonfile&gt;</code> or <code>-oj &lt;jsonfile&gt;</code> Instead of the previous option you may want to use this one if you want to log the JSON out put into a directory or if you rather want to specify the log file name yourself. If <code>jsonfile</code> is a directory the output will put into <code>logfile/${NODE}-p${port}${YYYYMMDD-HHMM}.json. If </code>jsonfile` is a file it will use that file name, an absolute path is also permitted here.</p>
+<p><code>--jsonfile &lt;jsonfile&gt;</code> or <code>-oj &lt;jsonfile&gt;</code> Instead of the previous option you may want to use this one if you want to log the JSON out put into a directory or if you rather want to specify the log file name yourself. If <code>jsonfile</code> is a directory the output will put into <code>logfile/${NODE}-p${port}${YYYYMMDD-HHMM}.json</code>. If <code>jsonfile</code> is a file it will use that file name, an absolute path is also permitted here.</p>
 
-<p><code>--json-pretty</code> Logs additionally to JSON file <code>${NODE}-p${port}${YYYYMMDD-HHMM}.json in the current working directory of the shell. The resulting JSON file is opposed to </code>--json` non-flat -- which means it is structured. The structure contains a header similar to the banner on the screen, including the command line, scan host, openssl binary used, testssl version and epoch of the start time. Then for every test section of testssl.sh it contains a separate JSON object/section. Each finding has a key/value pair identifier with the identifier for each single check, the severity and the finding. For vulnerabilities it may contain a CVE and CWE entry too.  The footer lists the scan time in seconds.</p>
+<p><code>--json-pretty</code> Logs additionally to JSON file <code>${NODE}-p${port}${YYYYMMDD-HHMM}.json</code> in the current working directory of the shell. The resulting JSON file is opposed to <code>--json</code> non-flat -- which means it is structured. The structure contains a header similar to the banner on the screen, including the command line, scan host, openssl binary used, testssl version and epoch of the start time. Then for every test section of testssl.sh it contains a separate JSON object/section. Each finding has a key/value pair identifier with the identifier for each single check, the severity and the finding. For vulnerabilities it may contain a CVE and CWE entry too.  The footer lists the scan time in seconds.</p>
+
 
 <p><code>--jsonfile-pretty &lt;jsonfile&gt;</code> or <code>-oJ &lt;jsonfile&gt;</code>  Similar to the aforementioned <code>--jsonfile</code> or <code>--logfile</code> it logs the output in pretty JSON format (see <code>--json-pretty</code>) into a file or a directory. For further explanation see <code>--jsonfile</code> or <code>--logfile</code>.</p>
 
@@ -429,7 +430,7 @@ Rating automatically gets disabled, to not give a wrong or misleading grade, whe
 
 <p><code>--overwrite</code> Normally, if an output file already exists and it has a file size greater zero, testssl.sh will not allow you to overwrite this file. This option will do that <strong>without any warning</strong>. The environment variable OVERWRITE does the same. Be careful, you have been warned!</p>
 
-<p><code>--outprefix &lt;fname_prefix&gt;</code> Prepend output filename prefix <var>fname_prefix</var> before '${NODE}-'. You can use as well the environment variable FNAME_PREFIX. Using this any output files will be named <code>&lt;fname_prefix&gt;-${NODE}-p${port}${YYYYMMDD-HHMM}.&lt;format&gt;</code> when no file name of the respective output option was specified. If you do not like the separator '-' you can as well supply a <code>&lt;fname_prefix&gt;</code> ending in '.',  '_' or ','. In this case or if you already supplied '-' no additional '-' will be appended to <code>&lt;fname_prefix&gt;</code>.</p>
+<p><code>--outprefix &lt;fname_prefix&gt;</code> Prepend output filename prefix <var>fname_prefix</var> before <code>${NODE}-</code>. You can use as well the environment variable FNAME_PREFIX. Using this any output files will be named <code>&lt;fname_prefix&gt;-${NODE}-p${port}${YYYYMMDD-HHMM}.&lt;format&gt;</code> when no file name of the respective output option was specified. If you do not like the separator '-' you can as well supply a <code>&lt;fname_prefix&gt;</code> ending in '.',  '_' or ','. In this case or if you already supplied '-' no additional '-' will be appended to <code>&lt;fname_prefix&gt;</code>.</p>
 
 <p>A few file output options can also be preset via environment variables.</p>
 
