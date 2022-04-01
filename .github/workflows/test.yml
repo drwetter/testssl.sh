@@ -4,7 +4,7 @@ on:
   push:
     paths-ignore:
       - 'utils/**'
-      - 'docs/**'
+      - 'doc/**'
       - 'bin/**'
       - '**.md'
       - '**.pem'
@@ -14,7 +14,7 @@ on:
       - 'Dockerfile'
     pull_request:
       - 'utils/**'
-      - 'docs/**'
+      - 'doc/**'
       - 'bin/**'
       - '**.md'
       - '**.pem'
