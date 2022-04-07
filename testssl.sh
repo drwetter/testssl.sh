@@ -1313,8 +1313,8 @@ fileout_insert_warning() {
           else
                echo -e ", " >>"$JSONFILE"
           fi
+          FIRST_FINDING=true
      fi
-     FIRST_FINDING=true
 }
 
 fileout_csv_finding() {
