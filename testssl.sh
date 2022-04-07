@@ -10517,7 +10517,10 @@ run_fs() {
                               curve_found="${curve_found%%,*}"
                          fi
                          for (( i=low; i < high; i++ )); do
-                              ! "${supported_curve[i]}" && [[ "${curves_ossl_output[i]}" == "$curve_found" ]] && break
+                              if ! "${supported_curve[i]}"; then
+                                   [[ "${curves_ossl_output[i]}" == "$curve_found" ]] && break
+                                   [[ "${curves_ossl[i]}" == "$curve_found" ]] && break
+                              fi
                          done
                          [[ $i -eq $high ]] && break
                          supported_curve[i]=true
