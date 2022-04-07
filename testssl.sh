@@ -1301,15 +1301,20 @@ fileout_insert_warning() {
      [[ "$CMDLINE=" =~ -iL ]] && return 0
      # Note we still have the message on screen + in HTML which is not as optimal as it could be
 
-     if "$do_pretty_json"; then
+     if "$do_pretty_json" && "$JSONHEADER"; then
           echo -e "          \"clientProblem${CLIENT_PROB_NO}\" : [" >>"$JSONFILE"
           CLIENT_PROB_NO=$((CLIENT_PROB_NO + 1))
           FIRST_FINDING=true       # make sure we don't have a comma here
      fi
      fileout "$1" "$2" "$3"
      if "$do_pretty_json"; then
-          echo -e "\n          ]," >>"$JSONFILE"
+          if "$JSONHEADER"; then
+               echo -e "\n          ]," >>"$JSONFILE"
+          else
+               echo -e ", " >>"$JSONFILE"
+          fi
      fi
+     FIRST_FINDING=true
 }
 
 fileout_csv_finding() {
@@ -21214,6 +21219,7 @@ determine_optimal_proto() {
      local all_failed=true
      local tmp=""
      local proto optimal_proto
+     local jsonID="optimal_proto"
 
      "$do_tls_sockets" && return 0
 
@@ -21328,6 +21334,7 @@ determine_optimal_proto() {
 
      if [[ "$optimal_proto" == -ssl2 ]]; then
           prln_magenta "$NODEIP:$PORT appears to only support SSLv2."
+          fileout "$jsonID" "WARN" "$NODEIP:$PORT appears to only support SSLv2."
           ignore_no_or_lame " Type \"yes\" to proceed and accept false negatives or positives" "yes"
           [[ $? -ne 0 ]] && exit $ERR_CLUELESS
      elif "$all_failed" && ! "$ALL_FAILED_SOCKETS"; then
@@ -21335,6 +21342,7 @@ determine_optimal_proto() {
                pr_magenta " $NODE:$PORT appears to support TLS 1.3 ONLY. You better use --openssl=<path_to_openssl_supporting_TLS_1.3>"
                if ! "$OSSL_SHORTCUT" || [[ ! -x /usr/bin/openssl ]] || /usr/bin/openssl s_client -tls1_3 2>&1 | grep -aiq "unknown option"; then
                     outln
+                    fileout "$jsonID" "WARN" "$NODE:$PORT appears to support TLS 1.3 ONLY, but $OPENSSL does not support TLS 1.3"
                     ignore_no_or_lame " Type \"yes\" to proceed and accept all scan problems" "yes"
                     [[ $? -ne 0 ]] && exit $ERR_CLUELESS
                     MAX_OSSL_FAIL=10
@@ -21351,11 +21359,13 @@ determine_optimal_proto() {
                [[ "$(has_server_protocol "tls1_2")" -ne 0 ]] && [[ "$(has_server_protocol "tls1_1")" -ne 0 ]] &&
                [[ "$(has_server_protocol "tls1")" -ne 0 ]]; then
                prln_magenta " $NODE:$PORT appears to support SSLv3 ONLY. You better use --openssl=<path_to_openssl_supporting_SSL_3>"
+               fileout "$jsonID" "WARN" "$NODE:$PORT appears to support SSLv3 ONLY, but $OPENSSL does not support SSLv3."
                ignore_no_or_lame " Type \"yes\" to proceed and accept all scan problems" "yes"
                [[ $? -ne 0 ]] && exit $ERR_CLUELESS
                MAX_OSSL_FAIL=10
           else
                prln_bold " Your OpenSSL cannot connect to $NODEIP:$PORT"
+               fileout "$jsonID" "WARN" "Your OpenSSL cannot connect to $NODEIP:$PORT."
                ignore_no_or_lame " The results might look ok but they could be nonsense. Really proceed ? (\"yes\" to continue)" "yes"
                [[ $? -ne 0 ]] && exit $ERR_CLUELESS
           fi
@@ -21363,8 +21373,10 @@ determine_optimal_proto() {
           outln
           if "$HAS_IPv6"; then
                pr_bold " Your $OPENSSL is not IPv6 aware, or $NODEIP:$PORT "
+               fileout "$jsonID" "WARN" "Your $OPENSSL is not IPv6 aware, or $NODEIP:$PORT doesn't seem to be a TLS/SSL enabled server."
           else
                pr_bold " $NODEIP:$PORT "
+               fileout "$jsonID" "WARN" "$NODEIP:$PORT doesn't seem to be a TLS/SSL enabled server."
           fi
           tmpfile_handle ${FUNCNAME[0]}.txt
           prln_bold "doesn't seem to be a TLS/SSL enabled server";
@@ -21376,6 +21388,7 @@ determine_optimal_proto() {
           # FIXME: Should we include some sort of "please report" note here?
           prln_magenta " Testing with $NODE:$PORT only worked using $OPENSSL."
           prln_magenta " Test results may be somewhat better if the --ssl-native option is used."
+          fileout "$jsonID" "WARN" "Testing with $NODE:$PORT only worked using $OPENSSL."
           ignore_no_or_lame " Type \"yes\" to proceed and accept false negatives or positives" "yes"
           [[ $? -ne 0 ]] && exit $ERR_CLUELESS
      fi
