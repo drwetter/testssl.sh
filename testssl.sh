@@ -10323,28 +10323,26 @@ run_fs() {
                fileout "$jsonID" "WARN" "tests skipped as you only have $nr_supported_ciphers FS ciphers on the client site. ($CLIENT_MIN_FS are required)"
                return 1
           fi
+          # By default, OpenSSL 1.1.1 and above only include a few curves in the ClientHello, so in order
+          # to test all curves, the -curves option must be added. In addition, OpenSSL limits the number of
+          # curves that can be specified to 28. So, if more than 28 curves are supported, then the curves must
+          # be tested in batches.
+          curves_list1="$(strip_trailing_space "$(strip_leading_space "$OSSL_SUPPORTED_CURVES")")"
+          curves_list1="${curves_list1//  / }"
+          if [[ "$(count_words "$OSSL_SUPPORTED_CURVES")" -gt 28 ]]; then
+               # Place the first 28 supported curves in curves_list1 and the remainder in curves_list2.
+               curves_list2="${curves_list1#* * * * * * * * * * * * * * * * * * * * * * * * * * * * }"
+               curves_list1="${curves_list1%$curves_list2}"
+               curves_list1="$(strip_trailing_space "$curves_list1")"
+               curves_list2="${curves_list2// /:}"
+          fi
+          curves_list1="${curves_list1// /:}"
           $OPENSSL s_client $(s_client_options "-cipher $fs_cipher_list -ciphersuites ALL $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
           sclient_connect_successful $? $TMPFILE
           sclient_success=$?
           [[ $sclient_success -eq 0 ]] && [[ $(grep -ac "BEGIN CERTIFICATE" $TMPFILE) -eq 0 ]] && sclient_success=1
           # Sometimes a TLS 1.3 ClientHello will fail, but a TLS 1.2 ClientHello will succeed. See #2131.
           if [[ $sclient_success -ne 0 ]]; then
-               # By default, OpenSSL 1.1.1 and above only include a few curves in the ClientHello, so in order
-               # to test all curves, the -curves option must be added. In addition, OpenSSL limits the number of
-               # curves that can be specified to 28. So, if more than 28 curves are supported, then the curves must
-               # be tested in batches.
-               curves_list1="$(strip_trailing_space "$(strip_leading_space "$OSSL_SUPPORTED_CURVES")")"
-               curves_list1="${curves_list1//  / }"
-               if [[ "$(count_words "$OSSL_SUPPORTED_CURVES")" -le 28 ]]; then
-                    curves_list1="${curves_list1// /:}"
-               else
-                    # Place the first 28 supported curves in curves_list1 and the remainder in curves_list2.
-                    curves_list2="${curves_list1#* * * * * * * * * * * * * * * * * * * * * * * * * * * * }"
-                    curves_list1="${curves_list1%$curves_list2}"
-                    curves_list1="$(strip_trailing_space "$curves_list1")"
-                    curves_list1="${curves_list1// /:}"
-                    curves_list2="${curves_list2// /:}"
-               fi
                curves_option="-curves $curves_list1"
                $OPENSSL s_client $(s_client_options "-cipher $fs_cipher_list $curves_option $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
                sclient_connect_successful $? $TMPFILE
@@ -10379,11 +10377,19 @@ run_fs() {
           fi
           if "$HAS_TLS13"; then
                protos_to_try="-no_ssl2 -no_tls1_3"
+               ! "$using_sockets" && [[ -z "$curves_option" ]] && protos_to_try+=" curves1-no_tls1_3"
+               ! "$using_sockets" && [[ -z "$curves_option" ]] && [[ -n "$curves_list2" ]] && protos_to_try+=" curves2-no_tls1_3"
           else
                protos_to_try="-no_ssl2"
+               ! "$using_sockets" && [[ -z "$curves_option" ]] && protos_to_try+=" curves1-no_ssl2"
+               ! "$using_sockets" && [[ -z "$curves_option" ]] && [[ -n "$curves_list2" ]] && protos_to_try+=" curves2-no_ssl2"
           fi
 
           for proto in $protos_to_try; do
+               # If ECDHE ciphers were already found, then no need to try
+               # again with a different "-curves" option.
+               [[ "$proto" =~ curves1 ]] && "$ecdhe_offered" && break
+               [[ "$proto" =~ curves2 ]] && "$ecdhe_offered" && break
                while true; do
                     ciphers_to_test=""
                     tls13_ciphers_to_test=""
@@ -10397,7 +10403,12 @@ run_fs() {
                          fi
                     done
                     [[ -z "$ciphers_to_test" ]] && [[ -z "$tls13_ciphers_to_test" ]] && break
-                    $OPENSSL s_client $(s_client_options "$proto -cipher "\'${ciphers_to_test:1}\'" -ciphersuites "\'${tls13_ciphers_to_test:1}\'" $curves_option $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") &>$TMPFILE </dev/null
+                    if [[ "$proto" =~ curves1 ]]; then
+                         curves_option="-curves $curves_list1"
+                    elif [[ "$proto" =~ curves2 ]]; then
+                         curves_option="-curves $curves_list2"
+                    fi
+                    $OPENSSL s_client $(s_client_options "-${proto#*-} -cipher "\'${ciphers_to_test:1}\'" -ciphersuites "\'${tls13_ciphers_to_test:1}\'" $curves_option $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") &>$TMPFILE </dev/null
                     sclient_connect_successful $? $TMPFILE || break
                     fs_cipher=$(get_cipher $TMPFILE)
                     [[ -z "$fs_cipher" ]] && break
@@ -10409,6 +10420,8 @@ run_fs() {
                     if [[ "$fs_cipher" == TLS13* ]] || [[ "$fs_cipher" == TLS_* ]] || [[ "$fs_cipher" == AEAD-* ]]; then
                          fs_tls13_offered=true
                          "$WIDE" && kx[i]="$(read_dhtype_from_file $TMPFILE)"
+                    elif [[ "$fs_cipher" == ECDHE-* ]]; then
+                         ecdhe_offered=true
                     fi
                     if "$WIDE"; then
                          dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
