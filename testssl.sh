@@ -10328,18 +10328,17 @@ run_fs() {
           sclient_success=$?
           [[ $sclient_success -eq 0 ]] && [[ $(grep -ac "BEGIN CERTIFICATE" $TMPFILE) -eq 0 ]] && sclient_success=1
           # Sometimes a TLS 1.3 ClientHello will fail, but a TLS 1.2 ClientHello will succeed. See #2131.
-          if [[ $sclient_success -ne 0 ]] && "$HAS_TLS13"; then
+          if [[ $sclient_success -ne 0 ]]; then
                # By default, OpenSSL 1.1.1 and above only include a few curves in the ClientHello, so in order
                # to test all curves, the -curves option must be added. In addition, OpenSSL limits the number of
                # curves that can be specified to 28. So, if more than 28 curves are supported, then the curves must
                # be tested in batches.
+               curves_list1="$(strip_trailing_space "$(strip_leading_space "$OSSL_SUPPORTED_CURVES")")"
+               curves_list1="${curves_list1//  / }"
                if [[ "$(count_words "$OSSL_SUPPORTED_CURVES")" -le 28 ]]; then
-                    curves_list1="$(strip_trailing_space "$(strip_leading_space "$OSSL_SUPPORTED_CURVES")")"
                     curves_list1="${curves_list1// /:}"
                else
                     # Place the first 28 supported curves in curves_list1 and the remainder in curves_list2.
-                    curves_list1="$(strip_trailing_space "$(strip_leading_space "$OSSL_SUPPORTED_CURVES")")"
-                    curves_list1="${curves_list1//  / }"
                     curves_list2="${curves_list1#* * * * * * * * * * * * * * * * * * * * * * * * * * * * }"
                     curves_list1="${curves_list1%$curves_list2}"
                     curves_list1="$(strip_trailing_space "$curves_list1")"
