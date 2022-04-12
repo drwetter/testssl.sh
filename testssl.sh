@@ -8181,7 +8181,9 @@ determine_cert_fingerprint_serial() {
      result="${result//serial=}"
      result="${result//:/}"
      result="${result//SHA1 /}"
+     result="${result//sha1 /}"
      result="${result//SHA256 /}"
+     result="${result//sha256 /}"
      # When the serial number is too large we'll get a 0x0a LF after 70 ASCII chars (see #2010).
      # Thus we clean them here so that it is displayed correctly.
      result="${result/[$'\n\r']/}"
