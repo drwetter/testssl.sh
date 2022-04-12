@@ -8615,7 +8615,9 @@ determine_cert_fingerprint_serial() {
      result="${result//serial=}"
      result="${result//:/}"
      result="${result//SHA1 /}"
+     result="${result//sha1 /}"
      result="${result//SHA256 /}"
+     result="${result//sha256 /}"
      # When the serial number is too large we'll get a 0x0a LF after 70 ASCII chars (see #2010).
      # Thus we clean them here so that it is displayed correctly.
      result="${result/[$'\n\r']/}"
@@ -9706,7 +9708,7 @@ certificate_info() {
           out " ($enddate). "
           cn="$(awk -F= '/Subject:.*CN/ { print $NF }' <<< "${intermediate_certs_txt[i]}")"
           issuer_CN="$(awk -F= '/Issuer:.*CN/ { print $NF }' <<< "${intermediate_certs_txt[i]}")"
-          pr_italic "$cn"; out " <-- "; prln_italic "$issuer_CN"
+          pr_italic "$(strip_leading_space "$cn")"; out " <-- "; prln_italic "$(strip_leading_space "$issuer_CN")"
           fileout "intermediate_cert_notAfter <#${i}>${json_postfix}" "$expok" "$enddate"
           fileout "intermediate_cert_expiration <#${i}>${json_postfix}" "$expok" "$cn_finding"
           fileout "intermediate_cert_chain <#${i}>${json_postfix}" "INFO" "$cn <-- $issuer_CN"
