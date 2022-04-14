@@ -305,7 +305,7 @@ TMPFILE=""
 ERRFILE=""
 CLIENT_AUTH=false
 TLS_TICKETS=false
-NO_SSL_SESSIONID=false
+NO_SSL_SESSIONID=true
 CERT_COMPRESSION=${CERT_COMPRESSION:-false}  # secret flag to set in addition to --devel for certificate compression
 HOSTCERT=""                                  # File with host certificate, without intermediate certificate
 HEADERFILE=""
@@ -7183,14 +7183,19 @@ tls_time() {
 #
 sclient_connect_successful() {
      local server_hello="$(cat -v "$2")"
+     local connect_success=false
      local re='Master-Key: ([^\
 ]*)'
 
-     [[ $1 -eq 0 ]] && return 0
-     if [[ "$server_hello" =~ $re ]]; then
-          [[ -n "${BASH_REMATCH[1]}" ]] && return 0
+     [[ $1 -eq 0 ]] && connect_success=true
+     if ! "$connect_success" && [[ "$server_hello" =~ $re ]]; then
+          [[ -n "${BASH_REMATCH[1]}" ]] && connect_success=true
      fi
-     [[ "$server_hello" =~ (New|Reused)", "(SSLv[23]|TLSv1(\.[0-3])?(\/SSLv3)?)", Cipher is "([A-Z0-9]+-[A-Za-z0-9\-]+|TLS_[A-Za-z0-9_]+) ]] && return 0
+     ! "$connect_success" && [[ "$server_hello" =~ (New|Reused)", "(SSLv[23]|TLSv1(\.[0-3])?(\/SSLv3)?)", Cipher is "([A-Z0-9]+-[A-Za-z0-9\-]+|TLS_[A-Za-z0-9_]+) ]] && connect_success=true
+     if "$connect_success"; then
+          "$NO_SSL_SESSIONID" && [[ "$server_hello" =~ Session-ID:\ [a-fA-F0-9]{2,64} ]] && NO_SSL_SESSIONID=false
+          return 0
+     fi
      # what's left now is: master key empty and Session-ID not empty
      # ==> probably client-based auth with x509 certificate. We handle that at other places
      #
@@ -12496,6 +12501,7 @@ parse_tls_serverhello() {
                fi
           done
      fi
+     [[ "0x${DETECTED_TLS_VERSION:2:2}" -le "0x03" ]] && [[ $tls_sid_len -gt 0 ]] && NO_SSL_SESSIONID=false
 
      if [[ "$DETECTED_TLS_VERSION" == "0300" ]]; then
           echo "Protocol  : SSLv3" >> $TMPFILE
@@ -18389,7 +18395,7 @@ sclient_auth() {
           fi
      fi
      [[ $ret -eq 0 ]] && \
-          [[ -z $(awk '/Session-ID: / { print $2 }' "$2") ]] && NO_SSL_SESSIONID=true # NO_SSL_SESSIONID is preset globally first
+          [[ -n $(awk '/Session-ID: / { print $2 }' "$2") ]] && NO_SSL_SESSIONID=false
      return $ret
 }
 
@@ -20161,7 +20167,7 @@ reset_hostdepended_vars() {
      KNOWN_OSSL_PROB=false
      TLS13_ONLY=false
      CLIENT_AUTH=false
-     NO_SSL_SESSIONID=false
+     NO_SSL_SESSIONID=true
      DH_GROUP_OFFERED=""
      DH_GROUP_LEN_P=0
      KEY_SHARE_EXTN_NR="33"
