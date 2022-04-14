@@ -6329,7 +6329,7 @@ run_server_preference() {
                fi
           fi
      fi
-     default_proto=$(get_protocol $TMPFILE)
+     [[ $ret -eq 0 ]] && default_proto=$(get_protocol $TMPFILE)
      [[ "$default_proto" == TLSv1.0 ]] && default_proto="TLSv1"
      # debugme tm_out " --> $default_proto\n"
 
