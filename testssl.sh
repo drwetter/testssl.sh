@@ -21090,7 +21090,7 @@ sclient_auth() {
 # This information can be used by determine_optimal_proto() to help distinguish between a server
 # that is not TLS/SSL enabled and one that is not compatible with the version of OpenSSL being used.
 determine_optimal_sockets_params() {
-     local -i ret1=1 ret2=1
+     local -i ret1=1 ret2=1 ret3=1
      local i proto cipher_offered
      local all_failed=true
 
@@ -21159,8 +21159,6 @@ determine_optimal_sockets_params() {
                add_proto_offered tls1_2 yes
                TLS12_CIPHER="$TLS12_CIPHER_2ND_TRY"
                all_failed=false
-          else
-               add_proto_offered tls1_2 no
           fi
           if [[ $ret2 -eq 2 ]]; then
                case $DETECTED_TLS_VERSION in
@@ -21172,7 +21170,32 @@ determine_optimal_sockets_params() {
                all_failed=false
           fi
      fi
-     if [[ $ret1 -eq 0 ]] || [[ $ret2 -eq 0 ]]; then
+     # Try a third time with cipher suites not in $TLS12_CIPHER or
+     # $TLS12_CIPHER_2ND_TRY. If using these cipher suites results in a
+     # successful connection, then change $TLS12_CIPHER to these
+     # cipher suites so that later tests will use this list of cipher
+     # suites.
+     if [[ $ret1 -ne 0 ]] && [[ $ret2 -ne 0 ]]; then
+          tls_sockets "03" "$TLS12_CIPHER_3RD_TRY"
+          ret3=$?
+          if [[ $ret3 -eq 0 ]]; then
+               add_proto_offered tls1_2 yes
+               TLS12_CIPHER="$TLS12_CIPHER_3RD_TRY"
+               all_failed=false
+          else
+               add_proto_offered tls1_2 no
+          fi
+          if [[ $ret3 -eq 2 ]]; then
+               case $DETECTED_TLS_VERSION in
+                    0302)  add_proto_offered tls1_1 yes ;;
+                    0301)  add_proto_offered tls1 yes ;;
+                    0300)  add_proto_offered ssl3 yes ;;
+               esac
+               [[ $ret1 -ne 2 ]] && [[ $ret2 -ne 2 ]] && TLS12_CIPHER="$TLS12_CIPHER_3RD_TRY"
+               all_failed=false
+          fi
+     fi
+     if [[ $ret1 -eq 0 ]] || [[ $ret2 -eq 0 ]] || [[ $ret3 -eq 0 ]]; then
           cipher_offered="$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")"
           if [[ "$cipher_offered" == TLS_* ]] || [[ "$cipher_offered" == SSL_* ]]; then
                cipher_offered="$(rfc2hexcode "$cipher_offered")"
