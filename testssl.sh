@@ -328,6 +328,9 @@ HAS_CURVES=false
 OSSL_SUPPORTED_CURVES=""
 HAS_SSL2=false
 HAS_SSL3=false
+HAS_TLS1=false
+HAS_TLS11=false
+HAS_TLS12=false
 HAS_TLS13=false
 HAS_X448=false
 HAS_X25519=false
@@ -976,6 +979,7 @@ actually_supported_osslciphers() {
      else
           options="${options//-no_ssl2 /}"
      fi
+     ! "$HAS_TLS1" && options="${options//-tls1 /}"
      if "$HAS_CIPHERSUITES"; then
           $OPENSSL ciphers $options $OSSL_CIPHERS_S -ciphersuites "$tls13_ciphers" "$ciphers" 2>/dev/null || echo ""
      elif [[ -n "$tls13_ciphers" ]]; then
@@ -3880,11 +3884,10 @@ run_cipher_match(){
                [[ $((nr_ossl_ciphers%num_bundles)) -ne 0 ]] && bundle_size+=1
           fi
 
-          if "$HAS_TLS13"; then
-               protos_to_try="-no_ssl2 -tls1_2 -tls1_1 -tls1"
-          else
-               protos_to_try="-no_ssl2 -tls1_1 -tls1"
-          fi
+          protos_to_try="-no_ssl2"
+          "$HAS_TLS13" && "$HAS_TLS12" && protos_to_try+=" -tls1_2"
+          "$HAS_TLS11" && protos_to_try+=" -tls1_1"
+          "$HAS_TLS1" && protos_to_try+=" -tls1"
           "$HAS_SSL3" && protos_to_try+=" -ssl3"
 
           for proto in $protos_to_try; do
@@ -4153,11 +4156,10 @@ run_allciphers() {
           [[ $((nr_ossl_ciphers%num_bundles)) -ne 0 ]] && bundle_size+=1
      fi
 
-     if "$HAS_TLS13"; then
-          protos_to_try="-no_ssl2 -tls1_2 -tls1_1 -tls1"
-     else
-          protos_to_try="-no_ssl2 -tls1_1 -tls1"
-     fi
+     protos_to_try="-no_ssl2"
+     "$HAS_TLS13" && "$HAS_TLS12" && protos_to_try+=" -tls1_2"
+     "$HAS_TLS11" && protos_to_try+=" -tls1_1"
+     "$HAS_TLS1" && protos_to_try+=" -tls1"
      "$HAS_SSL3" && protos_to_try+=" -ssl3"
 
      for proto in $protos_to_try; do
@@ -4315,7 +4317,7 @@ ciphers_by_strength() {
      "$wide" || out "  "
      if ! "$using_sockets" && ! sclient_supported "$proto"; then
           "$wide" && outln
-          pr_local_problem "$OPENSSL does not support $proto"
+          pr_local_problem "Your $OPENSSL does not support $proto"
           "$wide" && outln
           return 0
      fi
@@ -4445,7 +4447,7 @@ ciphers_by_strength() {
           fi
      else # no SSLv2
           nr_ossl_ciphers=0
-          if { "$HAS_SSL3" || [[ $proto != -ssl3 ]]; } && { "$HAS_TLS13" || [[ $proto != -tls1_3 ]]; }; then
+          if sclient_supported "$proto"; then
                for (( i=0; i < nr_ciphers; i++ )); do
                     if "${ossl_supported[i]}"; then
                          ciphers_found2[nr_ossl_ciphers]=false
@@ -5110,10 +5112,42 @@ run_client_simulation() {
                               [[ -n "$supported_curves" ]] && curves[i]="-curves ${supported_curves:1}"
                          fi
                          options="$(s_client_options "-cipher ${ch_ciphers[i]} -ciphersuites "\'${ciphersuites[i]}\'" ${curves[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${ch_sni[i]}")"
+                         "$HAS_TLS12" || options="${options//-no_tls1_2 /}"
+                         "$HAS_TLS11" || options="${options//-no_tls1_1 /}"
+                         "$HAS_TLS1" || options="${options//-no_tls1 /}"
+                         "$HAS_SSL3" || options="${options//-no_ssl3 /}"
                          debugme echo "$OPENSSL s_client $options  </dev/null"
-                         $OPENSSL s_client $options </dev/null >$TMPFILE 2>$ERRFILE
-                         sclient_connect_successful $? $TMPFILE
-                         sclient_success=$?
+                         # If "${protos[i]}" specifies protocols that aren't supported
+                         # by $OPENSSL, then skip the test.
+                         if [[ ! "${protos[i]}" =~ -no_ ]] && [[ ! "${protos[i]}" =~ \  ]] && ! sclient_supported "${protos[i]}"; then
+                              pr_local_problem "${protos[i]} not supported, "
+                              sclient_success=1
+                         elif ! "$HAS_SSL3" && [[ "${highest_protocol[i]}" == 0x0300 ]]; then
+                              pr_local_problem "SSLv3 not supported, "
+                              sclient_success=1
+                         elif ! "$HAS_TLS1" && [[ "${highest_protocol[i]}" == 0x0301 ]]; then
+                              pr_local_problem "TLS 1 not supported, "
+                              sclient_success=1
+                         elif ! "$HAS_TLS11" && [[ "${highest_protocol[i]}" == 0x0302 ]]; then
+                              pr_local_problem "TLS 1.1 not supported, "
+                              sclient_success=1
+                         elif ! "$HAS_TLS12" && [[ "${highest_protocol[i]}" == 0x0303 ]]; then
+                              pr_local_problem "TLS 1.2 not supported, "
+                              sclient_success=1
+                         elif ! "$HAS_TLS13" && [[ "${highest_protocol[i]}" == 0x0304 ]]; then
+                              pr_local_problem "TLS 1.3 not supported, "
+                              sclient_success=1
+                         elif [[ -z "$(actually_supported_osslciphers ${ch_ciphers[i]} ${ciphersuites[i]})" ]]; then
+                              # In some cases $OPENSSL supports the protocol, but none of the ciphers
+                              # offered by the client being simulated. In that case, issue a "Local problem"
+                              # rather than having sclient_connect_successful() write "Oops: openssl s_client connect problem".
+                              pr_local_problem "No supported ciphers, "
+                              sclient_success=1
+                         else
+                              $OPENSSL s_client $options </dev/null >$TMPFILE 2>$ERRFILE
+                              sclient_connect_successful $? $TMPFILE
+                              sclient_success=$?
+                         fi
                     fi
                     if [[ $sclient_success -eq 0 ]]; then
                          # If an ephemeral DH key was used, check that the number of bits is within range.
@@ -5149,13 +5183,13 @@ run_client_simulation() {
                          if [[ "$proto" == TLSv1.2 ]] && { ! "$using_sockets" || [[ -z "${handshakebytes[i]}" ]]; }; then
                               # OpenSSL reports TLS1.2 even if the connection is TLS1.1 or TLS1.0. Need to figure out which one it is...
                               for tls in ${tlsvers[i]}; do
-                                   # If the handshake data includes TLS 1.3 we need to remove it, otherwise the
+                                   # If the handshake data specifies an unsupported protocol we need to remove it, otherwise the
                                    # simulation will fail with # 'Oops: openssl s_client connect problem'
                                    # before/after trying another protocol. We only print a warning it in debug mode
                                    # as otherwise we would need e.g. handle the curves in a similar fashion -- not
                                    # to speak about ciphers
-                                   if [[ $tls =~ 1_3 ]] && ! "$HAS_TLS13"; then
-                                        debugme pr_local_problem "TLS 1.3 not supported, "
+                                   if ! sclient_supported "$tls"; then
+                                        debugme pr_local_problem "$tls not supported, "
                                         continue
                                    fi
                                    options="$(s_client_options "$tls -cipher ${ch_ciphers[i]} -ciphersuites "\'${ciphersuites[i]}\'" ${curves[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${ch_sni[i]}")"
@@ -5228,7 +5262,6 @@ run_client_simulation() {
 }
 
 # generic function whether $1 is supported by s_client.
-# Currently only used for protocols that's why we saved -connect $NXCONNECT.
 sclient_supported() {
      case "$1" in
           -ssl2)
@@ -5237,30 +5270,25 @@ sclient_supported() {
           -ssl3)
                "$HAS_SSL3" || return 7
                ;;
+          -tls1)
+               "$HAS_TLS1" || return 7
+               ;;
+          -tls1_1)
+               "$HAS_TLS11" || return 7
+               ;;
+          -tls1_2)
+               "$HAS_TLS12" || return 7
+               ;;
           -tls1_3)
                "$HAS_TLS13" || return 7
                ;;
-          *)   if $OPENSSL s_client "$1" </dev/null 2>&1 | grep -aiq "unknown option"; then
+          *)   if $OPENSSL s_client -connect $NXCONNECT "$1" </dev/null 2>&1 | grep -aiq "unknown option"; then
                     return 7
                fi
                ;;
      esac
      return 0
 }
-
-# generic function whether $1 is supported by s_client ($2: string to display)
-#TODO: we need to consider to remove the two instances from where this is called.
-#
-locally_supported() {
-     local -i ret
-
-     [[ -n "$2" ]] && out "$2 "
-     sclient_supported "$1"
-     ret=$?
-     [[ $ret -eq 7 ]] && prln_local_problem "$OPENSSL doesn't support \"s_client $1\""
-     return $ret
-}
-
 
 # The protocol check in run_protocols needs to be redone. The using_sockets part there kind of sucks.
 # 1) we need to have a variable where the results are being stored so that every other test doesn't have to do this again
@@ -5573,8 +5601,10 @@ run_protocols() {
      case $ret_val_tls1 in
           0)   pr_svrty_low "offered" ; outln " (deprecated)"
                fileout "$jsonID" "LOW" "offered (deprecated)"
-               latest_supported="0301"
-               latest_supported_string="TLSv1.0"
+               if "$using_sockets" || "$HAS_TLS1"; then
+                    latest_supported="0301"
+                    latest_supported_string="TLSv1.0"
+               fi
                add_proto_offered tls1 yes
                set_grade_cap "B" "TLS 1.0 offered"
                ;;                                                # nothing wrong with it -- per se
@@ -5653,8 +5683,10 @@ run_protocols() {
      case $ret_val_tls11 in
           0)   pr_svrty_low "offered" ; outln " (deprecated)"
                fileout "$jsonID" "LOW" "offered (deprecated)"
-               latest_supported="0302"
-               latest_supported_string="TLSv1.1"
+               if "$using_sockets" || "$HAS_TLS11"; then
+                    latest_supported="0302"
+                    latest_supported_string="TLSv1.1"
+               fi
                add_proto_offered tls1_1 yes
                set_grade_cap "B" "TLS 1.1 offered"
                ;;                                                # nothing wrong with it
@@ -5766,8 +5798,10 @@ run_protocols() {
      case $ret_val_tls12 in
           0)   prln_svrty_best "offered (OK)"
                fileout "$jsonID" "OK" "offered"
-               latest_supported="0303"
-               latest_supported_string="TLSv1.2"
+               if "$using_sockets" || "$HAS_TLS12"; then
+                    latest_supported="0303"
+                    latest_supported_string="TLSv1.2"
+               fi
                add_proto_offered tls1_2 yes
                ;;                                                     # GCM cipher in TLS 1.2: very good!
           1)   add_proto_offered tls1_2 no
@@ -6012,15 +6046,17 @@ listciphers() {
      local debugname=""
      local ciphers="$1"
      local tls13_ciphers="$TLS13_OSSL_CIPHERS"
+     local options="$3 "
 
      [[ "$2" != ALL ]] && tls13_ciphers="$2"
      "$HAS_SECLEVEL" && [[ -n "$ciphers" ]] && ciphers="@SECLEVEL=0:$1"
+     ! "$HAS_TLS1" && options="${options//-tls1 /}"
      if "$HAS_CIPHERSUITES"; then
-          $OPENSSL ciphers $OSSL_CIPHERS_S $3 -ciphersuites "$tls13_ciphers" "$ciphers" &>$TMPFILE
+          $OPENSSL ciphers $OSSL_CIPHERS_S $options -ciphersuites "$tls13_ciphers" "$ciphers" &>$TMPFILE
      elif [[ -n "$tls13_ciphers" ]]; then
-          $OPENSSL ciphers $OSSL_CIPHERS_S $3 "$tls13_ciphers:$ciphers" &>$TMPFILE
+          $OPENSSL ciphers $OSSL_CIPHERS_S $options "$tls13_ciphers:$ciphers" &>$TMPFILE
      else
-          $OPENSSL ciphers $OSSL_CIPHERS_S $3 "$ciphers" &>$TMPFILE
+          $OPENSSL ciphers $OSSL_CIPHERS_S $options "$ciphers" &>$TMPFILE
      fi
      ret=$?
      debugme cat $TMPFILE
@@ -6066,8 +6102,8 @@ sub_cipherlists() {
                          ! "$HAS_TLS13" && continue
                          [[ -z "$2" ]] && continue
                     fi
-                    ! "$HAS_SSL3" && [[ "$proto" == -ssl3 ]] && continue
                     if [[ "$proto" != -no_ssl2 ]]; then
+                         sclient_supported "$proto" || continue
                          "$FAST" && continue
                          [[ $(has_server_protocol "${proto:1}") -eq 1 ]] && continue
                     fi
@@ -7161,18 +7197,13 @@ cipher_pref_check() {
      local -a -i index
      local ciphers_found_with_sockets=false prioritize_chacha=false
 
-     if [[ $proto == ssl3 ]] && ! "$HAS_SSL3" && ! "$using_sockets"; then
+     if ! "$using_sockets" && ! sclient_supported "-$proto"; then
           outln
-          prln_local_problem "$OPENSSL doesn't support \"s_client -ssl3\"";
-          return 0
-     fi
-     if [[ $proto == tls1_3 ]] && ! "$HAS_TLS13" && ! "$using_sockets"; then
-          outln
-          prln_local_problem "$OPENSSL doesn't support \"s_client -tls1_3\"";
+          prln_local_problem "$OPENSSL doesn't support \"s_client -$proto\"";
           return 0
      fi
 
-     if { [[ $proto != tls1_3 ]] || "$HAS_TLS13"; } && { [[ $proto != ssl3 ]] || "$HAS_SSL3"; }; then
+     if sclient_supported "-$proto"; then
           if [[ $proto == tls1_2 ]] && "$SERVER_SIZE_LIMIT_BUG" && \
              [[ "$(count_ciphers "$(actually_supported_osslciphers "ALL:COMPLEMENTOFALL" "" "")")" -gt 127 ]]; then
                order="$(check_tls12_pref "$wide")"
@@ -8157,7 +8188,7 @@ get_server_certificate() {
 
           for proto in $protocols_to_try; do
                [[ 1 -eq $(has_server_protocol $proto) ]] && continue
-               [[ "$proto" == ssl3 ]] && ! "$HAS_SSL3" && continue
+               sclient_supported "-$proto" || continue
                addcmd=""
                $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -cipher $ciphers_to_test -showcerts -connect $NODEIP:$PORT $PROXY $SNI -$proto -tlsextdebug $npn_params -status -msg") </dev/null 2>$ERRFILE >$TMPFILE
                if sclient_connect_successful $? $TMPFILE; then
@@ -8167,7 +8198,7 @@ get_server_certificate() {
           done                          # this loop is needed for IIS6 and others which have a handshake size limitations
           if [[ $success -eq 7 ]]; then
                # "-status" above doesn't work for GOST only servers, so we do another test without it and see whether that works then:
-               [[ "$proto" == ssl3 ]] && ! "$HAS_SSL3" && return 7
+               sclient_supported "-$proto" || return 7
                $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -cipher $ciphers_to_test -showcerts -connect $NODEIP:$PORT $PROXY $SNI -$proto -tlsextdebug") </dev/null 2>>$ERRFILE >$TMPFILE
                if ! sclient_connect_successful $? $TMPFILE; then
                     if [ -z "$1" ]; then
@@ -17396,8 +17427,8 @@ run_sweet32() {
           fi
           for proto in -no_ssl2 -tls1_1 -tls1 -ssl3; do
                [[ $nr_supported_ciphers -eq 0 ]] && break
-               ! "$HAS_SSL3" && [[ "$proto" == -ssl3 ]] && continue
                if [[ "$proto" != -no_ssl2 ]]; then
+                    sclient_supported "$proto" || continue
                     "$FAST" && break
                     [[ $(has_server_protocol "${proto:1}") -eq 1 ]] && continue
                fi
@@ -17553,7 +17584,7 @@ run_tls_poodle() {
 # the countermeasure to protect against protocol downgrade attacks.
 #
 run_tls_fallback_scsv() {
-     local -i ret=0 debug_level
+     local -i ret=0 debug_level hsp
      local high_proto="" low_proto=""
      local p high_proto_str protos_to_try
      local using_sockets=true
@@ -17578,21 +17609,26 @@ run_tls_fallback_scsv() {
           return 0
      fi
      for p in tls1_2 tls1_1 tls1 ssl3; do
-          [[ $(has_server_protocol "$p") -eq 1 ]] && continue
-          if [[ $(has_server_protocol "$p") -eq 0 ]]; then
+          hsp=$(has_server_protocol "$p")
+          [[ $hsp -eq 1 ]] && continue
+          if [[ $hsp -eq 0 ]]; then
                high_proto="$p"
                break
           fi
-
-          if [[ "$p" == ssl3 ]] && ! "$HAS_SSL3"; then
-               "$using_sockets" || continue
-               tls_sockets "00" "$TLS_CIPHER" "" "" "true"
+          if ! sclient_supported "-$p"; then
+               "$using_sockets"|| continue
+               case "$p" in
+                    "tls1_2") tls_sockets "03" "$TLS12_CIPHER" "" "" "true" ;;
+                    "tls1_1") tls_sockets "02" "$TLS_CIPHER" "" "" "true" ;;
+                    "tls1")   tls_sockets "01" "$TLS_CIPHER" "" "" "true" ;;
+                    "ssl3")   tls_sockets "00" "$TLS_CIPHER" "" "" "true" ;;
+               esac
                if [[ $? -eq 0 ]]; then
                     high_proto="$p"
-                    add_proto_offered ssl3 yes
+                    add_proto_offered "$p" yes
                     break
                else
-                    add_proto_offered ssl3 no
+                    add_proto_offered "$p" no
                fi
           else
                $OPENSSL s_client $(s_client_options "-$p $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
@@ -17617,19 +17653,22 @@ run_tls_fallback_scsv() {
                fileout "$jsonID" "HIGH" "only SSLv3 supported"
                return 0
                ;;
-          *)   if [[ $(has_server_protocol tls1_3) -eq 0 ]]; then
+          # TODO: Need to recheck possible scenarios when $high_proto can't be found if
+          # not using sockets and $OPENSSL doesn't support TLS 1, TLS 1.1, etc.
+          *)   hsp=$(has_server_protocol tls1_3)
+               if [[ $hsp -eq 0 ]] && { "$HAS_TLS12" || "$using_sockets"; }; then
                     # If the server supports TLS 1.3, and does not support TLS 1.2, TLS 1.1, or TLS 1,
                     # then assume it does not support SSLv3, even if SSLv3 cannot be tested.
                     pr_svrty_good "No fallback possible (OK)"; outln ", TLS 1.3 is the only protocol"
                     fileout "$jsonID" "OK" "only TLS 1.3 supported"
-               elif [[ $(has_server_protocol tls1_3) -eq 1 ]] && \
+               elif [[ $hsp -eq 1 ]] && \
                     { [[ $(has_server_protocol ssl3) -eq 1 ]] || "$HAS_SSL3"; }; then
                     # TLS 1.3, TLS 1.2, TLS 1.1, TLS 1, and SSLv3 are all not supported.
                     # This may be an SSLv2-only server, if $OPENSSL does not support SSLv2.
                     prln_warning "test failed (couldn't connect)"
                     fileout "$jsonID" "WARN" "Check failed. (couldn't connect)"
                     return 1
-               elif [[ $(has_server_protocol tls1_3) -eq 1 ]]; then
+               elif [[ $hsp -eq 1 ]]; then
                     # If the server does not support TLS 1.3, TLS 1.2, TLS 1.1, or TLS 1, and
                     # support for SSLv3 cannot be tested, then treat it as HIGH severity, since
                     # it is very likely that SSLv3 is the only supported protocol.
@@ -17648,20 +17687,25 @@ run_tls_fallback_scsv() {
 
      # Next find a second protocol that the server supports.
      for p in $protos_to_try; do
-          [[ $(has_server_protocol "$p") -eq 1 ]] && continue
-          if [[ $(has_server_protocol "$p") -eq 0 ]]; then
+          hsp=$(has_server_protocol "$p")
+          [[ $hsp -eq 1 ]] && continue
+          if [[ $hsp -eq 0 ]]; then
                low_proto="$p"
                break
           fi
-          if [[ "$p" == ssl3 ]] && ! "$HAS_SSL3"; then
+          if ! sclient_supported "-$p"; then
                "$using_sockets" || continue
-               tls_sockets "00" "$TLS_CIPHER" "" "" "true"
+               case "$p" in
+                    "tls1_1") tls_sockets "02" "$TLS_CIPHER" "" "" "true" ;;
+                    "tls1")   tls_sockets "01" "$TLS_CIPHER" "" "" "true" ;;
+                    "ssl3")   tls_sockets "00" "$TLS_CIPHER" "" "" "true" ;;
+               esac
                if [[ $? -eq 0 ]]; then
                     low_proto="$p"
-                    add_proto_offered ssl3 yes
+                    add_proto_offered "$p" yes
                     break
                else
-                    add_proto_offered ssl3 no
+                    add_proto_offered "$p" no
                fi
           else
                $OPENSSL s_client $(s_client_options "-$p $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
@@ -17672,32 +17716,40 @@ run_tls_fallback_scsv() {
           fi
      done
 
-     if ! "$HAS_SSL3" && ! "$using_sockets" && \
-         [[ "$low_proto" == ssl3 || \
-           ( "$high_proto" == tls1 && $(has_server_protocol ssl3) -eq 2 ) ]]; then
-          # If the protocol that the server would fall back to is SSLv3, but $OPENSSL does
-          # not support SSLv3, then the test cannot be performed. So, if $OPENSSL does not
-          # support SSLv3 and it is known that SSLv3 is the fallback protocol ($low_proto), then
-          # the test cannot be performed. Similarly, if SSLv3 could be the fallback protocol, but
-          # support for SSLv3 is unknown, then the test cannot be performed.
-          # NOTE: This check assumes that any server that supports SSLv3 and either TLS 1.2 or
-          # TLS 1.1 would also support TLS 1. So, if $high_proto is not TLS 1, then it is assumed
-          # that either (1) $low_proto has already been set (to TLS1.1 or TLS 1) or (2) no protocol
-          # lower than $high_proto is offered.
-          prln_local_problem "Can't test: $OPENSSL does not support SSLv3"
-          fileout "$jsonID" "WARN" "Can't test: $OPENSSL does not support SSLv3"
-          return 1
-     fi
      if [[ -z "$low_proto" ]]; then
           case "$high_proto" in
-               "tls1_2")
+               tls1_2)
+                    if ! "$using_sockets" && ! "$HAS_TLS11" && [[ $(has_server_protocol tls1_1) -eq 2 ]] && [[ $(has_server_protocol tls1) -eq 2 ]]; then
+                         prln_local_problem "Can't test: $OPENSSL does not support TLS 1.1"
+                         fileout "$jsonID" "WARN" "Can't test: $OPENSSL does not support TLS 1.1"
+                         return 1
+                    fi
                     pr_svrty_good "No fallback possible (OK)"; outln ", no protocol below $high_proto_str offered"
                     ;;
-               *)   outln "No fallback possible, no protocol below $high_proto_str offered (OK)"
+               tls1_1)
+                    if ! "$using_sockets" && ! "$HAS_TLS1" && [[ $(has_server_protocol tls1) -eq 2 ]]; then
+                         prln_local_problem "Can't test: $OPENSSL does not support TLS 1"
+                         fileout "$jsonID" "WARN" "Can't test: $OPENSSL does not support TLS 1"
+                         return 1
+                    fi
+                    outln "No fallback possible, no protocol below $high_proto_str offered (OK)"
+                    ;;
+               tls1)
+                    if ! "$using_sockets" && ! "$HAS_SSL3" && [[ $(has_server_protocol ssl3) -eq 2 ]]; then
+                         prln_local_problem "Can't test: $OPENSSL does not support SSLv3"
+                         fileout "$jsonID" "WARN" "Can't test: $OPENSSL does not support SSLv3"
+                         return 1
+                    fi
+                    outln "No fallback possible, no protocol below $high_proto_str offered (OK)"
                     ;;
           esac
           fileout "$jsonID" "OK" "no protocol below $high_proto_str offered"
           return 0
+     fi
+     if ! "$using_sockets" && ! sclient_supported "-$low_proto"; then
+          prln_local_problem "Can't test: $OPENSSL doesn't support \"s_client -$low_proto\""
+          fileout "$jsonID" "WARN" "Can't test: $OPENSSL doesn't support 's_client -$low_proto'"
+          return 1
      fi
      case "$low_proto" in
           "tls1_1")
@@ -18297,6 +18349,15 @@ run_beast(){
      fi
 
      "$SSL_NATIVE" && using_sockets=false
+
+     # If $OPENSSL does not support TLS 1, then it probably does not support
+     # SSL 3 either. To work with an $OPENSSL that did support SSL 3, but not
+     # TLS 1, it would be necessary to make some changes this function.
+     if ! "$using_sockets" && ! "$HAS_TLS1"; then
+          pr_local_problem "$OPENSSL doesn't support \"s_client tls1\"."
+          outln " Test skipped"
+          return 1
+     fi
      # $cbc_ciphers_hex has 126 ciphers, we omitted SRP-AES-256-CBC-SHA bc the trailing 00,ff below will pose
      # a problem for ACE loadbalancers otherwise. So in case we know this is not true, we'll re-add it
      ! "$SERVER_SIZE_LIMIT_BUG" && "$using_sockets" && cbc_ciphers_hex="$cbc_ciphers_hex, C0,20"
@@ -18350,6 +18411,7 @@ run_beast(){
                     tls1_2) higher_proto_supported+=" TLSv1.2" ;;
                esac
           elif [[ $subret -eq 2 ]]; then
+               sclient_supported "-$proto" || continue
                $OPENSSL s_client $(s_client_options "-state -"${proto}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") 2>>$ERRFILE >$TMPFILE </dev/null
                if sclient_connect_successful $? $TMPFILE; then
                     higher_proto_supported+=" $(get_protocol $TMPFILE)"
@@ -18359,7 +18421,8 @@ run_beast(){
      done
 
      for proto in ssl3 tls1; do
-          if [[ "$proto" == ssl3 ]] && ! "$using_sockets" && ! locally_supported "-${proto}"; then
+          if ! "$using_sockets" && ! sclient_supported "-$proto"; then
+               prln_local_problem "$OPENSSL doesn't support \"s_client -$proto\""
                continued=true
                out "                                           "
                continue
@@ -18369,12 +18432,15 @@ run_beast(){
                sclient_success=0
           elif [[ $subret -eq 1 ]]; then
                sclient_success=1
-          elif [[ "$proto" != "ssl3" ]] || "$HAS_SSL3"; then
+          elif sclient_supported "-$proto"; then
                $OPENSSL s_client $(s_client_options "-"$proto" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>>$ERRFILE </dev/null
                sclient_connect_successful $? $TMPFILE
                sclient_success=$?
-          else
+          elif [[ "$proto" == ssl3 ]]; then
                tls_sockets "00" "$TLS_CIPHER"
+               sclient_success=$?
+          else
+               tls_sockets "01" "$TLS_CIPHER"
                sclient_success=$?
           fi
           if [[ $sclient_success -ne 0 ]]; then                  # protocol supported?
@@ -18413,7 +18479,7 @@ run_beast(){
                sigalg[nr_ciphers]=""
           done
           while true; do
-               [[ "$proto" == ssl3 ]] && ! "$HAS_SSL3" && break
+               sclient_supported "-$proto" || break
                ciphers_to_test=""
                for (( i=0; i < nr_ciphers; i++ )); do
                     ! "${ciphers_found[i]}" && "${ossl_supported[i]}" && ciphers_to_test+=":${ciph[i]}"
@@ -18975,8 +19041,10 @@ run_rc4() {
      done
 
      for proto in -no_ssl2 -tls1_1 -tls1 -ssl3; do
-          [[ "$proto" != -no_ssl2 ]] && [[ $(has_server_protocol "${proto:1}") -eq 1 ]] && continue
-          ! "$HAS_SSL3" && [[ "$proto" == -ssl3 ]] && continue
+          if [[ "$proto" != -no_ssl2 ]]; then
+               [[ $(has_server_protocol "${proto:1}") -eq 1 ]] && continue
+               sclient_supported "$proto" || continue
+          fi
           while true; do
                ciphers_to_test=""
                for (( i=0; i < nr_ossl_ciphers; i++ )); do
@@ -20010,6 +20078,9 @@ find_openssl_binary() {
      OSSL_CIPHERS_S=""
      HAS_SSL2=false
      HAS_SSL3=false
+     HAS_TLS1=false
+     HAS_TLS11=false
+     HAS_TLS12=false
      HAS_TLS13=false
      HAS_X448=false
      HAS_X25519=false
@@ -20050,6 +20121,9 @@ find_openssl_binary() {
 
      $OPENSSL s_client -ssl2 </dev/null 2>&1 | grep -aiq "unknown option" || HAS_SSL2=true
      $OPENSSL s_client -ssl3 </dev/null 2>&1 | grep -aiq "unknown option" || HAS_SSL3=true
+     $OPENSSL s_client -tls1 </dev/null 2>&1 | grep -aiq "unknown option" || HAS_TLS1=true
+     $OPENSSL s_client -tls1_1 </dev/null 2>&1 | grep -aiq "unknown option" || HAS_TLS11=true
+     $OPENSSL s_client -tls1_2 </dev/null 2>&1 | grep -aiq "unknown option" || HAS_TLS12=true
      $OPENSSL s_client -tls1_3 </dev/null 2>&1 | grep -aiq "unknown option" || HAS_TLS13=true
      $OPENSSL s_client -no_ssl2 </dev/null 2>&1 | grep -aiq "unknown option" || HAS_NO_SSL2=true
 
@@ -20478,6 +20552,9 @@ OSSL_SUPPORTED_CURVES: $OSSL_SUPPORTED_CURVES
 HAS_IPv6: $HAS_IPv6
 HAS_SSL2: $HAS_SSL2
 HAS_SSL3: $HAS_SSL3
+HAS_TLS1: $HAS_TLS1
+HAS_TLS11: $HAS_TLS11
+HAS_TLS12: $HAS_TLS12
 HAS_TLS13: $HAS_TLS13
 HAS_X448: $HAS_X448
 HAS_X25519: $HAS_X25519
@@ -21707,12 +21784,7 @@ determine_optimal_proto() {
      if [[ -n "$1" ]]; then
           # STARTTLS workaround needed see https://github.com/drwetter/testssl.sh/issues/188 -- kind of odd
           for STARTTLS_OPTIMAL_PROTO in -tls1_2 -tls1 -ssl3 -tls1_1 -tls1_3 -ssl2; do
-               case $STARTTLS_OPTIMAL_PROTO in
-                    -tls1_3) "$HAS_TLS13" || continue ;;
-                    -ssl3)   "$HAS_SSL3" || continue ;;
-                    -ssl2)   "$HAS_SSL2" || continue ;;
-                    *) ;;
-               esac
+               sclient_supported "$STARTTLS_OPTIMAL_PROTO" || continue
                $OPENSSL s_client $(s_client_options "$STARTTLS_OPTIMAL_PROTO $BUGS -connect "$NODEIP:$PORT" $PROXY -msg $STARTTLS $SNI") </dev/null >$TMPFILE 2>>$ERRFILE
                if sclient_auth $? $TMPFILE; then
                     all_failed=false
@@ -21726,12 +21798,7 @@ determine_optimal_proto() {
      else
           # No STARTTLS
           for proto in '' -tls1_2 -tls1 -tls1_3 -ssl3 -tls1_1 -ssl2; do
-               case $proto in
-                    -tls1_3) "$HAS_TLS13" || continue ;;
-                    -ssl3)   "$HAS_SSL3" || continue ;;
-                    -ssl2)   "$HAS_SSL2" || continue ;;
-                    *) ;;
-               esac
+               [[ -z "$proto" ]] || sclient_supported "$proto" || continue
                # Only send $GET_REQ11 in case of a non-empty $URL_PATH, as it
                # is not needed otherwise. Also, sending $GET_REQ11 may cause
                # problems if the server being tested is not an HTTPS server,
