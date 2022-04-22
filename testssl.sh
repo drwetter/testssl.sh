@@ -5184,10 +5184,11 @@ run_prototest_openssl() {
 # arg2: available (yes) or not (no)
 add_proto_offered() {
      # the ":" is mandatory here (and @ other places), otherwise e.g. tls1 will match tls1_2
-     if [[ "$PROTOS_OFFERED" =~ $1: ]]; then
-          # we got that protocol already
-          :
-     else
+     if [[ "$2" == yes ]] && [[ "$PROTOS_OFFERED" =~ $1:no ]]; then
+          # In rare cases, a protocol may be marked as not available even though it is
+          # (e.g., the connection fails with tls_sockets() but succeeds with $OPENSSL.
+          PROTOS_OFFERED="${PROTOS_OFFERED/$1:no/$1:$2}"
+     elif [[ ! "$PROTOS_OFFERED" =~ $1: ]]; then
           PROTOS_OFFERED+="${1}:$2 "
      fi
 }
@@ -21370,6 +21371,10 @@ determine_optimal_proto() {
         [[ "$(has_server_protocol "tls1_1")" -ne 0 ]] && [[ "$(has_server_protocol "tls1")" -ne 0 ]] &&
         [[ "$(has_server_protocol "ssl3")" -ne 0 ]]; then
           TLS13_ONLY=true
+     elif [[ -z "$TLS12_CIPHER_OFFERED" ]] && [[ "$(has_server_protocol "tls1_2")" -eq 0 ]] && [[ "$(get_protocol $TMPFILE)" == TLSv1.2 ]]; then
+          TLS12_CIPHER_OFFERED="$(get_cipher $TMPFILE)"
+          TLS12_CIPHER_OFFERED="$(openssl2hexcode "$TLS12_CIPHER_OFFERED")"
+          [[ ${#TLS12_CIPHER_OFFERED} -eq 9 ]] && TLS12_CIPHER_OFFERED="${TLS12_CIPHER_OFFERED:2:2},${TLS12_CIPHER_OFFERED:7:2}" || TLS12_CIPHER_OFFERED=""
      fi
 
      if [[ "$optimal_proto" == -ssl2 ]]; then
