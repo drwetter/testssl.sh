@@ -924,15 +924,23 @@ join_by() {
 actually_supported_osslciphers() {
      local ciphers="$1"
      local tls13_ciphers="$TLS13_OSSL_CIPHERS"
+     local options="$3 "
 
      [[ "$2" != ALL ]] && tls13_ciphers="$2"
      "$HAS_SECLEVEL" && [[ -n "$ciphers" ]] && ciphers="@SECLEVEL=0:$1"
-     if "$HAS_CIPHERSUITES"; then
-          $OPENSSL ciphers $3 $OSSL_CIPHERS_S -ciphersuites "$tls13_ciphers" "$ciphers" 2>/dev/null || echo ""
-     elif [[ -n "$tls13_ciphers" ]]; then
-          $OPENSSL ciphers $3 $OSSL_CIPHERS_S "$tls13_ciphers:$ciphers" 2>/dev/null || echo ""
+     # With OpenSSL 1.0.2 the only way to exclude SSLv2 ciphers is to use the -tls1 option.
+     # However, with newer versions of OpenSSL, the -tls1 option excludes TLSv1.2 ciphers.
+     if "$HAS_SSL2"; then
+          options="${options//-no_ssl2 /-tls1 }"
      else
-          $OPENSSL ciphers $OSSL_CIPHERS_S $3 "$ciphers" 2>/dev/null || echo ""
+          options="${options//-no_ssl2 /}"
+     fi
+     if "$HAS_CIPHERSUITES"; then
+          $OPENSSL ciphers $options $OSSL_CIPHERS_S -ciphersuites "$tls13_ciphers" "$ciphers" 2>/dev/null || echo ""
+     elif [[ -n "$tls13_ciphers" ]]; then
+          $OPENSSL ciphers $options $OSSL_CIPHERS_S "$tls13_ciphers:$ciphers" 2>/dev/null || echo ""
+     else
+          $OPENSSL ciphers $OSSL_CIPHERS_S $options "$ciphers" 2>/dev/null || echo ""
      fi
 }
 
@@ -3473,6 +3481,8 @@ openssl2hexcode() {
      if [[ $TLS_NR_CIPHERS -eq 0 ]]; then
           if "$HAS_CIPHERSUITES"; then
                hexc="$($OPENSSL ciphers -V -ciphersuites "$TLS13_OSSL_CIPHERS" 'ALL:COMPLEMENTOFALL:@STRENGTH' | awk '/ '"$1"' / { print $1 }')"
+          elif "$HAS_SSL2"; then
+               hexc="$($OPENSSL ciphers -V -tls1 'ALL:COMPLEMENTOFALL:@STRENGTH' | awk '/ '"$1"' / { print $1 }')"
           else
                hexc="$($OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' | awk '/ '"$1"' / { print $1 }')"
           fi
@@ -6706,7 +6716,7 @@ run_server_preference() {
           [[ $DEBUG -ge 4 ]] && echo -e "\n Forward: ${list_fwd}"
           $OPENSSL s_client $(s_client_options "$STARTTLS -cipher $list_fwd $BUGS -connect $NODEIP:$PORT $PROXY $addcmd2") </dev/null 2>$ERRFILE >$TMPFILE
           if ! sclient_connect_successful $? $TMPFILE; then
-               list_fwd="$(actually_supported_osslciphers $list_fwd '' '-tls1')"
+               list_fwd="$(actually_supported_osslciphers $list_fwd '' '-no_ssl2')"
                pr_warning "no matching cipher in this list found (pls report this): "
                outln "$list_fwd  . "
                fileout "$jsonID" "WARN" "Could not determine server cipher order, no matching cipher in list found (pls report this): $list_fwd"
@@ -18492,7 +18502,7 @@ run_rc4() {
                     ossl_supported[nr_ciphers]=true
                     nr_ciphers+=1
                fi
-          done < <($OPENSSL ciphers $OSSL_CIPHERS_S -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>>$ERRFILE)
+          done < <(actually_supported_osslciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' '' '-V')
      fi
 
      if "$using_sockets" && [[ -n "$sslv2_ciphers_hex" ]] && [[ $(has_server_protocol ssl2) -ne 1 ]]; then
@@ -20128,11 +20138,7 @@ prepare_arrays() {
 
      if [[ -e "$CIPHERS_BY_STRENGTH_FILE" ]]; then
           "$HAS_SSL2" && ossl_supported_sslv2="$($OPENSSL ciphers -ssl2 -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE)"
-          if "$HAS_SSL2"; then
-               ossl_supported_tls="$(actually_supported_osslciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 'ALL' "-tls1 -V")"
-          else
-               ossl_supported_tls="$(actually_supported_osslciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 'ALL' "-V")"
-          fi
+          ossl_supported_tls="$(actually_supported_osslciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 'ALL' "-no_ssl2 -V")"
           TLS13_OSSL_CIPHERS=""
           while read hexc n TLS_CIPHER_OSSL_NAME[i] TLS_CIPHER_RFC_NAME[i] TLS_CIPHER_SSLVERS[i] TLS_CIPHER_KX[i] TLS_CIPHER_AUTH[i] TLS_CIPHER_ENC[i] mac TLS_CIPHER_EXPORT[i]; do
                TLS_CIPHER_HEXCODE[i]="$hexc"
