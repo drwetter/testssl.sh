@@ -1,6 +1,9 @@
 ---
 name: Codespell
 on: [push, pull_request]
+permissions:
+  contents: read
+
 jobs:
   codespell:
     name: Check for spelling errors

@@ -12,6 +12,9 @@ env:
   BUILD_VERSION: "3.1dev"
   DOCKER_CLI_EXPERIMENTAL: enabled
 
+permissions:
+  contents: read
+
 jobs:
 
   deploy:
