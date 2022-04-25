@@ -9972,10 +9972,6 @@ run_server_defaults() {
      done
 
      determine_tls_extensions
-     "$using_sockets" && cert_compression_methods="$(determine_cert_compression)"
-     [[ -n "$cert_compression_methods" ]] && [[ "$cert_compression_methods" != "none" ]] && \
-          extract_new_tls_extensions "$TEMPDIR/$NODEIP.determine_cert_compression.txt"
-
      if [[ $? -eq 0 ]] && [[ "$OPTIMAL_PROTO" != -ssl2 ]]; then
           cp "$TEMPDIR/$NODEIP.determine_tls_extensions.txt" $TMPFILE
           >$ERRFILE
@@ -9984,6 +9980,10 @@ run_server_defaults() {
                sessticket_proto="$(get_protocol "$TMPFILE")"
           fi
      fi
+     "$using_sockets" && cert_compression_methods="$(determine_cert_compression)"
+     [[ -n "$cert_compression_methods" ]] && [[ "$cert_compression_methods" != "none" ]] && \
+          extract_new_tls_extensions "$TEMPDIR/$NODEIP.determine_cert_compression.txt"
+
      if "$using_sockets" && ! "$TLS13_ONLY" && [[ -z "$sessticket_lifetime_hint" ]] && [[ "$OPTIMAL_PROTO" != -ssl2 ]]; then
           if "$HAS_TLS13" && ( [[ -z "$OPTIMAL_PROTO" ]] || [[ "$OPTIMAL_PROTO" == -tls1_3 ]] ) ; then
                # If a session ticket were sent in response to a TLSv1.3 ClientHello, then a session ticket
