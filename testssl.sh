@@ -10297,7 +10297,7 @@ starttls_full_read(){
 
 starttls_ftp_dialog() {
      debugme echo "=== starting ftp STARTTLS dialog ==="
-     local reAUTHTLS='^ AUTH TLS'
+     local reAUTHTLS='^ AUTH'
      starttls_full_read '^220-' '^220 '                    && debugme echo "received server greeting" &&
      starttls_just_send 'FEAT'                             && debugme echo "sent FEAT" &&
      starttls_full_read '^(211-| )' '^211 ' "${reAUTHTLS}" && debugme echo "received server features and checked STARTTLS availability" &&
