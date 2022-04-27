@@ -11044,7 +11044,7 @@ starttls_full_read(){
 
 starttls_ftp_dialog() {
      local -i ret=0
-     local reSTARTTLS='^ AUTH TLS'
+     local reSTARTTLS='^ AUTH'
 
      debugme echo "=== starting ftp STARTTLS dialog ==="
      starttls_full_read '^220-' '^220 '     ''                   "received server greeting" &&
