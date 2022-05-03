@@ -1226,14 +1226,22 @@ count_ciphers() {
 #arg3: options (e.g., -V)
 actually_supported_osslciphers() {
      local tls13_ciphers="$TLS13_OSSL_CIPHERS"
+     local options="$3 "
 
      [[ "$2" != ALL ]] && tls13_ciphers="$2"
-     if "$HAS_CIPHERSUITES"; then
-          $OPENSSL ciphers $3 $OSSL_CIPHERS_S -ciphersuites "$tls13_ciphers" "$1" 2>/dev/null || echo ""
-     elif [[ -n "$tls13_ciphers" ]]; then
-          $OPENSSL ciphers $3 $OSSL_CIPHERS_S "$tls13_ciphers:$1" 2>/dev/null || echo ""
+     # With OpenSSL 1.0.2 the only way to exclude SSLv2 ciphers is to use the -tls1 option.
+     # However, with newer versions of OpenSSL, the -tls1 option excludes TLSv1.2 ciphers.
+     if "$HAS_SSL2"; then
+          options="${options//-no_ssl2 /-tls1 }"
      else
-          $OPENSSL ciphers $OSSL_CIPHERS_S $3 "$1" 2>/dev/null || echo ""
+          options="${options//-no_ssl2 /}"
+     fi
+     if "$HAS_CIPHERSUITES"; then
+          $OPENSSL ciphers $options $OSSL_CIPHERS_S -ciphersuites "$tls13_ciphers" "$1" 2>/dev/null || echo ""
+     elif [[ -n "$tls13_ciphers" ]]; then
+          $OPENSSL ciphers $options $OSSL_CIPHERS_S "$tls13_ciphers:$1" 2>/dev/null || echo ""
+     else
+          $OPENSSL ciphers $OSSL_CIPHERS_S $options "$1" 2>/dev/null || echo ""
      fi
 }
 
@@ -3241,6 +3249,8 @@ openssl2hexcode() {
      if [[ $TLS_NR_CIPHERS -eq 0 ]]; then
           if "$HAS_CIPHERSUITES"; then
                hexc="$($OPENSSL ciphers -V -ciphersuites "$TLS13_OSSL_CIPHERS" 'ALL:COMPLEMENTOFALL:@STRENGTH' | awk '/ '"$1"' / { print $1 }')"
+          elif "$HAS_SSL2"; then
+               hexc="$($OPENSSL ciphers -V -tls1 'ALL:COMPLEMENTOFALL:@STRENGTH' | awk '/ '"$1"' / { print $1 }')"
           else
                hexc="$($OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' | awk '/ '"$1"' / { print $1 }')"
           fi
@@ -4898,10 +4908,11 @@ run_prototest_openssl() {
 # arg2: available (yes) or not (no)
 add_tls_offered() {
      # the ":" is mandatory here (and @ other places), otherwise e.g. tls1 will match tls1_2
-     if [[ "$PROTOS_OFFERED" =~ $1: ]]; then
-          # we got that protocol already
-          :
-     else
+     if [[ "$2" == yes ]] && [[ "$PROTOS_OFFERED" =~ $1:no ]]; then
+          # In rare cases, a protocol may be marked as not available even though it is
+          # (e.g., the connection fails with tls_sockets() but succeeds with $OPENSSL.
+          PROTOS_OFFERED="${PROTOS_OFFERED/$1:no/$1:$2}"
+     elif [[ ! "$PROTOS_OFFERED" =~ $1: ]]; then
           PROTOS_OFFERED+="${1}:$2 "
      fi
 }
@@ -6364,7 +6375,7 @@ run_server_preference() {
           [[ $DEBUG -ge 4 ]] && echo -e "\n Forward: ${list_fwd}"
           $OPENSSL s_client $(s_client_options "$STARTTLS -cipher $list_fwd $BUGS -connect $NODEIP:$PORT $PROXY $addcmd2") </dev/null 2>$ERRFILE >$TMPFILE
           if ! sclient_connect_successful $? $TMPFILE; then
-               list_fwd="$(actually_supported_osslciphers $list_fwd '' '-tls1')"
+               list_fwd="$(actually_supported_osslciphers $list_fwd '' '-no_ssl2')"
                pr_warning "no matching cipher in this list found (pls report this): "
                outln "$list_fwd  . "
                fileout "$jsonID" "WARN" "Could not determine server cipher order, no matching cipher in list found (pls report this): $list_fwd"
@@ -17623,11 +17634,7 @@ prepare_arrays() {
 
      if [[ -e "$CIPHERS_BY_STRENGTH_FILE" ]]; then
           "$HAS_SSL2" && ossl_supported_sslv2="$($OPENSSL ciphers -ssl2 -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE)"
-          if "$HAS_SSL2"; then
-               ossl_supported_tls="$(actually_supported_osslciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 'ALL' "-tls1 -V")"
-          else
-               ossl_supported_tls="$(actually_supported_osslciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 'ALL' "-V")"
-          fi
+          ossl_supported_tls="$(actually_supported_osslciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 'ALL' "-no_ssl2 -V")"
           TLS13_OSSL_CIPHERS=""
           while read hexc n TLS_CIPHER_OSSL_NAME[i] TLS_CIPHER_RFC_NAME[i] TLS_CIPHER_SSLVERS[i] TLS_CIPHER_KX[i] TLS_CIPHER_AUTH[i] TLS_CIPHER_ENC[i] mac TLS_CIPHER_EXPORT[i]; do
                TLS_CIPHER_HEXCODE[i]="$hexc"
@@ -18411,7 +18418,7 @@ sclient_auth() {
 # This information can be used by determine_optimal_proto() to help distinguish between a server
 # that is not TLS/SSL enabled and one that is not compatible with the version of OpenSSL being used.
 determine_optimal_sockets_params() {
-     local -i ret1=1 ret2=1
+     local -i ret1=1 ret2=1 ret3=1
      local i proto cipher_offered
      local all_failed=true
 
@@ -18480,8 +18487,6 @@ determine_optimal_sockets_params() {
                add_tls_offered tls1_2 yes
                TLS12_CIPHER="$TLS12_CIPHER_2ND_TRY"
                all_failed=false
-          else
-               add_tls_offered tls1_2 no
           fi
           if [[ $ret2 -eq 2 ]]; then
                case $DETECTED_TLS_VERSION in
@@ -18493,7 +18498,32 @@ determine_optimal_sockets_params() {
                all_failed=false
           fi
      fi
-     if [[ $ret1 -eq 0 ]] || [[ $ret2 -eq 0 ]]; then
+     # Try a third time with cipher suites not in $TLS12_CIPHER or
+     # $TLS12_CIPHER_2ND_TRY. If using these cipher suites results in a
+     # successful connection, then change $TLS12_CIPHER to these
+     # cipher suites so that later tests will use this list of cipher
+     # suites.
+     if [[ $ret1 -ne 0 ]] && [[ $ret2 -ne 0 ]]; then
+          tls_sockets "03" "$TLS12_CIPHER_3RD_TRY"
+          ret3=$?
+          if [[ $ret3 -eq 0 ]]; then
+               add_tls_offered tls1_2 yes
+               TLS12_CIPHER="$TLS12_CIPHER_3RD_TRY"
+               all_failed=false
+          else
+               add_tls_offered tls1_2 no
+          fi
+          if [[ $ret3 -eq 2 ]]; then
+               case $DETECTED_TLS_VERSION in
+                    0302)  add_tls_offered tls1_1 yes ;;
+                    0301)  add_tls_offered tls1 yes ;;
+                    0300)  add_tls_offered ssl3 yes ;;
+               esac
+               [[ $ret1 -ne 2 ]] && [[ $ret2 -ne 2 ]] && TLS12_CIPHER="$TLS12_CIPHER_3RD_TRY"
+               all_failed=false
+          fi
+     fi
+     if [[ $ret1 -eq 0 ]] || [[ $ret2 -eq 0 ]] || [[ $ret3 -eq 0 ]]; then
           cipher_offered="$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")"
           if [[ "$cipher_offered" == TLS_* ]] || [[ "$cipher_offered" == SSL_* ]]; then
                cipher_offered="$(rfc2hexcode "$cipher_offered")"
@@ -18614,6 +18644,10 @@ determine_optimal_proto() {
         [[ "$(has_server_protocol "tls1_1")" -ne 0 ]] && [[ "$(has_server_protocol "tls1")" -ne 0 ]] &&
         [[ "$(has_server_protocol "ssl3")" -ne 0 ]]; then
           TLS13_ONLY=true
+     elif [[ -z "$TLS12_CIPHER_OFFERED" ]] && [[ "$(has_server_protocol "tls1_2")" -eq 0 ]] && [[ "$(get_protocol $TMPFILE)" == TLSv1.2 ]]; then
+          TLS12_CIPHER_OFFERED="$(get_cipher $TMPFILE)"
+          TLS12_CIPHER_OFFERED="$(openssl2hexcode "$TLS12_CIPHER_OFFERED")"
+          [[ ${#TLS12_CIPHER_OFFERED} -eq 9 ]] && TLS12_CIPHER_OFFERED="${TLS12_CIPHER_OFFERED:2:2},${TLS12_CIPHER_OFFERED:7:2}" || TLS12_CIPHER_OFFERED=""
      fi
 
      if [[ "$optimal_proto" == -ssl2 ]]; then
