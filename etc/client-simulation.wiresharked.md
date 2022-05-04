@@ -13,9 +13,9 @@ The whole process is manual but not too difficult.
 * Edit `client-simulation.wiresharked.txt` and insert a new section, preferably by copying a previous version of the client from it.
 * Edit the *names* accordingly and "short". The latter must not contain blanks.
 * Retrieve *handshakebytes* by marking the "TLS 1.x Record Layer" --> Copy --> As a hex stream.
-* Figure out *protos* and *tlsvers* by looking at the "supported_versions" TLS extension (43=0x002b). May work only with recent clients. Be careful as some do not list all TLS versions here (OpenSSL 1.1.1 lists only TLS 1.2/1.3).
+* Figure out *protos* and *tlsvers* by looking at the "supported_versions" TLS extension (43=0x002b). May work only with recent clients. Be careful as some do not list all TLS versions here (OpenSSL 1.1.1 listed only TLS 1.2/1.3).
 * Adjust *lowest_protocol* and *highest_protocol* accordingly.
-* For *curves* mark the "supported groups" TLS extension --> Copy --> As a hex stream, remove any leading GREASE ciphers (?a?a) and supply it to `~/utils/hexstream2curves.sh`
+* For *curves* mark the "supported groups" TLS extension --> Copy --> As a hex stream, remove any leading GREASE ciphers (?a?a) and supply it to `~/utils/hexstream2curves.sh`. Ignore any ffdhe\* values here.
 * Retrieve *alpn* by looking at the "alpn" TLS extension 16 (=0x0010).
 * Review TLS extension 13 (=0x000d) "signature_algorithm" whether any SHA1 signature algorithm is listed. If not *requiresSha2* is true.
 * Leave *maxDhBits*/*minDhBits* and *minRsaBits*/*maxRsaBit* at -1, unless you know for sure what the client can handle.
