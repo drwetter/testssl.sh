@@ -130,24 +130,8 @@ unlike($openssl_out, qr/$openssl_regex_bl/, "");
 $tests++;
 
 
-$uri="140.238.219.117:119";
-
-# unlink "tmp.json";
-printf "\n%s\n", "STARTTLS NNTP unit tests via sockets --> $uri ...";
-$socket_out = `./testssl.sh $check2run -t nntp $uri 2>&1`;
-# $socket_json = json('tmp.json');
-unlike($socket_out, qr/$socket_regex_bl/, "");
-$tests++;
-
-printf "\n%s\n", "STARTTLS NNTP unit tests via OpenSSL --> $uri ...";
-$openssl_out = `./testssl.sh --ssl-native $check2run -t nntp $uri 2>&1`;
-# $openssl_json = json('tmp.json');
-unlike($openssl_out, qr/$openssl_regex_bl/, "");
-$tests++;
-
-
 # IRC: missing
-# LTMP, mysql, postgres
+# LTMP, mysql, postgres, NNTP, telnet
 
 
 

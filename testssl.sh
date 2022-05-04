@@ -17665,13 +17665,11 @@ prepare_arrays() {
 
 
 mybanner() {
-     local idtag
      local bb1 bb2 bb3
 
      "$QUIET" && return
      "$CHILD_MASS_TESTING" && return
      OPENSSL_NR_CIPHERS=$(count_ciphers "$(actually_supported_osslciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 'ALL')")
-     [[ -n "$GIT_REL" ]] && idtag="$GIT_REL"
      bb1=$(cat <<EOF
 
 ###########################################################
@@ -17694,11 +17692,9 @@ EOF
 )
      pr_bold "$bb1 "
      pr_boldurl "$SWURL"; outln
-     if [[ -n "$idtag" ]]; then
-          #FIXME: if we run it not off the git dir we miss the version tag.
-          # at least we don't want to display empty brackets here...
+     if [[ -n "$GIT_REL" ]]; then
           pr_bold "    ("
-          pr_grey "$idtag"
+          pr_litegrey "$GIT_REL"
           prln_bold ")"
      fi
      pr_bold "$bb2 "
