@@ -130,7 +130,7 @@
      minEcdsaBits+=(-1)
      curves+=("secp521r1:secp384r1:prime256v1")
      requiresSha2+=(false)
-     current+=(true)
+     current+=(false)
 
      names+=("Android 5.0.0")
      short+=("android_500")
@@ -151,7 +151,7 @@
      minEcdsaBits+=(-1)
      curves+=("secp521r1:secp384r1:prime256v1")
      requiresSha2+=(false)
-     current+=(true)
+     current+=(false)
 
      names+=("Android 6.0")
      short+=("android_60")
@@ -216,7 +216,7 @@
      minEcdsaBits+=(-1)
      curves+=("X25519:secp256r1:secp384r1")
      requiresSha2+=(false)
-     current+=(true)
+     current+=(false)
 
      names+=("Android 9.0 (native)")
      short+=("android_90")
@@ -2665,8 +2665,8 @@ names+=("Opera 66 (Win 10)")
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(224)
-     curves+=("x25519:secp256r1:secp384r1:secp521r1:x448")
-     requiresSha2+=(true)
+     curves+=("x25519:secp256r1:secp384r1:secp521r1:x448:ffdhe2048:ffdhe3072:ffdhe4096:ffdhe6144:ffdhe8192")
+     requireseha2+=(true)
      current+=(true)
 
      names+=("OpenSSL 0.9.8y")

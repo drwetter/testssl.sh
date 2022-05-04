@@ -306,7 +306,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(224)
-     curves+=("x25519:secp256r1:secp384r1:secp521r1:x448")
+     curves+=("x25519:secp256r1:secp384r1:secp521r1:x448:ffdhe2048:ffdhe3072:ffdhe4096:ffdhe6144:ffdhe8192")
      requiresSha2+=(true)
      current+=(true)
 
