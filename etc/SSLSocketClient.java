@@ -2,14 +2,18 @@ import java.net.*;
 import java.io.*;
 import javax.net.ssl.*;
 
-/*  java SSLSocketClient
+/*  java SSLSocketClient taken from
  *  https://docs.oracle.com/javase/10/security/sample-code-illustrating-secure-socket-connection-client-and-server.htm
+ *  License: Unknown, not GPLv2
  */
 
 /*
- * This example demostrates how to use a SSLSocket as client to
+ * This example demonstrates how to use a SSLSocket as client to
  * send a HTTP request and get response from an HTTPS server.
- * It assumes that the client is not behind a firewall
+ * It assumes that the client is not behind a firewall.
+ * The handshake doesn't include any ALPN protocols. See
+ * https://docs.oracle.com/javase/8/docs/technotes/guides/security/jsse/alpn.html
+ * for more documentation.
  */
 
 public class SSLSocketClient {
