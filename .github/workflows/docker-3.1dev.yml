@@ -41,7 +41,7 @@ jobs:
 
       - name: GitHub login
         if: ${{ github.event_name != 'pull_request' }}
-        uses: docker/login-action@v1.14.1
+        uses: docker/login-action@v2.0.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
