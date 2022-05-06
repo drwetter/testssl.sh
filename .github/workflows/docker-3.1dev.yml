@@ -27,7 +27,7 @@ jobs:
 
       - name: Setup Buildx
         id: buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v2
 
       - name: Set Docker metadata
         id: docker_meta
