@@ -6608,7 +6608,7 @@ sub_session_resumption() {
 
 run_server_preference() {
      local cipher1="" cipher2="" tls13_cipher1="" tls13_cipher2="" default_proto=""
-     local default_cipher=""
+     local default_cipher="" ciph
      local limitedsense="" supported_sslv2_ciphers
      local proto_ossl proto_txt proto_hex cipherlist i
      local -i ret=0 j sclient_success
@@ -6662,27 +6662,28 @@ run_server_preference() {
                esac
           fi
           if [[ $sclient_success -eq 0 ]] ; then
-               cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE
                cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" "$TEMPDIR/$NODEIP.parse_tls13_serverhello.txt"
-               cipher0=$(get_cipher $TMPFILE)
+               cipher0=$(get_cipher "$TEMPDIR/$NODEIP.parse_tls13_serverhello.txt")
           fi
      fi
      if [[ $sclient_success -ne 0 ]]; then
-          $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $addcmd") </dev/null 2>>$ERRFILE >$TMPFILE
-          if sclient_connect_successful $? $TMPFILE; then
-               cipher0=$(get_cipher $TMPFILE)
+          $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $addcmd") </dev/null 2>>$ERRFILE >"$TEMPDIR/$NODEIP.parse_tls13_serverhello.txt"
+          if sclient_connect_successful $? "$TEMPDIR/$NODEIP.parse_tls13_serverhello.txt"; then
+               cipher0=$(get_cipher "$TEMPDIR/$NODEIP.parse_tls13_serverhello.txt")
                debugme tm_out "0 --> $cipher0\n"
-               cp $TMPFILE "$TEMPDIR/$NODEIP.parse_tls13_serverhello.txt"
           else
                # 2 second try with $OPTIMAL_PROTO especially for intolerant IIS6 servers:
-               $OPENSSL s_client $(s_client_options "$STARTTLS $OPTIMAL_PROTO $BUGS -connect $NODEIP:$PORT $PROXY $SNI") </dev/null 2>>$ERRFILE >$TMPFILE
-               if ! sclient_connect_successful $? $TMPFILE; then
+               $OPENSSL s_client $(s_client_options "$STARTTLS $OPTIMAL_PROTO $BUGS -connect $NODEIP:$PORT $PROXY $SNI") </dev/null 2>>$ERRFILE >"$TEMPDIR/$NODEIP.parse_tls13_serverhello.txt"
+               if sclient_connect_successful $? "$TEMPDIR/$NODEIP.parse_tls13_serverhello.txt"; then
+                    cipher0=$(get_cipher "$TEMPDIR/$NODEIP.parse_tls13_serverhello.txt")
+                    debugme tm_out "0 --> $cipher0\n"
+               else
                     pr_warning "Handshake error!"
                     ret=1
                fi
           fi
      fi
-     [[ $ret -eq 0 ]] && default_proto=$(get_protocol $TMPFILE)
+     [[ $ret -eq 0 ]] && default_proto=$(get_protocol "$TEMPDIR/$NODEIP.parse_tls13_serverhello.txt")
      [[ "$default_proto" == TLSv1.0 ]] && default_proto="TLSv1"
      # debugme tm_out " --> $default_proto\n"
 
@@ -6721,41 +6722,50 @@ run_server_preference() {
                pr_warning "no matching cipher in this list found (pls report this): "
                outln "$list_fwd  . "
                fileout "$jsonID" "WARN" "Could not determine server cipher order, no matching cipher in list found (pls report this): $list_fwd"
-               tmpfile_handle ${FUNCNAME[0]}.txt
-               return 1
+               ret=1
                # we assume the problem is with testing here but it could be also the server side
+          else
+               cipher1=$(get_cipher $TMPFILE)               # cipher1 from 1st serverhello
+               debugme tm_out "1 --> $cipher1\n"
+
+               # second client hello with reverse list
+               [[ $DEBUG -ge 4 ]] && echo -e "\n Reverse: ${list_reverse}"
+               $OPENSSL s_client $(s_client_options "$STARTTLS -cipher $list_reverse $BUGS -connect $NODEIP:$PORT $PROXY $addcmd2") </dev/null 2>>$ERRFILE >$TMPFILE
+               # first handshake worked above so no error handling here
+               cipher2=$(get_cipher $TMPFILE)               # cipher2 from 2nd serverhello
+               debugme tm_out "2 --> $cipher2\n"
+
+               [[ $cipher1 == $cipher2 ]] && has_cipher_order=true
           fi
-          cipher1=$(get_cipher $TMPFILE)               # cipher1 from 1st serverhello
-          debugme tm_out "1 --> $cipher1\n"
-
-          # second client hello with reverse list
-          [[ $DEBUG -ge 4 ]] && echo -e "\n Reverse: ${list_reverse}"
-          $OPENSSL s_client $(s_client_options "$STARTTLS -cipher $list_reverse $BUGS -connect $NODEIP:$PORT $PROXY $addcmd2") </dev/null 2>>$ERRFILE >$TMPFILE
-          # first handshake worked above so no error handling here
-          cipher2=$(get_cipher $TMPFILE)               # cipher2 from 2nd serverhello
-          debugme tm_out "2 --> $cipher2\n"
-
-          [[ $cipher1 == $cipher2 ]] && has_cipher_order=true
      fi
      debugme echo "has_cipher_order: $has_cipher_order"
      debugme echo "has_tls13_cipher_order: $has_tls13_cipher_order"
 
      # restore file from above
      [[ "$default_proto" == TLSv1.3 ]] && cp "$TEMPDIR/$NODEIP.parse_tls13_serverhello.txt" $TMPFILE
-     cipher1=$(get_cipher $TMPFILE)
-     tmpfile_handle ${FUNCNAME[0]}.txt
+     if [[ "$default_proto" == TLSv1.3 ]] || [[ -n "$cipher2" ]]; then
+          cipher1=$(get_cipher $TMPFILE)
+          tmpfile_handle ${FUNCNAME[0]}.txt
+     fi
 
      # Sanity check: Handshake with no ciphers and one with forward list didn't overlap
-     if [[ "$cipher0" != $cipher1 ]]; then
+     if [[ $ret -eq 0 ]] && [[ "$cipher0" != $cipher1 ]]; then
           limitedsense=" (matching cipher in list missing)"
      fi
 
-     if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]] && ( [[ "$cipher1" == TLS_* ]] || [[ "$cipher1" == SSL_* ]] ); then
-          default_cipher="$(rfc2openssl "$cipher1")"
-     elif [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]] && [[ "$cipher1" != TLS_* ]] && [[ "$cipher1" != SSL_* ]]; then
-          default_cipher="$(openssl2rfc "$cipher1")"
+     if [[ -n "$cipher1" ]]; then
+          ciph="$cipher1"
+     else
+          ciph="$cipher0"
+          cp "$TEMPDIR/$NODEIP.parse_tls13_serverhello.txt" $TMPFILE
+          tmpfile_handle ${FUNCNAME[0]}.txt
      fi
-     [[ -z "$default_cipher" ]] && default_cipher="$cipher1"
+     if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]] && ( [[ "$ciph" == TLS_* ]] || [[ "$ciph" == SSL_* ]] ); then
+          default_cipher="$(rfc2openssl "$ciph")"
+     elif [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]] && [[ "$ciph" != TLS_* ]] && [[ "$ciph" != SSL_* ]]; then
+          default_cipher="$(openssl2rfc "$ciph")"
+     fi
+     [[ -z "$default_cipher" ]] && default_cipher="$ciph"
 
      "$FAST" && using_sockets=false
      [[ $TLS_NR_CIPHERS == 0 ]] && using_sockets=false
@@ -6778,6 +6788,8 @@ run_server_preference() {
                     outln " (listed by strength)"
                elif [[ $proto_ossl == tls1_3 ]]; then
                     outln " (no server order, thus listed by strength)"
+               elif [[ -z "$cipher2" ]]; then
+                    outln " (listed by strength)"
                else
                     prln_svrty_high " (no server order, thus listed by strength)"
                fi
@@ -6794,6 +6806,8 @@ run_server_preference() {
           out "no (TLS 1.3 only)"
           limitedsense=" (limited sense as client will pick)"
           fileout "$jsonID" "INFO" "not a cipher order for TLS 1.3 configured"
+     elif ! "$TLS13_ONLY" && [[ -z "$cipher2" ]]; then
+          pr_warning "unable to determine"
      elif ! "$has_cipher_order" && ! "$has_tls13_cipher_order"; then
           # server used the different ends (ciphers) from the client hello
           pr_svrty_high "no (NOT ok)"
@@ -6895,11 +6909,11 @@ run_server_preference() {
           *)   fileout "$jsonID" "INFO" "$default_cipher$(read_dhbits_from_file "$TEMPDIR/$NODEIP.run_server_preference.txt" "string") $limitedsense"
                ;;
      esac
-     read_dhbits_from_file "$TEMPDIR/$NODEIP.run_server_preference.txt"
+     [[ -n "$default_cipher" ]] && read_dhbits_from_file "$TEMPDIR/$NODEIP.run_server_preference.txt"
 
      if [[ "$cipher0" != $cipher1 ]]; then
           pr_warning " -- inconclusive test, matching cipher in list missing"
-          outln ", better see below"
+          outln ", better see above"
           #FIXME: This is ugly but the best we can do before rewrite this section
      else
           outln "$limitedsense"
