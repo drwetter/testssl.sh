@@ -9608,7 +9608,7 @@ certificate_info() {
           fileout "${jsonID}${json_postfix}" "INFO" "check skipped as instructed"
      else
           pr_svrty_low "not offered"
-          fileout "${jsonID}${json_postfix}" "LOW" "--"
+          fileout "${jsonID}${json_postfix}" "LOW" "not offered, checkout https://crashtest-security.com/enable-missing-ssl-caa-record"
      fi
      outln
 
