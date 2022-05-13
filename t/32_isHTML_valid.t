@@ -35,7 +35,7 @@ unlink 'tmp.html';
 # Remove the HTML footer
 $edited_html =~ s/\n\<\/pre\>\n\<\/body\>\n\<\/html\>//;
 # Remove any hypertext links for URLs
-$edited_html =~ s/<a href=[0-9A-Za-z ";:=\/\.\?\-]*>//g;
+$edited_html =~ s/<a href=[0-9A-Za-z ";:_&=\/\.\?\-]*>//g;
 $edited_html =~ s/<\/a>//g;
 
 # Replace escaped characters with their original text
