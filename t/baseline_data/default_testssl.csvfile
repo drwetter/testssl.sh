@@ -91,7 +91,7 @@
 "SWEET32","testssl.sh/81.169.166.184","443","OK","not vulnerable","CVE-2016-2183 CVE-2016-6329","CWE-327"
 "FREAK","testssl.sh/81.169.166.184","443","OK","not vulnerable","CVE-2015-0204","CWE-310"
 "DROWN","testssl.sh/81.169.166.184","443","OK","not vulnerable on this host and port","CVE-2016-0800 CVE-2016-0703","CWE-310"
-"DROWN_hint","testssl.sh/81.169.166.184","443","INFO","Make sure you don't use this certificate elsewhere with SSLv2 enabled services, see https://censys.io/ipv4?q=317383D12511E625564E8C850DD7494CAC6903ECAD7394055A5D3FB5E6EFB402","CVE-2016-0800 CVE-2016-0703","CWE-310"
+"DROWN_hint","testssl.sh/81.169.166.184","443","INFO","Make sure you don't use this certificate elsewhere with SSLv2 enabled services, see https://search.censys.io/search?resource=hosts&sort=RELEVANCE&virtual_hosts=INCLUDE&?q=31B44391529821C6A77F3C78B02D716A07F99B8FDB342BF5A78F263C25375968","CVE-2016-0800 CVE-2016-0703","CWE-310
 "LOGJAM","testssl.sh/81.169.166.184","443","OK","not vulnerable, no DH EXPORT ciphers,","CVE-2015-4000","CWE-310"
 "LOGJAM-common_primes","testssl.sh/81.169.166.184","443","OK","--","CVE-2015-4000","CWE-310"
 "BEAST_CBC_TLS1","testssl.sh/81.169.166.184","443","MEDIUM","ECDHE-RSA-AES256-SHA ECDHE-RSA-AES128-SHA DHE-RSA-CAMELLIA256-SHA DHE-RSA-CAMELLIA128-SHA DHE-RSA-AES256-SHA DHE-RSA-AES128-SHA AES256-SHA","CVE-2011-3389","CWE-20"
