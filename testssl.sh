@@ -15617,7 +15617,7 @@ run_drown() {
      local cwe="CWE-310"
      local hint=""
      local jsonID="DROWN"
-     local censys_host_url="https://search.censys.io/search?resource=hosts&sort=RELEVANCE&virtual_hosts=INCLUDE&"
+     local censys_host_url="https://search.censys.io/search?resource=hosts&virtual_hosts=INCLUDE"
 
      if [[ $VULN_COUNT -le $VULN_THRESHLD ]]; then
           outln
@@ -15643,7 +15643,7 @@ run_drown() {
           return 1
      fi
 
-     censys_host_url="$censys_host_url?q=$cert_fingerprint_sha2"
+     censys_host_url="$censys_host_url&q=$cert_fingerprint_sha2"
      if [[ $(has_server_protocol ssl2) -ne 1 ]]; then
           sslv2_sockets
      else
