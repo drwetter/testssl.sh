@@ -9357,6 +9357,7 @@ certificate_info() {
 
      determine_dates_certificate "$cert_txt" > /tmp/ddc_cert.txt
      IFS=',' read -r startdate enddate diffseconds days2expire yearstart < /tmp/ddc_cert.txt
+     rm /tmp/ddc_cert.txt
 
      # We adjust the thresholds by %50 for LE certificates, relaxing warnings for those certificates.
      # . instead of \' because it does not break syntax highlighting in vim
@@ -9698,6 +9699,7 @@ certificate_info() {
           # We don't need every value here. For the sake of being consistent here we add the rest
           determine_dates_certificate "${intermediate_certs_txt[i]}" > /tmp/ddc_intermediate_certs.txt
           IFS=',' read -r startdate enddate diffseconds days2expire yearstart < /tmp/ddc_intermediate_certs.txt
+          rm /tmp/ddc_intermediate_certs.txt
           fileout "intermediate_cert_notBefore <#${i}>${json_postfix}"  "INFO" "$startdate"
 
           if $first; then
