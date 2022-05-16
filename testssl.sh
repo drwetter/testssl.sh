@@ -9354,7 +9354,9 @@ certificate_info() {
 #         see #967
 
      out "$indent"; pr_bold " Certificate Validity (UTC)   "
-     IFS=',' read -r startdate enddate diffseconds days2expire yearstart < <(determine_dates_certificate "$cert_txt")
+
+     determine_dates_certificate "$cert_txt" > /tmp/ddc_cert.txt
+     IFS=',' read -r startdate enddate diffseconds days2expire yearstart < /tmp/ddc_cert.txt
 
      # We adjust the thresholds by %50 for LE certificates, relaxing warnings for those certificates.
      # . instead of \' because it does not break syntax highlighting in vim
@@ -9694,7 +9696,8 @@ certificate_info() {
           intermediate_certs_txt[i]="$($OPENSSL x509 -text -noout 2>/dev/null <<< "$cert")"
 
           # We don't need every value here. For the sake of being consistent here we add the rest
-          IFS=',' read -r startdate enddate diffseconds days2expire yearstart < <(determine_dates_certificate "${intermediate_certs_txt[i]}")
+          determine_dates_certificate "${intermediate_certs_txt[i]}" > /tmp/ddc_intermediate_certs.txt
+          IFS=',' read -r startdate enddate diffseconds days2expire yearstart < /tmp/ddc_intermediate_certs.txt
           fileout "intermediate_cert_notBefore <#${i}>${json_postfix}"  "INFO" "$startdate"
 
           if $first; then
@@ -17802,7 +17805,6 @@ run_drown() {
      local cwe="CWE-310"
      local hint=""
      local jsonID="DROWN"
-     local censys_host_url="https://search.censys.io/search?resource=hosts&virtual_hosts=INCLUDE"
 
      if [[ $VULN_COUNT -le $VULN_THRESHLD ]]; then
           outln
@@ -17828,7 +17830,6 @@ run_drown() {
           return 1
      fi
 
-     censys_host_url="$censys_host_url&q=$cert_fingerprint_sha2"
      if [[ $(has_server_protocol ssl2) -ne 1 ]]; then
           sslv2_sockets
      else
@@ -17851,26 +17852,26 @@ run_drown() {
                     nr_ciphers_detected=$((V2_HELLO_CIPHERSPEC_LENGTH / 3))
                     if [[ 0 -eq "$nr_ciphers_detected" ]]; then
                          prln_svrty_high "CVE-2015-3197: SSLv2 supported but couldn't detect a cipher (NOT ok)";
-                         fileout "$jsonID" "HIGH" "SSLv2 offered, but could not detect a cipher. Make sure you don't use this certificate elsewhere, see $censys_host_url" "$cve CVE-2015-3197" "$cwe" "$hint"
+                         fileout "$jsonID" "HIGH" "SSLv2 offered, but could not detect a cipher. Make sure you don't use this certificate elsewhere, see https://censys.io/ipv4?q=$cert_fingerprint_sha2" "$cve CVE-2015-3197" "$cwe" "$hint"
                     else
                          prln_svrty_critical  "VULNERABLE (NOT ok), SSLv2 offered with $nr_ciphers_detected ciphers";
-                         fileout "$jsonID" "CRITICAL" "VULNERABLE, SSLv2 offered with $nr_ciphers_detected ciphers. Make sure you don't use this certificate elsewhere, see $censys_host_url" "$cve" "$cwe" "$hint"
+                         fileout "$jsonID" "CRITICAL" "VULNERABLE, SSLv2 offered with $nr_ciphers_detected ciphers. Make sure you don't use this certificate elsewhere, see https://censys.io/ipv4?q=$cert_fingerprint_sha2" "$cve" "$cwe" "$hint"
                          set_grade_cap "F" "Vulnerable to DROWN"
                     fi
                     outln "$spaces Make sure you don't use this certificate elsewhere, see:"
                     out "$spaces "
-                    pr_url "$censys_host_url"
+                    pr_url "https://censys.io/ipv4?q=$cert_fingerprint_sha2"
                     outln
                fi
                ;;
           *)   prln_svrty_best "not vulnerable on this host and port (OK)"
                fileout "$jsonID" "OK" "not vulnerable on this host and port" "$cve" "$cwe"
                if [[ -n "$cert_fingerprint_sha2" ]]; then
-                    outln "$spaces make sure you don't use this certificate elsewhere with SSLv2 enabled services, see"
+                    outln "$spaces make sure you don't use this certificate elsewhere with SSLv2 enabled services"
                     out "$spaces "
-                    pr_url "$censys_host_url"
-                    outln
-                    fileout "${jsonID}_hint" "INFO" "Make sure you don't use this certificate elsewhere with SSLv2 enabled services, see $censys_host_url" "$cve" "$cwe"
+                    pr_url "https://censys.io/ipv4?q=$cert_fingerprint_sha2"
+                    outln " could help you to find out"
+                    fileout "${jsonID}_hint" "INFO" "Make sure you don't use this certificate elsewhere with SSLv2 enabled services, see https://censys.io/ipv4?q=$cert_fingerprint_sha2" "$cve" "$cwe"
                else
                     outln "$spaces no RSA certificate, thus certificate can't be used with SSLv2 elsewhere"
                     fileout "${jsonID}_hint" "INFO" "no RSA certificate, can't be used with SSLv2 elsewhere" "$cve" "$cwe"
