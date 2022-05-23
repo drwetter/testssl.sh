@@ -16710,7 +16710,7 @@ run_crime() {
           pr_svrty_best "not vulnerable (OK)"
           [[ $DEBUG -ge 1 ]] && out ", no compression in TLS 1.3 only servers"
           outln
-          fileout "$jsonID" "OK" "TLS 1.3 only server" "$cve" "$cwe"
+          fileout "CRIME_TLS" "OK" "TLS 1.3 only server" "$cve" "$cwe"
           return 0
      fi
 
