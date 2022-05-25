@@ -16705,6 +16705,7 @@ run_crime() {
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for CRIME vulnerability " && outln
      pr_bold " CRIME, TLS " ; out "($cve)                "
+     jsonID="CRIME_TLS"
 
      if "$TLS13_ONLY"; then
           pr_svrty_best "not vulnerable (OK)"
@@ -16717,7 +16718,7 @@ run_crime() {
      if ! "$HAS_ZLIB"; then
           if "$SSL_NATIVE"; then
                prln_local_problem "$OPENSSL lacks zlib support"
-               fileout "CRIME_TLS" "WARN" "CRIME, TLS: Not tested. $OPENSSL lacks zlib support" "$cve" "$cwe"
+               fileout "$jsonID" "WARN" "CRIME, TLS: Not tested. $OPENSSL lacks zlib support" "$cve" "$cwe"
                return 1
           else
                tls_sockets "03" "$TLS12_CIPHER" "" "" "true"
@@ -16735,23 +16736,23 @@ run_crime() {
 
      if [[ $sclient_success -ne 0 ]]; then
           pr_warning "test failed (couldn't connect)"
-          fileout "CRIME_TLS" "WARN" "Check failed, couldn't connect" "$cve" "$cwe"
+          fileout "$jsonID" "WARN" "Check failed, couldn't connect" "$cve" "$cwe"
           ret=1
      elif grep -a Compression $TMPFILE | grep -aq NONE >/dev/null; then
           pr_svrty_good "not vulnerable (OK)"
           if [[ $SERVICE != HTTP ]] && [[ "$CLIENT_AUTH" != required ]];  then
                out " (not using HTTP anyway)"
-               fileout "CRIME_TLS" "OK" "not vulnerable (not using HTTP anyway)" "$cve" "$cwe"
+               fileout "$jsonID" "OK" "not vulnerable (not using HTTP anyway)" "$cve" "$cwe"
           else
-               fileout "CRIME_TLS" "OK" "not vulnerable" "$cve" "$cwe"
+               fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
           fi
      else
           if [[ $SERVICE == HTTP ]] || [[ "$CLIENT_AUTH" == required ]]; then
                pr_svrty_high "VULNERABLE (NOT ok)"
-               fileout "CRIME_TLS" "HIGH" "VULNERABLE" "$cve" "$cwe" "$hint"
+               fileout "$jsonID" "HIGH" "VULNERABLE" "$cve" "$cwe" "$hint"
           else
                pr_svrty_medium "VULNERABLE but not using HTTP: probably no exploit known"
-               fileout "CRIME_TLS" "MEDIUM" "VULNERABLE, but not using HTTP. Probably no exploit known" "$cve" "$cwe" "$hint"
+               fileout "$jsonID" "MEDIUM" "VULNERABLE, but not using HTTP. Probably no exploit known" "$cve" "$cwe" "$hint"
                # not clear whether a protocol != HTTP offers the ability to repeatedly modify the input
                # which is done e.g. via javascript in the context of HTTP
           fi
