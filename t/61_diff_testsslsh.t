@@ -36,7 +36,6 @@ printf "\n%s\n", "Diff unit test IPv4 against \"$uri\"";
 #1 run
 `$prg $check2run $uri 2>&1`;
 
-
 $diff = diff $socket_csv, $master_socket_csv;
 
 $socket_csv=`cat tmp.csv`;
@@ -53,7 +52,6 @@ $master_socket_csv=~ s/censys.io.*\n//g;
 # HTTP time
 $socket_csv=~ s/HTTP_headerTime.*\n//g;
 $master_socket_csv=~ s/HTTP_headerTime.*\n//g;
-
 
 # Compare the differences to the master file -- and print differences if there were detected.
 #
