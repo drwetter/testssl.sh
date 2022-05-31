@@ -14,12 +14,12 @@ The certificate trust stores were retrieved from
   --> "Keychain Access" (2 click). In that window --> "Keychains" --> "System"
   --> "Category" --> "All Items"
   Select all CA certificates except for Developer ID Certification Authority,  "File" --> "Export Items"
-    2. __Internet:__ Pick the latest subdir (=highest number) from https://opensource.apple.com/source/security_certificates/. They are in DER format despite their file extension. Download them with ``wget --level=1 --cut-dirs=5  --mirror --convert-links --adjust-extension --page-requisites  --no-parent https://opensource.apple.com/source/security_certificates/security_certificates-*/certificates/roots/``
+    2. __Internet:__ Pick the latest subdir (=highest number) from https://opensource.apple.com/source/security_certificates/. They are in DER format despite their file extension. Download them with ``wget --level=1 --cut-dirs=5 --mirror --convert-links --adjust-extension --page-requisites --no-parent https://opensource.apple.com/source/security_certificates/security_certificates-*/certificates/roots/``
 
 
 Google Chromium uses basically the trust stores above, see https://www.chromium.org/Home/chromium-security/root-ca-policy.
 
-If you want to check trust against e.g. a company internal CA you need to use ``./testssl.sh --add-ca companyCA1.pem,companyCA2.pem <further_cmds>`` or ``ADDITIONAL_CA_FILES=companyCA1.pem,companyCA2.pem ./testssl.sh <further_cmds>``.
+If you want to check trust against e.g. a company internal CA you need to use ``./testssl.sh --add-ca companyCA1.pem,companyCA2.pem <further_cmds>`` or ``ADDTL_CA_FILES=companyCA1.pem,companyCA2.pem ./testssl.sh <further_cmds>``.
 
 
 #### Further files
@@ -27,6 +27,8 @@ If you want to check trust against e.g. a company internal CA you need to use ``
 * ``tls_data.txt`` contains lists of cipher suites and private keys for sockets-based tests
 
 * ``cipher-mapping.txt`` contains information about all of the cipher suites defined for SSL/TLS
+
+* ``curves-mapping.txt`` contains information about all of the elliptic curves defined by IANA
 
 * ``ca_hashes.txt`` is used for HPKP test in order to have a fast comparison with known CAs. Use
    ``~/utils/create_ca_hashes.sh`` for an update
