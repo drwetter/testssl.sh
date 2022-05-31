@@ -38,3 +38,7 @@ If you want to check trust against e.g. a company internal CA you need to use ``
 * ``client-simulation.txt`` / ``client-simulation.wiresharked.txt`` are as the names indicate data for the client simulation.
   The first one is derived from ``~/utils/update_client_sim_data.pl``, and manually edited to sort and label those we don't want.
   The second file provides more client data retrieved from wireshark captures and some instructions how to do that yourself.
+
+* SSLSocketClient.java as the name indicates is a simple socket client in Java to generate a TLS/SSL handshake. It's taken from
+  https://docs.oracle.com/javase/10/security/sample-code-illustrating-secure-socket-connection-client-and-server.htm . It's not
+  ours and it's not GPLv2. There wasn't any license mentioned, it's only added for your convenience.
