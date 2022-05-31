@@ -1,4 +1,6 @@
 .DS_Store
+._.DS_Store
+.idea
 tmp.json
 *.bak
 *.json
@@ -6,3 +8,9 @@ tmp.json
 *.log
 *.xml
 *.iml
+*.swp
+*.orig
+*.rej
+*.asc
+*.diff
+*.patch
