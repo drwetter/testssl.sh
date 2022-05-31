@@ -11,7 +11,7 @@ The whole process is manual but not too difficult.
 * If needed sort for ClientHello.
 * Look for the ClientHello which matches the source IP + destination you had in mind. Check the destination hostname in the SNI extension so that you can be sure, it's the right traffic.
 * Edit `client-simulation.wiresharked.txt` and insert a new section, preferably by copying a previous version of the client from it.
-* Edit the *names* accordingly and "short". The latter must not contain blanks.
+* Edit the *names* accordingly and *short*. The latter must not contain blanks.
 * Retrieve *handshakebytes* by marking the "TLS 1.x Record Layer" --> Copy --> As a hex stream.
 * For *ch_ciphers* mark "Cipher Suites" --> Copy --> As a hex stream, remove any leading GREASE ciphers (?a?a) and supply it to `~/utils/hexstream2cipher.sh`. For consistency reasons it is preferred you remove the TLS 1.3 ciphers before which start with TLS\*.
 * *ciphersuites* are TLS 1.3 ciphersuites. You can identify them as they currently are like 0x130?. Retrieve them from above see `~/utils/hexstream2cipher.sh`. They start with TLS\*.
