@@ -4220,7 +4220,7 @@ run_allciphers() {
 # are good or bad) and list them in order to encryption strength.
 ciphers_by_strength() {
      local proto="$1" proto_hex="$2" proto_text="$3"
-     local using_sockets="$4" wide="$5"
+     local using_sockets="$4" wide="$5" serverpref_known="$6"
      local ossl_ciphers_proto
      local -i nr_ciphers nr_ossl_ciphers nr_nonossl_ciphers success
      local n sslvers auth mac hexc sslv2_ciphers="" cipher
@@ -4229,20 +4229,21 @@ ciphers_by_strength() {
      local -i i bundle end_of_bundle bundle_size num_bundles
      local -a ciphers_found ciphers_found2 sigalg ossl_supported index
      local dhlen supported_sslv2_ciphers ciphers_to_test tls13_ciphers_to_test addcmd temp
-     local available
+     local available proto_supported=false
      local id
      local has_dh_bits="$HAS_DH_BITS"
 
      # for local problem if it happens
      "$wide" || out "  "
-     if ! "$using_sockets" && ! locally_supported "$proto"; then
-          pr_local_problem "Your $OPENSSL does not support $proto"
+     if ! "$using_sockets" && ! sclient_supported "$proto"; then
+          "$wide" && outln
+          pr_local_problem "$OPENSSL does not support $proto"
           "$wide" && outln
           return 0
      fi
 
      if [[ $(has_server_protocol "${proto:1}") -eq 1 ]]; then
-          "$wide" && outln " - "
+          "$wide" && outln "\n - "
           return 0
      fi
 
@@ -4333,15 +4334,17 @@ ciphers_by_strength() {
                          for (( i=0 ; i<nr_ciphers; i++ )); do
                               if [[ "$supported_sslv2_ciphers" =~ ${normalized_hexcode[i]} ]]; then
                                    ciphers_found[i]=true
+                                   proto_supported=true
                                    "$wide" && "$SHOW_SIGALGO" && sigalg[i]="$s"
                               fi
                          done
                     else
+                         "$wide" && outln
                          outln " protocol supported with no cipher "
                     fi
                else
                     add_proto_offered ssl2 no
-                    "$wide" && outln " - "
+                    "$wide" && outln "\n - "
                fi
           else
                $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY -ssl2 >$TMPFILE 2>$ERRFILE </dev/null
@@ -4353,12 +4356,13 @@ ciphers_by_strength() {
                     for (( i=0 ; i<nr_ciphers; i++ )); do
                          if [[ "$supported_sslv2_ciphers" =~ ${ciph[i]} ]]; then
                               ciphers_found[i]=true
+                              proto_supported=true
                               "$wide" && "$SHOW_SIGALGO" && sigalg[i]="$s"
                          fi
                     done
                else
                     add_proto_offered ssl2 no
-                    "$wide" && outln " - "
+                    "$wide" && outln "\n - "
                fi
           fi
      else # no SSLv2
@@ -4413,6 +4417,7 @@ ciphers_by_strength() {
                                    done
                                    i=${index[i]}
                                    ciphers_found[i]=true
+                                   proto_supported=true
                                    "$wide" && [[ "$proto" == -tls1_3 ]] && kx[i]="$(read_dhtype_from_file $TMPFILE)"
                                    if "$wide" && ( [[ ${kx[i]} == Kx=ECDH ]] || [[ ${kx[i]} == Kx=DH ]] || [[ ${kx[i]} == Kx=EDH ]] ); then
                                         dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
@@ -4474,6 +4479,7 @@ ciphers_by_strength() {
                               done
                               i=${index[i]}
                               ciphers_found[i]=true
+                              proto_supported=true
                               "$wide" && [[ "$proto" == -tls1_3 ]] && kx[i]="$(read_dhtype_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")"
                               if "$wide" && ( [[ ${kx[i]} == Kx=ECDH ]] || [[ ${kx[i]} == Kx=DH ]] || [[ ${kx[i]} == Kx=EDH ]] ); then
                                    dhlen=$(read_dhbits_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" quiet)
@@ -4487,6 +4493,18 @@ ciphers_by_strength() {
           done
      fi
 
+     if "$wide" && [[ "${FUNCNAME[1]}" == run_server_preference ]] && "$proto_supported"; then
+          if [[ $proto_ossl == tls1_3 ]]; then
+               outln " (no server order, thus listed by strength)"
+          elif ! "$serverpref_known"; then
+               outln " (listed by strength)"
+          else
+               prln_svrty_high " (no server order, thus listed by strength)"
+          fi
+     elif "$wide" && "$proto_supported" || [[ $proto != -ssl2 ]]; then
+          outln
+     fi
+     
      cipher=""
      for (( i=0 ; i<nr_ciphers; i++ )); do
           if "${ciphers_found[i]}"; then
@@ -4567,8 +4585,8 @@ run_cipher_per_proto() {
      outln
      neat_header
      while read proto proto_hex proto_text; do
-          prln_underline "$(printf -- "%b" "$proto_text")"
-          ciphers_by_strength "$proto" "$proto_hex" "$proto_text" "$using_sockets" "true"
+          pr_underline "$(printf -- "%b" "$proto_text")"
+          ciphers_by_strength "$proto" "$proto_hex" "$proto_text" "$using_sockets" "true" "false"
      done <<< "$(tm_out " -ssl2 22 SSLv2\n -ssl3 00 SSLv3\n -tls1 01 TLS 1\n -tls1_1 02 TLS 1.1\n -tls1_2 03 TLS 1.2\n -tls1_3 04 TLS 1.3")"
      return 0
 #FIXME: no error condition
@@ -6773,8 +6791,6 @@ run_server_preference() {
      neat_header
      while read proto_ossl proto_hex proto_txt; do
           pr_underline "$(printf -- "%b" "$proto_txt")"
-          # TODO: If there's no cipher we should consider not displaying the text in the round brackets)
-          # the following takes care of that but only if we know the protocol is not supported
           if [[ $(has_server_protocol "$proto_ossl") -eq 1 ]]; then
                outln "\n - "
                continue
@@ -6784,16 +6800,12 @@ run_server_preference() {
           if [[ $proto_ossl == ssl2 ]] || \
                     ( [[ $proto_ossl != tls1_3 ]] && ! "$has_cipher_order" ) || \
                     ( [[ $proto_ossl == tls1_3 ]] && ! "$has_tls13_cipher_order" ); then
-               if [[ $proto_ossl == ssl2 ]]; then
-                    outln " (listed by strength)"
-               elif [[ $proto_ossl == tls1_3 ]]; then
-                    outln " (no server order, thus listed by strength)"
-               elif [[ -z "$cipher2" ]]; then
-                    outln " (listed by strength)"
+               if [[ -n "$cipher2" ]] && [[ $proto_ossl != ssl2 ]]; then
+                    ciphers_by_strength "-$proto_ossl" "$proto_hex" "$proto_txt" "$using_sockets" "true" "true"
                else
-                    prln_svrty_high " (no server order, thus listed by strength)"
+                    ciphers_by_strength "-$proto_ossl" "$proto_hex" "$proto_txt" "$using_sockets" "true" "false"
                fi
-               ciphers_by_strength "-$proto_ossl" "$proto_hex" "$proto_txt" "$using_sockets" "true"
+               
           else
                cipher_pref_check "$proto_ossl" "$proto_hex" "$proto_txt" "$using_sockets" "true"
           fi
@@ -7033,12 +7045,12 @@ cipher_pref_check() {
      local ciphers_found_with_sockets=false prioritize_chacha=false
 
      if [[ $proto == ssl3 ]] && ! "$HAS_SSL3" && ! "$using_sockets"; then
-          outln " (server order)"
+          outln
           prln_local_problem "$OPENSSL doesn't support \"s_client -ssl3\"";
           return 0
      fi
      if [[ $proto == tls1_3 ]] && ! "$HAS_TLS13" && ! "$using_sockets"; then
-          outln " (server order)"
+          outln
           prln_local_problem "$OPENSSL doesn't support \"s_client -tls1_3\"";
           return 0
      fi
@@ -7339,8 +7351,10 @@ cipher_pref_check() {
      fi
      if "$prioritize_chacha"; then
           outln " (server order -- server prioritizes ChaCha ciphers when preferred by clients)"
-     else
+     elif [[ -n "$order" ]]; then
           outln " (server order)"
+     else
+          outln
      fi
      if [[ -n "$order" ]]; then
           add_proto_offered "$proto" yes
