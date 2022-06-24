@@ -1233,6 +1233,8 @@ fileout_json_finding() {
           if [[ "$1" == service ]]; then
                if [[ $SERVER_COUNTER -gt 1 ]]; then
                     echo "          ," >> "$JSONFILE"
+               elif ! "$FIRST_FINDING"; then
+                    echo -n "," >> "$JSONFILE"
                fi
                target="$NODE"
                $do_mx_all_ips && target="$URI"
