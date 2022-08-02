@@ -3551,14 +3551,18 @@ neat_header(){
 # arg3: keyexchange
 # arg4: encryption (maybe included "export")
 # arg5: "export" if the cipher is an export-quality cipher, empty otherwise.
-# arg6: "true" if the cipher's "quality" should be highlighted
-#       "false" if the line should be printed in light grey
-#       empty if line should be returned as a string
+# arg6: not a boolean!
+#       "true" : if the cipher's "quality" should be highlighted
+#       "false": if the line should be printed in light grey
+#       ""     : if line should be returned as a string
+#       "available" / "not a/v" when SHOW_EACH_C is set
+
 neat_list(){
      local hexcode="$1"
      local ossl_cipher="$2" export="$5" tls_cipher=""
      local kx enc strength line what_dh bits
      local -i i len
+     local how2show="$6"
 
      kx="${3//Kx=/}"
      enc="${4//Enc=/}"
@@ -3574,14 +3578,19 @@ neat_list(){
      enc="${enc//POLY1305/}"            # remove POLY1305
      enc="${enc//\//}"                  # remove "/"
 
-     # For rating set bit size
-     set_ciph_str_score $strength
+     # For rating set bit size but only when we're not on all display mode (global var SHOW_EACH_C)
+     if [[ $how2show != "not a/v" ]] && "$SHOW_EACH_C" ]]; then
+          :
+     else
+          set_ciph_str_score $strength
+     fi
 
      [[ "$export" =~ export ]] && strength="$strength,exp"
 
      [[ "$DISPLAY_CIPHERNAMES" != openssl-only ]] && tls_cipher="$(show_rfc_style "$hexcode")"
 
-     if [[ "$6" != true ]]; then
+     # global var SHOW_EACH_C determines whether we display all tested ciphers
+     if [[ "$how2show" != true ]]; then
           if [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]]; then
                line="$(printf -- " %-7s %-49s %-10s %-12s%-8s" "$hexcode" "$tls_cipher" "$kx" "$enc" "$strength")"
                [[ "$DISPLAY_CIPHERNAMES" != rfc-only ]] && line+="$(printf -- " %-33s${SHOW_EACH_C:+  %-0s}" "$ossl_cipher")"
@@ -3589,7 +3598,7 @@ neat_list(){
                line="$(printf -- " %-7s %-33s %-10s %-12s%-8s" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength")"
                [[ "$DISPLAY_CIPHERNAMES" != openssl-only ]] && line+="$(printf -- " %-49s${SHOW_EACH_C:+  %-0s}" "$tls_cipher")"
           fi
-          if [[ -z "$6" ]]; then
+          if [[ -z "$how2show" ]]; then
                tm_out "$line"
           else
                pr_deemphasize "$line"
@@ -4504,7 +4513,7 @@ ciphers_by_strength() {
      elif "$wide" && "$proto_supported" || [[ $proto != -ssl2 ]]; then
           outln
      fi
-     
+
      cipher=""
      for (( i=0 ; i<nr_ciphers; i++ )); do
           if "${ciphers_found[i]}"; then
@@ -6805,7 +6814,6 @@ run_server_preference() {
                else
                     ciphers_by_strength "-$proto_ossl" "$proto_hex" "$proto_txt" "$using_sockets" "true" "false"
                fi
-               
           else
                cipher_pref_check "$proto_ossl" "$proto_hex" "$proto_txt" "$using_sockets" "true"
           fi
