@@ -7,17 +7,17 @@ assignees: ''
 
 ---
 <!---
-Feel free to remove this line but please stick to the template.
+Feel free to remove this line but please stick to the template. Not filling out anything might result in immediate closing your feature request.
 -->
+
+**Which version are you referring to**
+3.0.x or 3.1dev? We might close this right away otherwise.
+
 
 **Please check this repo whether this is a known feature request**
 If in doubt check the git log and/or check whether you run the latest version from the git repo. Maybe this was solved already?
 
-**Which version are you referring to**
-3.0.x or 3.1dev?
-
 **Describe your feature request (if it's a technical feature)**
-
 
 **If your feature request otherwise is related to a usage problem, please describe it**
 A clear and concise description of what the problem is. Example: I'm always frustrated when [...]
