@@ -3555,7 +3555,6 @@ neat_header(){
 #       "true" : if the cipher's "quality" should be highlighted
 #       "false": if the line should be printed in light grey
 #       ""     : if line should be returned as a string
-#       "available" / "not a/v" when SHOW_EACH_C is set
 
 neat_list(){
      local hexcode="$1"
@@ -3578,10 +3577,8 @@ neat_list(){
      enc="${enc//POLY1305/}"            # remove POLY1305
      enc="${enc//\//}"                  # remove "/"
 
-     # For rating set bit size but only when we're not on all display mode (global var SHOW_EACH_C)
-     if [[ $how2show != "not a/v" ]] && "$SHOW_EACH_C" ]]; then
-          :
-     else
+     # For rating set bit size but only when cipher is supported by server.
+     if [[ $how2show == true ]]; then
           set_ciph_str_score $strength
      fi
 
