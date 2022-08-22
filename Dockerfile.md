@@ -36,7 +36,7 @@ You can pull the image from dockerhub and run:
 docker run --rm -t drwetter/testssl.sh --fs example.com
 ```
 
-Supported tages are: ``3.1dev`` and ``latest`, which are the same, i.e. the rolling release. ``3.0`` is the latest stable version from git which might have a few improvements (see git log) over the released version 3.0.X.
+Supported tags are: ``3.1dev`` and ``latest`, which are the same, i.e. the rolling release. ``3.0`` is the latest stable version from git which might have a few improvements (see git log) over the released version 3.0.X.
 
 ``docker run --rm -t drwetter/testssl.sh:stable example.com``.
 
