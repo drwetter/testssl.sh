@@ -122,7 +122,7 @@ trap "child_error" USR1
 
 ########### Internal definitions
 #
-declare -r VERSION="3.1dev"
+declare -r VERSION="3.2rc1"
 declare -r SWCONTACT="dirk aet testssl dot sh"
 [[ "$VERSION" =~ dev|rc|beta ]] && \
      SWURL="https://testssl.sh/dev/" ||
