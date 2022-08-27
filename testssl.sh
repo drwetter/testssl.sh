@@ -11106,7 +11106,7 @@ starttls_smtp_dialog() {
      [[ -n "$2" ]] && starttls="$starttls\r\n$2"            # this adds a payload if supplied
      if [[ "$1" == lmtp ]]; then
           proto="lmtp"
-          greet_str="LHLO"
+          greet_str="LHLO testssl.sh"
      fi
      debugme echo "=== starting $proto STARTTLS dialog ==="
 
