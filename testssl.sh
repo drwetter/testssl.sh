@@ -19762,8 +19762,9 @@ find_openssl_binary() {
 
      grep -qw '\-fallback_scsv' $s_client_has && HAS_FALLBACK_SCSV=true
 
+     # the output from 1.0.2 and 1.1.1/3.0.x is quite different
      grep -q 'xmpp' $s_client_starttls_has && HAS_XMPP=true
-     grep -q 'xmpp-server' $s_client_starttls_has && HAS_XMPP_SERVER=true
+     grep -Eq 'xmpp-server|xmpp\[-server\]' $s_client_starttls_has && HAS_XMPP_SERVER=true
 
      grep -q 'postgres' $s_client_starttls_has && HAS_POSTGRES=true
      grep -q 'mysql' $s_client_starttls_has && HAS_MYSQL=true
