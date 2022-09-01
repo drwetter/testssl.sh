@@ -10,7 +10,7 @@ for some new / advanced cipher suites and/or features which are not in the
 official branch like (old version of the) CHACHA20+POLY1305 and CAMELLIA 256 bit ciphers.
 
 The (stripped) binaries this directory are all compiled from my openssl snapshot
-(https://github.com/drwetter/openssl-1.0.2-bad) which adds a few bits to Peter
+(https://github.com/drwetter/openssl-1.0.2.bad) which adds a few bits to Peter
 Mosman's openssl fork (https://github.com/PeterMosmans/openssl). Thx a bunch, Peter!
 The few bits are IPv6 support (except IPV6 proxy) and some STARTTLS backports.
 
