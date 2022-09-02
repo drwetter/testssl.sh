@@ -274,6 +274,8 @@ APP_TRAF_KEY_INFO=""                    # Information about the application traf
 TLS13_ONLY=false                        # Does the server support TLS 1.3 ONLY?
 OSSL_SHORTCUT=${OSSL_SHORTCUT:-false}   # Hack: if during the scan turns out the OpenSSL binary supports TLS 1.3 would be a better choice, this enables it.
 TLS_EXTENSIONS=""
+TLS13_CERT_COMPRESS_METHODS=""
+CERTIFICATE_TRANSPARENCY_SOURCE=""
 V2_HELLO_CIPHERSPEC_LENGTH=0
 declare -r NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
 # alpn_protos needs to be space-separated, not comma-separated, including odd ones observed @ facebook and others, old ones like h2-17 omitted as they could not be found
@@ -7745,7 +7747,7 @@ determine_cert_compression() {
      local len1 len2 methods_to_test method_found method_nr methods_found=""
 
      # Certificate compression is only supported by TLS 1.3.
-     [[ $(has_server_protocol "tls1_3") -eq 1 ]] && tm_out "" && return 1
+     [[ $(has_server_protocol "tls1_3") -eq 1 ]] && return 1
      while true; do
           methods_to_test=""
           for (( i=1; i <= nr_compression_methods; i++ )); do
@@ -7759,7 +7761,6 @@ determine_cert_compression() {
           tls_sockets "04" "$TLS13_CIPHER" "all+" "00,1b, 00,$len2, $len1$methods_to_test"
           if [[ $? -ne 0 ]]; then
                add_proto_offered tls1_3 no
-               tm_out ""
                return 1
           fi
           add_proto_offered tls1_3 yes
@@ -7773,11 +7774,10 @@ determine_cert_compression() {
           methods_found+=" $method_found"
      done
      if [[ -n "$methods_found" ]]; then
-          methods_found="${methods_found:1}"
+          TLS13_CERT_COMPRESS_METHODS="${methods_found:1}"
      else
-          methods_found="none"
+          TLS13_CERT_COMPRESS_METHODS="none"
      fi
-     tm_out "$methods_found"
      return 0
 }
 
@@ -8585,16 +8585,18 @@ certificate_transparency() {
      # Cipher suites that use a certificate with a GOST public key
      local -r a_gost="00,80, 00,81, 00,82, 00,83"
 
+     CERTIFICATE_TRANSPARENCY_SOURCE=""
+
      # First check whether signed certificate timestamps (SCT) are included in the
      # server's certificate. If they aren't, check whether the server provided
      # a stapled OCSP response with SCTs. If no SCTs were found in the certificate
      # or OCSP response, check for an SCT TLS extension.
      if [[ "$cert_txt" =~ CT\ Precertificate\ SCTs ]] || [[ "$cert_txt" =~ '1.3.6.1.4.1.11129.2.4.2' ]]; then
-          tm_out "certificate extension"
+          CERTIFICATE_TRANSPARENCY_SOURCE="certificate extension"
           return 0
      fi
      if [[ "$ocsp_response" =~ CT\ Certificate\ SCTs ]] || [[ "$ocsp_response" =~ '1.3.6.1.4.1.11129.2.4.5' ]]; then
-          tm_out "OCSP extension"
+          CERTIFICATE_TRANSPARENCY_SOURCE="OCSP extension"
           return 0
      fi
 
@@ -8603,7 +8605,7 @@ certificate_transparency() {
      # one certificate, then it is possible that an SCT TLS extension is returned for some
      # certificates, but not for all of them.
      if [[ $number_of_certificates -eq 1 ]] && [[ "$TLS_EXTENSIONS" =~ signed\ certificate\ timestamps ]]; then
-          tm_out "TLS extension"
+          CERTIFICATE_TRANSPARENCY_SOURCE="TLS extension"
           return 0
      fi
 
@@ -8636,16 +8638,16 @@ certificate_transparency() {
           if ( [[ $success -eq 0 ]] || [[ $success -eq 2 ]] ) && \
              grep -a 'TLS server extension ' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" | \
              grep -aq "signed certificate timestamps"; then
-               tm_out "TLS extension"
+               CERTIFICATE_TRANSPARENCY_SOURCE="TLS extension"
                return 0
           fi
      fi
 
      if [[ $SERVICE != HTTP ]] && [[ "$CLIENT_AUTH" != required ]]; then
           # At the moment Certificate Transparency only applies to HTTPS.
-          tm_out "N/A"
+          CERTIFICATE_TRANSPARENCY_SOURCE="N/A"
      else
-          tm_out "--"
+          CERTIFICATE_TRANSPARENCY_SOURCE="--"
      fi
      return 0
 }
@@ -9799,7 +9801,6 @@ run_server_defaults() {
      local -a ciphers_to_test certificate_type
      local -a -i success
      local cn_nosni cn_sni sans_nosni sans_sni san tls_extensions client_auth_ca
-     local cert_compression_methods=""
      local using_sockets=true
 
      "$SSL_NATIVE" && using_sockets=false
@@ -10015,8 +10016,9 @@ run_server_defaults() {
                sessticket_proto="$(get_protocol "$TMPFILE")"
           fi
      fi
-     "$using_sockets" && cert_compression_methods="$(determine_cert_compression)"
-     [[ -n "$cert_compression_methods" ]] && [[ "$cert_compression_methods" != "none" ]] && \
+     TLS13_CERT_COMPRESS_METHODS=""
+     "$using_sockets" && determine_cert_compression
+     [[ -n "$TLS13_CERT_COMPRESS_METHODS" ]] && [[ "$TLS13_CERT_COMPRESS_METHODS" != "none" ]] && \
           extract_new_tls_extensions "$TEMPDIR/$NODEIP.determine_cert_compression.txt"
 
      if "$using_sockets" && ! "$TLS13_ONLY" && [[ -z "$sessticket_lifetime_hint" ]] && [[ "$OPTIMAL_PROTO" != -ssl2 ]]; then
@@ -10038,7 +10040,8 @@ run_server_defaults() {
      # Now that all of the server's certificates have been found, determine for
      # each certificate whether certificate transparency information is provided.
      for (( i=1; i <= certs_found; i++ )); do
-          ct[i]="$(certificate_transparency "${previous_hostcert_txt[i]}" "${ocsp_response[i]}" "$certs_found" "${tested_cipher[i]}" "${sni_used[i]}" "${tls_version[i]}")"
+          certificate_transparency "${previous_hostcert_txt[i]}" "${ocsp_response[i]}" "$certs_found" "${tested_cipher[i]}" "${sni_used[i]}" "${tls_version[i]}"
+          ct[i]="$CERTIFICATE_TRANSPARENCY_SOURCE"
           # If certificate_transparency() called tls_sockets() and found a "signed certificate timestamps" extension,
           # then add it to $TLS_EXTENSIONS, since it may not have been found by determine_tls_extensions().
           [[ $certs_found -gt 1 ]] && [[ "${ct[i]}" == TLS\ extension ]] && extract_new_tls_extensions "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt"
@@ -10158,8 +10161,8 @@ run_server_defaults() {
      elif [[ $(has_server_protocol "tls1_3") -eq 0 ]]; then
           jsonID="certificate_compression"
           pr_bold " Certificate Compression      "
-          outln "$cert_compression_methods"
-          fileout "$jsonID" "INFO" "$cert_compression_methods"
+          outln "$TLS13_CERT_COMPRESS_METHODS"
+          fileout "$jsonID" "INFO" "$TLS13_CERT_COMPRESS_METHODS"
      else
          fileout "$jsonID" "INFO" "N/A"
      fi
@@ -23402,6 +23405,8 @@ reset_hostdepended_vars() {
      NR_STARTTLS_FAIL=0
      NR_HEADER_FAIL=0
      TLS_EXTENSIONS=""
+     TLS13_CERT_COMPRESS_METHODS=""
+     CERTIFICATE_TRANSPARENCY_SOURCE=""
      PROTOS_OFFERED=""
      TLS12_CIPHER_OFFERED=""
      CURVES_OFFERED=""
