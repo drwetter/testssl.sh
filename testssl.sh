@@ -11715,6 +11715,8 @@ check_tls_serverhellodone() {
                decrypted_response+="${tls_content_type}0301$(printf "%04X" $((plaintext_len/2)))${plaintext:0:plaintext_len}"
                if [[ "$tls_content_type" == 16 ]]; then
                     tls_handshake_ascii+="${plaintext:0:plaintext_len}"
+                    # Data after the Finished message is encrypted under a different key.
+                    [[ "${plaintext:0:2}" == 14 ]] && break
                elif [[ "$tls_content_type" == 15 ]]; then
                     tls_alert_ascii+="${plaintext:0:plaintext_len}"
                else
