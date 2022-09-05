@@ -6,20 +6,16 @@ All the precompiled binaries provided here have extended support for
 everything which is normally not in OpenSSL or LibreSSL -- 40+56 Bit,
 export/ANON ciphers, weak DH ciphers, weak EC curves, SSLv2 etc. -- all the dirty
 features needed for testing. OTOH they also come with extended support
-for new / advanced cipher suites and/or features which are not in the
+for some new / advanced cipher suites and/or features which are not in the
 official branch like (old version of the) CHACHA20+POLY1305 and CAMELLIA 256 bit ciphers.
-They also have IPv6 support, see below.
 
-The (stripped) binaries this directory are all compiled from my openssl
-snapshot (https://github.com/drwetter/openssl) from Peter Mosman's openssl
-fork (https://github.com/PeterMosmans/openssl). Thx a bunch, Peter!
+The (stripped) binaries this directory are all compiled from my openssl snapshot
+(https://github.com/drwetter/openssl-1.0.2.bad) which adds a few bits to Peter
+Mosman's openssl fork (https://github.com/PeterMosmans/openssl). Thx a bunch, Peter!
+The few bits are IPv6 support (except IPV6 proxy) and some STARTTLS backports.
 
 Compiled Linux and FreeBSD binaries so far come from Dirk, other
 contributors see ../CREDITS.md .
-
-**I discontinued to upload the not commonly used binaries at GitHub ** (ARM7l, Darwin.i386 and all except one kerberos compiles) **as it is not very appropriate to use GitHub especially for those. The main site for all
-binaries is https://testssl.sh/openssl-1.0.2i-chacha.pm.ipv6.contributed/, also see the tarball @
-https://testssl.sh/openssl-1.0.2i-chacha.pm.ipv6.Linux+FreeBSD.tar.gz**
 
 The binaries here have the naming scheme ``openssl.$(uname).$(uname -m)``
 and will be picked up from testssl.sh if you run testssl.sh directly
@@ -31,6 +27,20 @@ The Linux binaries with the trailing ``-krb5`` come with Kerberos 5 support,
 they won't be picked up automatically as you need to make sure first they
 run (see libraries below).
 
+Because I didn't want blow up the repo and waste disk spaces for others
+there are more binaries for other aerchitectures (ARM7l, Darwin.i386, ..
+here: https://testssl.sh/openssl-1.0.2k-chacha.pm.ipv6.Linux+FreeBSD.tar.gz
+and older ones here: https://testssl.sh/openssl-1.0.2i-chacha.pm.ipv6.contributed/ .
+
+As there is not darwin64-arm64-cc in the old branch there is not binary for
+that architecture either. (FYI: patch isn't big but isn't easy to backport).
+
+
+In general the usage of this binaries became more and more of a limited
+value: It doesn't support e.g. TLS 1.3 and newer TLS 1.2 ciphers. OTOH servers
+which only offer SSLv2 and SSLv3 became less common and we use for the
+majority of checks in testssl.sh sockets and not this binary.
+
 
 Compiling and Usage Instructions
 ================================
@@ -38,9 +48,11 @@ Compiling and Usage Instructions
 General
 -------
 
-Both 64+32 bit Linux binaries were compiled under Ubuntu 12.04 LTS. Likely you
-cannot use them for older distributions, younger worked in all my test environments.
-I provide for each distributions two sets of binaries (no IPv6 here):
+Both 64+32 bit Linux binaries were compiled under Ubuntu 12.04 LTS(!). Likely you
+cannot use them for older distributions, younger worked in all my test environments
+(like Debian 11 and OpenSuse Tumbleweed on Q3/2022).
+
+I provide two sets of binaries:
 
 * completely statically linked binaries
 * dynamically linked binaries, additionally with MIT Kerberos support ("krb5" in the name).
@@ -48,8 +60,9 @@ I provide for each distributions two sets of binaries (no IPv6 here):
 
 For the latter you need a whopping bunch of kerberos runtime libraries which you maybe need to
 install from your distributor (libgssapi_krb5, libkrb5, libcom_err, libk5crypto, libkrb5support,
-libkeyutils). The 'static' binaries do not have MIT kerberos support as there are no
-static kerberos libs and I did not bother to compile them from the sources.
+libkeyutils). Despite the fact it's 2022 the openssl kerberos binary still works when compiled
+non-statically on a legacy VM. I didn't bother use static kerberos libs as they need to be
+compiled from source.
 
 
 Compilation instructions
@@ -57,14 +70,8 @@ Compilation instructions
 
 If you want to compile OpenSSL yourself, here are the instructions:
 
-1.) get openssl from Peter Mosmans' repo:
-
-     git clone https://github.com/PeterMosmans/openssl
-     cd openssl
-
-or use my repo:
-
-    git clone https://github.com/drwetter/openssl
+1.)
+    git git clone https://github.com/drwetter/openssl-1.0.2-bad
     cd openssl
 
 
@@ -98,11 +105,6 @@ or use my repo:
     enable-seed enable-camellia enable-idea enable-rfc3779 no-ec_nistp_64_gcc_128 \
     -static experimental-jpake -DOPENSSL_USE_BUILD_DATE
 
-IPv6 support would need additionally the patch from ``fedora-dirk-ipv6.diff`` (included already
-in my branch).  This doesn't give you the option of an IPv6 enabled proxy yet.
-It is good practice to compile those binaries with ``-DOPENSSL_USE_IPV6`` as
-later on you can tell them apart by``openssl version -a``.
-
 Four GOST [1][2] ciphers come via engine support automagically with this setup. Two additional GOST
 ciphers can be compiled in (``GOST-GOST94``, ``GOST-MD5``) with ``-DTEMP_GOST_TLS`` but as of now they make
 problems under some circumstances, so unless you desperately need those ciphers I would stay away from
@@ -121,9 +123,11 @@ If you don't have / don't want Kerberos libraries and devel rpms/debs, just omit
 * 193(+4 GOST) ciphers including kerberos
 * 179(+4 GOST) ciphers without kerberos
 
-as opposed to ~110 from Ubuntu or Opensuse.
+as opposed to ~162 from Ubuntu or Opensuse. Note that newer distributions provide
+newer ciphers which this old openssl-1.0.2-bad doesn't have. OTOH openssl-1.0.2-bad
+has a lot of legacy ciphers and protocols enabled which newer binaries don't have.
 
-**Never use these binaries for anything other than testing**
+**Never use these binaries for anything other than testing!**
 
 Enjoy, Dirk
 
