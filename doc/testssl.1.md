@@ -120,6 +120,8 @@ The same can be achieved by setting the environment variable `WARNINGS`.
 
 `--xmpphost <jabber_domain>` is an additional option for STARTTLS enabled XMPP: It expects the jabber domain as a parameter. This is only needed if the domain is different from the URI supplied.
 
+`--starttls-not-mandatory` is an additional option to not cap the grade to `T` where STARTTLS is not mandatory.
+
 `--mx <domain|host>` tests all MX records (STARTTLS on port 25) from high to low priority, one after the other.
 
 `--ip <ip>` tests either the supplied IPv4 or IPv6 address instead of resolving host(s) in `<URI>`. IPv6 addresses need to be supplied in square brackets. `--ip=one` means: just test the first A record DNS returns (useful for multiple IPs). If `-6` and  `--ip=one` was supplied an AAAA record will be picked if available. The ``--ip`` option might be also useful if you want to resolve the supplied hostname to a different IP, similar as if you would edit `/etc/hosts` or `/c/Windows/System32/drivers/etc/hosts`. `--ip=proxy` tries a DNS resolution via proxy.
