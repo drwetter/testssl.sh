@@ -13362,6 +13362,7 @@ check_tls_serverhellodone() {
      local tls_content_type tls_protocol tls_msg_type extension_type
      local tls_err_level
      local hash_fn handshake_traffic_keys key="" iv="" finished_key=""
+     local post_finished_msg=""
      local -i seq_num=0 plaintext_len
      local plaintext decrypted_response="" additional_data
      local include_headers=true
@@ -13468,7 +13469,13 @@ check_tls_serverhellodone() {
                decrypted_response+="${tls_content_type}0301$(printf "%04X" $((plaintext_len/2)))${plaintext:0:plaintext_len}"
                case "$tls_content_type" in
                     15) tls_alert_ascii+="${plaintext:0:plaintext_len}" ;;
-                    16) tls_handshake_ascii+="${plaintext:0:plaintext_len}" ;;
+                    16) tls_handshake_ascii+="${plaintext:0:plaintext_len}"
+                        # Data after the Finished message is encrypted under a different key.
+                        if [[ "${plaintext:0:2}" == 14 ]]; then
+                             [[ "$process_full" == all+ ]] && post_finished_msg="${tls_hello_ascii:$((i+msg_len))}"
+                             break
+                        fi
+                        ;;
                     *) return 2 ;;
                esac
           fi
@@ -13517,7 +13524,7 @@ check_tls_serverhellodone() {
           # For SSLv3 - TLS1.2 look for a ServerHelloDone message.
           # For TLS 1.3 look for a Finished message.
           [[ $tls_msg_type == 0E ]] && tm_out "" && return 0
-          [[ $tls_msg_type == 14 ]] && tm_out "$msg_transcript $decrypted_response" && return 0
+          [[ $tls_msg_type == 14 ]] && tm_out "$msg_transcript $decrypted_response $post_finished_msg" && return 0
      done
      # If the response is TLSv1.3 and the full response is to be processed, but the
      # key and IV have not been provided to decrypt the response, then return 3 if
@@ -13821,6 +13828,8 @@ parse_tls_serverhello() {
                fi
                tls_serverhello_ascii="${tls_handshake_ascii:i:msg_len}"
                tls_serverhello_ascii_len=$msg_len
+          elif [[ "$tls_msg_type" == 04 ]]; then
+               parse_tls13_new_session_ticket "${APP_TRAF_KEY_INFO%% *}" "${tls_handshake_ascii:$((i-8)):$((msg_len+8))}"
           elif [[ "$process_full" =~ all ]] && [[ "$tls_msg_type" == 08 ]]; then
                # Add excrypted extensions (now decrypted) to end of extensions in ServerHello
                tls_encryptedextensions_ascii="${tls_handshake_ascii:i:msg_len}"
@@ -15665,18 +15674,22 @@ tls_sockets() {
      local tls_low_byte
      local cipher_list_2send
      local sock_reply_file2 sock_reply_file3
-     local tls_hello_ascii next_packet
+     local tls_hello_ascii next_packet post_finished_msg=""
      local clienthello1 original_clienthello hrr=""
      local process_full="$3" offer_compression=false skip=false
      local close_connection=true include_headers=true
-     local -i i len tag_len hello_done=0
+     local -i i len msg_len tag_len hello_done=0 seq_num=0
      local cipher="" tls_version handshake_secret="" res
-     local initial_msg_transcript msg_transcript finished_msg aad="" data=""
+     local initial_msg_transcript msg_transcript finished_msg aad="" data="" plaintext
      local handshake_traffic_keys key iv finished_key
      local master_secret master_traffic_keys
 
+     APP_TRAF_KEY_INFO=""
      [[ "$5" == true ]] && offer_compression=true
      [[ "$6" == false ]] && close_connection=false
+     if [[ "$process_full" == all+ ]] && [[ -s "$TEMPDIR/$NODEIP.parse_tls13_new_session_ticket.txt" ]]; then
+          rm "$TEMPDIR/$NODEIP.parse_tls13_new_session_ticket.txt"
+     fi
      tls_low_byte="$1"
      if [[ -n "$2" ]]; then             # use supplied string in arg2 if there is one
           cipher_list_2send="$2"
@@ -15765,7 +15778,44 @@ tls_sockets() {
                     res="$(check_tls_serverhellodone "$tls_hello_ascii" "$process_full" "$cipher" "$handshake_secret" "$initial_msg_transcript")"
                     hello_done=$?
                     if [[ "$hello_done" -eq 0 ]] && [[ -n "$res" ]]; then
-                         read -r msg_transcript tls_hello_ascii <<< "$res"
+                         read -r msg_transcript tls_hello_ascii post_finished_msg <<< "$res"
+                         if [[ -n "$post_finished_msg" ]]; then
+                              # Determine TLS version
+                              tls_version="$DETECTED_TLS_VERSION"
+                              if [[ "${TLS_SERVER_HELLO:8:3}" == 7F1 ]]; then
+                                   tls_version="${TLS_SERVER_HELLO:8:4}"
+                              elif [[ "$TLS_SERVER_HELLO" =~ 002B00027F1[0-9A-F] ]]; then
+                                   tls_version="${BASH_REMATCH:8:4}"
+                              fi
+                              [[ "${tls_version:0:2}" == 7F ]] && [[ 0x${tls_version:2:2} -lt 25 ]] && include_headers=false
+
+                              # Compute application traffic keys and IVs.
+                              master_secret="$(derive-master-secret "$cipher" "$handshake_secret")"
+                              master_traffic_keys="$(derive-application-traffic-keys "$cipher" "$master_secret" "$msg_transcript" client)"
+                              APP_TRAF_KEY_INFO="$master_traffic_keys 0"
+                              master_traffic_keys="$(derive-application-traffic-keys "$cipher" "$master_secret" "$msg_transcript" server)"
+                              read -r key iv finished_key <<< "$master_traffic_keys"
+                              while true; do
+                                   len=${#post_finished_msg}
+                                   [[ $len -ge 10 ]] || break
+                                   [[ "${post_finished_msg:0:5}" == 17030 ]] || break
+                                   msg_len=$((2*0x${post_finished_msg:6:4}))
+                                   [[ $len -ge $((msg_len+10)) ]] || break
+                                   aad="${post_finished_msg:0:10}"
+                                   "$include_headers" || aad=""
+                                   plaintext="$(sym-decrypt "$cipher" "$key" "$(get-nonce "$iv" "$seq_num")" "${post_finished_msg:10:msg_len}" "$aad")"
+
+                                   # Remove zeros from end of plaintext, if any
+                                   len=${#plaintext}-2
+                                   while [[ "${plaintext:len:2}" == 00 ]]; do
+                                        len=$((len-2))
+                                   done
+                                   tls_hello_ascii+="${plaintext:len:2}0301$(printf "%04X" $((len/2)))${plaintext:0:len}"
+                                   post_finished_msg="${post_finished_msg:$((msg_len+10))}"
+                                   seq_num+=1
+                              done
+                              APP_TRAF_KEY_INFO="$tls_version $cipher $master_traffic_keys $seq_num $APP_TRAF_KEY_INFO"
+                         fi
                          tls_hello_ascii="$(toupper "$tls_hello_ascii")"
                     fi
                     if [[ "$hello_done" -eq 3 ]]; then
@@ -15842,22 +15892,23 @@ tls_sockets() {
                socksend_clienthello "${data}"
                sleep $USLEEP_SND
 
-               # Compute application traffic keys and IVs.
-               master_secret="$(derive-master-secret "$cipher" "$handshake_secret")"
-               master_traffic_keys="$(derive-application-traffic-keys "$cipher" "$master_secret" "$msg_transcript" server)"
-               APP_TRAF_KEY_INFO="$tls_version $cipher $master_traffic_keys 0 "
-               master_traffic_keys="$(derive-application-traffic-keys "$cipher" "$master_secret" "$msg_transcript" client)"
-               APP_TRAF_KEY_INFO+="$master_traffic_keys 0"
+               if [[ -z "$APP_TRAF_KEY_INFO" ]]; then
+                    # Compute application traffic keys and IVs.
+                    master_secret="$(derive-master-secret "$cipher" "$handshake_secret")"
+                    master_traffic_keys="$(derive-application-traffic-keys "$cipher" "$master_secret" "$msg_transcript" server)"
+                    APP_TRAF_KEY_INFO="$tls_version $cipher $master_traffic_keys 0 "
+                    master_traffic_keys="$(derive-application-traffic-keys "$cipher" "$master_secret" "$msg_transcript" client)"
+                    APP_TRAF_KEY_INFO+="$master_traffic_keys 0"
+               fi
 
                # Some servers send new session tickets as soon as the handshake is complete.
-               [[ -s "$TEMPDIR/$NODEIP.parse_tls13_new_session_ticket.txt" ]] && \
-                    rm "$TEMPDIR/$NODEIP.parse_tls13_new_session_ticket.txt"
                receive_app_data
                if [[ $? -eq 0 ]] && [[ $DEBUG -ge 2 ]]; then
-                    [[ -s "$TEMPDIR/$NODEIP.parse_tls13_new_session_ticket.txt" ]] && \
-                         echo -n "Ticket: " && cat "$TEMPDIR/$NODEIP.parse_tls13_new_session_ticket.txt"
                     [[ -s $TMPFILE ]] && echo -n "Unexpected response: " && cat "$TMPFILE"
                fi
+          fi
+          if [[ $DEBUG -ge 2 ]] &&[[ "$process_full" == all+ ]] && [[ -s "$TEMPDIR/$NODEIP.parse_tls13_new_session_ticket.txt" ]]; then
+               echo -en "\nTicket: " && cat "$TEMPDIR/$NODEIP.parse_tls13_new_session_ticket.txt"
           fi
 
           # determine the return value for higher level, so that they can tell what the result is
