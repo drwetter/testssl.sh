@@ -22395,10 +22395,6 @@ run_rating() {
 
      [[ -n "$STARTTLS_PROTOCOL" ]] && set_grade_cap "T" "Encryption via STARTTLS is not mandatory (opportunistic)."
 
-     # Sort the reasons. This is just nicer to read in general
-     IFS=$'\n' sorted_reasons=($(sort -ru <<<"${GRADE_CAP_REASONS[*]}"))
-     IFS=$'\n' sorted_warnings=($(sort -u <<<"${GRADE_WARNINGS[*]}"))
-     IFS=$old_ifs
      pr_bold " Rating specs"; out " (not complete)  "; outln "SSL Labs's 'SSL Server Rating Guide' (version 2009q from 2020-01-30)"
      pr_bold " Specification documentation  "; pr_url "https://github.com/ssllabs/research/wiki/SSL-Server-Rating-Guide"
      outln
@@ -22407,6 +22403,11 @@ run_rating() {
 
      # No point in calculating a score, if a cap of "F", "T", or "M" has been set
      if [[ $GRADE_CAP == F || $GRADE_CAP == T || $GRADE_CAP == M ]]; then
+          # Sort the reasons
+          IFS=$'\n' sorted_reasons=($(sort -ru <<<"${GRADE_CAP_REASONS[*]}"))
+          IFS=$'\n' sorted_warnings=($(sort -u <<<"${GRADE_WARNINGS[*]}"))
+          IFS=$old_ifs
+
           pr_bold " Protocol Support"; out " (weighted)  "; outln "0 (0)"
           pr_bold " Key Exchange"; out "     (weighted)  "; outln "0 (0)"
           pr_bold " Cipher Strength"; out "  (weighted)  "; outln "0 (0)"
@@ -22507,6 +22508,12 @@ run_rating() {
           fileout "cipher_strength_score_weighted" "INFO" "$c3_wscore"
 
           ## Calculate final score and grade
+
+          # Sort the reasons
+          IFS=$'\n' sorted_reasons=($(sort -ru <<<"${GRADE_CAP_REASONS[*]}"))
+          IFS=$'\n' sorted_warnings=($(sort -u <<<"${GRADE_WARNINGS[*]}"))
+          IFS=$old_ifs
+
           # If any category resulted in a score of 0, push final grade to 0
           if [[ $c1_score -eq 0 || $c2_score -eq 0 || $c3_score -eq 0 ]]; then
                final_score=0
@@ -22537,7 +22544,7 @@ run_rating() {
                final_grade=$GRADE_CAP
           # For "exceptional" config, an "A+" is awarded, or "A-" for slightly less "exceptional"
           elif [[ -z "$GRADE_CAP" && $pre_cap_grade == A ]]; then
-               if [[ ${#sorted_warnings[@]} -eq 0 ]]; then
+               if [[ ${#GRADE_WARNINGS[@]} -eq 0 ]]; then
                     final_grade="A+"
                else
                     final_grade="A-"
