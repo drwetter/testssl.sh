@@ -268,6 +268,7 @@ NR_HEADER_FAIL=0                        # .. for HTTP_GET
 PROTOS_OFFERED=""                       # This keeps which protocol is being offered. See has_server_protocol().
 TLS12_CIPHER_OFFERED=""                 # This contains the hexcode of a cipher known to be supported by the server with TLS 1.2
 CURVES_OFFERED=""                       # This keeps which curves have been detected. Just for error handling
+NO_CIPHER_ORDER_LEVEL=5                 # This is the finding level to report if the server does not enforce a cipher order for one or more protocol versions.
 KNOWN_OSSL_PROB=false                   # We need OpenSSL a few times. This variable is an indicator if we can't connect. Eases handling
 DETECTED_TLS_VERSION=""                 # .. as hex string, e.g. 0300 or 0303
 APP_TRAF_KEY_INFO=""                    # Information about the application traffic keys for a TLS 1.3 connection.
@@ -4243,6 +4244,7 @@ ciphers_by_strength() {
      local available proto_supported=false
      local id
      local has_dh_bits="$HAS_DH_BITS"
+     local -i quality worst_cipher=8 best_cipher=0 difference_rating=5
 
      # for local problem if it happens
      "$wide" || out "  "
@@ -4505,12 +4507,51 @@ ciphers_by_strength() {
      fi
 
      if "$wide" && [[ "${FUNCNAME[1]}" == run_server_preference ]] && "$proto_supported"; then
-          if [[ $proto_ossl == tls1_3 ]]; then
-               outln " (no server order, thus listed by strength)"
-          elif ! "$serverpref_known"; then
+          if ! "$serverpref_known"; then
                outln " (listed by strength)"
           else
-               prln_svrty_high " (no server order, thus listed by strength)"
+               # Determine the best and worst quality level findings for the supported ciphers
+               for (( i=0 ; i<nr_ciphers; i++ )); do
+                    if "${ciphers_found[i]}"; then
+                         if [[ "${rfc_ciph[i]}" != - ]]; then
+                              get_cipher_quality "${rfc_ciph[i]}"
+                         else
+                              get_cipher_quality ${ciph[i]}
+                         fi
+                         quality=$?
+                         [[ $quality -lt $worst_cipher ]] && worst_cipher=$quality
+                         [[ $quality -gt $best_cipher ]] && best_cipher=$quality
+                    fi
+               done
+               # Assign a rating (severity level) based on the difference between the levels
+               # of the best and worst supported ciphers.
+               if [[ $worst_cipher -ne $best_cipher ]]; then
+                    case $best_cipher in
+                         3|5|6|7)
+                              difference_rating=$worst_cipher
+                              [[ $difference_rating -gt 5 ]] && difference_rating=5
+                              ;;
+                         4)
+                              case $worst_cipher in
+                                   3) difference_rating=4 ;;
+                                   2) difference_rating=2 ;;
+                                   1) difference_rating=1 ;;
+                              esac
+                              ;;
+                         2)
+                              difference_rating=2
+                              ;;
+                    esac
+               fi
+               
+               [[ $difference_rating -lt $NO_CIPHER_ORDER_LEVEL ]] && NO_CIPHER_ORDER_LEVEL=$difference_rating
+               case $difference_rating in
+                    5) outln " (no server order, thus listed by strength)" ;;
+                    4) prln_svrty_low " (no server order, thus listed by strength)" ;; 
+                    3) prln_svrty_medium " (no server order, thus listed by strength)" ;;
+                    2) prln_svrty_high " (no server order, thus listed by strength)" ;;
+                    1) prln_svrty_critical " (no server order, thus listed by strength)" ;;
+               esac
           fi
      elif "$wide" && "$proto_supported" || [[ $proto != -ssl2 ]]; then
           outln
@@ -6650,7 +6691,7 @@ run_server_preference() {
      local has_cipher_order=false has_tls13_cipher_order=false
      local addcmd="" addcmd2=""
      local using_sockets=true
-     local jsonID="cipher_order"
+     local jsonID="cipher_order" fileout_msg="" fileout_rating="" terminal_msg=""
      local cwe="CWE-310"
      local cve=""
 
@@ -6824,23 +6865,58 @@ run_server_preference() {
 
      pr_bold " Has server cipher order?     "
      jsonID="cipher_order"
+     case $NO_CIPHER_ORDER_LEVEL in
+          5) fileout_rating="INFO" ;;
+          4) fileout_rating="LOW" ;;
+          3) fileout_rating="MEDIUM" ;;
+          2) fileout_rating="HIGH" ;;
+          1) fileout_rating="CRITICAL" ;;
+     esac
      if "$TLS13_ONLY" && ! "$has_tls13_cipher_order"; then
-          out "no (TLS 1.3 only)"
+          terminal_msg="no (TLS 1.3 only)"
           limitedsense=" (limited sense as client will pick)"
-          fileout "$jsonID" "INFO" "not a cipher order for TLS 1.3 configured"
+          fileout_msg="not a cipher order for TLS 1.3 configured"
      elif ! "$TLS13_ONLY" && [[ -z "$cipher2" ]]; then
           pr_warning "unable to determine"
      elif ! "$has_cipher_order" && ! "$has_tls13_cipher_order"; then
           # server used the different ends (ciphers) from the client hello
-          pr_svrty_high "no (NOT ok)"
+          terminal_msg="no (NOT ok)"
+          [[ "$fileout_rating" == INFO ]] && terminal_msg="no"
           limitedsense=" (limited sense as client will pick)"
-          fileout "$jsonID" "HIGH" "NOT a cipher order configured"
+          fileout_msg="NOT a cipher order configured"
      elif "$has_cipher_order" && ! "$has_tls13_cipher_order" && [[ "$default_proto" == TLSv1.3 ]]; then
-          pr_svrty_good "yes (OK)"; out " -- only for < TLS 1.3"
-          fileout "$jsonID" "OK" "server -- TLS 1.3 client determined"
+          if [[ $NO_CIPHER_ORDER_LEVEL -eq 5 ]]; then
+               pr_svrty_good "yes (OK)"; out " -- only for < TLS 1.3"
+               fileout "$jsonID" "OK" "server -- TLS 1.3 client determined"
+          else
+               # The server does not enforce a cipher order for TLS 1.3 and it
+               # accepts some lower quality TLS 1.3 ciphers.
+               terminal_msg="only for < TLS 1.3"
+               fileout_msg="server -- TLS 1.3 client determined"
+          fi
      elif ! "$has_cipher_order" && "$has_tls13_cipher_order"; then
-          pr_svrty_high "no (NOT ok)"; out " -- only for TLS 1.3"
-          fileout "$jsonID" "HIGH" "server -- < TLS 1.3 client determined"
+          case "$fileout_rating" in
+               "INFO") 
+                    out "only for TLS 1.3"
+                    fileout "$jsonID" "INFO" "server -- < TLS 1.3 client determined"
+                    ;;
+               "LOW")
+                    pr_svrty_low "no (NOT ok)"; out " -- only for TLS 1.3"
+                    fileout "$jsonID" "LOW" "server -- < TLS 1.3 client determined"
+                    ;;
+               "MEDIUM")
+                    pr_svrty_medium "no (NOT ok)"; out " -- only for TLS 1.3"
+                    fileout "$jsonID" "MEDIUM" "server -- < TLS 1.3 client determined"
+                    ;;
+               "HIGH")
+                    pr_svrty_high "no (NOT ok)"; out " -- only for TLS 1.3"
+                    fileout "$jsonID" "HIGH" "server -- < TLS 1.3 client determined"
+                    ;;
+               "CRITICAL")
+                    pr_svrty_critical "no (NOT ok)"; out " -- only for TLS 1.3"
+                    fileout "$jsonID" "CRITICAL" "server -- < TLS 1.3 client determined"
+                    ;;
+          esac
      else
           if "$has_tls13_cipher_order"; then
                if "$TLS13_ONLY"; then
@@ -6856,6 +6932,17 @@ run_server_preference() {
                pr_svrty_best "yes (OK)"
                fileout "$jsonID" "OK" "server"
           fi
+     fi
+     if [[ -n "$fileout_msg" ]]; then
+          case "$fileout_rating" in
+               "INFO") out "$terminal_msg" ;;
+               "OK") pr_svrty_good "$terminal_msg" ;;
+               "LOW") pr_svrty_low "$terminal_msg" ;;
+               "MEDIUM") pr_svrty_medium "$terminal_msg" ;;
+               "HIGH") pr_svrty_high "$terminal_msg" ;;
+               "CRITICAL") pr_svrty_critical "$terminal_msg" ;;
+          esac
+          fileout "$jsonID" "$fileout_rating" "$fileout_msg"
      fi
      outln
 
@@ -23469,6 +23556,7 @@ reset_hostdepended_vars() {
      PROTOS_OFFERED=""
      TLS12_CIPHER_OFFERED=""
      CURVES_OFFERED=""
+     NO_CIPHER_ORDER_LEVEL=5
      KNOWN_OSSL_PROB=false
      TLS13_ONLY=false
      CLIENT_AUTH="none"
