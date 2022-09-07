@@ -22504,7 +22504,7 @@ run_rating() {
                   fileout "overall_grade" "MEDIUM" "$final_grade"
                     ;;
                C) prln_svrty_medium $final_grade
-                  fileout "grade" "MEDIUM" "$final_grade"
+                  fileout "overall_grade" "MEDIUM" "$final_grade"
                     ;;
                D) prln_svrty_high $final_grade
                   fileout "overall_grade" "HIGH" "$final_grade"
