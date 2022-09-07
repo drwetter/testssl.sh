@@ -207,6 +207,7 @@ MAX_WAITSOCK=${MAX_WAITSOCK:-10}        # waiting at max 10 seconds for socket r
 CCS_MAX_WAITSOCK=${CCS_MAX_WAITSOCK:-5} # for the two CCS payload (each). There shouldn't be any reason to change this.
 HEARTBLEED_MAX_WAITSOCK=${HEARTBLEED_MAX_WAITSOCK:-8}      # for the heartbleed payload. There shouldn't be any reason to change this.
 STARTTLS_SLEEP=${STARTTLS_SLEEP:-10}    # max time wait on a socket for STARTTLS. MySQL has a fixed value of 1 which can't be overwritten (#914)
+STARTTLS_NOT_MANDATORY=${STARTTLS_NOT_MANDATORY:-false}    # Do not cap the grade to T if STARTTLS is not mandatory
 FAST_STARTTLS=${FAST_STARTTLS:-true}    # at the cost of reliability decrease the handshakes for STARTTLS
 USLEEP_SND=${USLEEP_SND:-0.1}           # sleep time for general socket send
 USLEEP_REC=${USLEEP_REC:-0.2}           # sleep time for general socket receive
@@ -20022,6 +20023,7 @@ help() {
 
      -t, --starttls <protocol>     Does a run against a STARTTLS enabled service which is one of ftp, smtp, lmtp, pop3, imap,
                                    sieve, xmpp, xmpp-server, telnet, ldap, nntp, postgres, mysql
+     --starttls-not-mandatory      Do not cap the grade to T if STARTTLS is not mandatory
      --xmpphost <to_domain>        For STARTTLS xmpp or xmpp-server checks it supplies the domainname (like SNI)
      --mx <domain/host>            Tests MX records from high to low priority (STARTTLS, port 25)
      --file/-iL <fname>            Mass testing option: Reads one testssl.sh command line per line from <fname>.
@@ -22393,7 +22395,7 @@ run_rating() {
      pr_headlineln " Rating (experimental) "
      outln
 
-     [[ -n "$STARTTLS_PROTOCOL" ]] && set_grade_cap "T" "Encryption via STARTTLS is not mandatory (opportunistic)."
+     [[ -n "$STARTTLS_PROTOCOL" ]] && ! $STARTTLS_NOT_MANDATORY && set_grade_cap "T" "Encryption via STARTTLS is not mandatory (opportunistic)."
 
      # Sort the reasons. This is just nicer to read in general
      IFS=$'\n' sorted_reasons=($(sort -ru <<<"${GRADE_CAP_REASONS[*]}"))
@@ -23028,6 +23030,9 @@ parse_cmd_line() {
                -SI|--SI|--starttls[-_]injection)
                     do_starttls_injection=true
                     ((VULN_COUNT++))
+                    ;;
+               --starttls-not-mandatory)
+                    STARTTLS_NOT_MANDATORY=true
                     ;;
                -f|--fs|--nsa|--forward-secrecy)
                     do_fs=true
