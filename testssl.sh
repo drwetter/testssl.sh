@@ -296,6 +296,7 @@ DETECTED_TLS_VERSION=""                 # .. as hex string, e.g. 0300 or 0303
 TLS13_ONLY=false                        # Does the server support TLS 1.3 ONLY?
 OSSL_SHORTCUT=${OSSL_SHORTCUT:-false}   # Hack: if during the scan turns out the OpenSSL binary supports TLS 1.3 would be a better choice, this enables it.
 TLS_EXTENSIONS=""
+CERTIFICATE_TRANSPARENCY_SOURCE=""
 declare -r NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
 # alpn_protos needs to be space-separated, not comma-seperated, including odd ones observed @ facebook and others, old ones like h2-17 omitted as they could not be found
 declare -r ALPN_PROTOs="h2 spdy/3.1 http/1.1 grpc-exp h2-fb spdy/1 spdy/2 spdy/3 stun.turn stun.nat-discovery webrtc c-webrtc ftp"
@@ -8118,16 +8119,18 @@ certificate_transparency() {
      # Cipher suites that use a certificate with a GOST public key
      local -r a_gost="00,80, 00,81, 00,82, 00,83"
 
+     CERTIFICATE_TRANSPARENCY_SOURCE=""
+
      # First check whether signed certificate timestamps (SCT) are included in the
      # server's certificate. If they aren't, check whether the server provided
      # a stapled OCSP response with SCTs. If no SCTs were found in the certificate
      # or OCSP response, check for an SCT TLS extension.
      if [[ "$cert_txt" =~ CT\ Precertificate\ SCTs ]] || [[ "$cert_txt" =~ '1.3.6.1.4.1.11129.2.4.2' ]]; then
-          tm_out "certificate extension"
+          CERTIFICATE_TRANSPARENCY_SOURCE="certificate extension"
           return 0
      fi
      if [[ "$ocsp_response" =~ CT\ Certificate\ SCTs ]] || [[ "$ocsp_response" =~ '1.3.6.1.4.1.11129.2.4.5' ]]; then
-          tm_out "OCSP extension"
+          CERTIFICATE_TRANSPARENCY_SOURCE="OCSP extension"
           return 0
      fi
 
@@ -8136,7 +8139,7 @@ certificate_transparency() {
      # one certificate, then it is possible that an SCT TLS extension is returned for some
      # certificates, but not for all of them.
      if [[ $number_of_certificates -eq 1 ]] && [[ "$TLS_EXTENSIONS" =~ signed\ certificate\ timestamps ]]; then
-          tm_out "TLS extension"
+          CERTIFICATE_TRANSPARENCY_SOURCE="TLS extension"
           return 0
      fi
 
@@ -8169,16 +8172,16 @@ certificate_transparency() {
           if ( [[ $success -eq 0 ]] || [[ $success -eq 2 ]] ) && \
              grep -a 'TLS server extension ' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" | \
              grep -aq "signed certificate timestamps"; then
-               tm_out "TLS extension"
+               CERTIFICATE_TRANSPARENCY_SOURCE="TLS extension"
                return 0
           fi
      fi
 
      if [[ $SERVICE != HTTP ]] && ! "$CLIENT_AUTH"; then
           # At the moment Certificate Transparency only applies to HTTPS.
-          tm_out "N/A"
+          CERTIFICATE_TRANSPARENCY_SOURCE="N/A"
      else
-          tm_out "--"
+          CERTIFICATE_TRANSPARENCY_SOURCE="--"
      fi
      return 0
 }
@@ -9366,7 +9369,8 @@ run_server_defaults() {
      # Now that all of the server's certificates have been found, determine for
      # each certificate whether certificate transparency information is provided.
      for (( i=1; i <= certs_found; i++ )); do
-          ct[i]="$(certificate_transparency "${previous_hostcert_txt[i]}" "${ocsp_response[i]}" "$certs_found" "${cipher[i]}" "${sni_used[i]}" "${tls_version[i]}")"
+          certificate_transparency "${previous_hostcert_txt[i]}" "${ocsp_response[i]}" "$certs_found" "${cipher[i]}" "${sni_used[i]}" "${tls_version[i]}"
+          ct[i]="$CERTIFICATE_TRANSPARENCY_SOURCE"
           # If certificate_transparency() called tls_sockets() and found a "signed certificate timestamps" extension,
           # then add it to $TLS_EXTENSIONS, since it may not have been found by determine_tls_extensions().
           [[ $certs_found -gt 1 ]] && [[ "${ct[i]}" == TLS\ extension ]] && extract_new_tls_extensions "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt"
@@ -20191,6 +20195,7 @@ nodeip_to_proper_ip6() {
 
 reset_hostdepended_vars() {
      TLS_EXTENSIONS=""
+     CERTIFICATE_TRANSPARENCY_SOURCE=""
      PROTOS_OFFERED=""
      CURVES_OFFERED=""
      OPTIMAL_PROTO=""
