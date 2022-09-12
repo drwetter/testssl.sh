@@ -74,7 +74,7 @@ datebanner() {
 
 dns() {
 	ip4=`host -t a $1 | grep -v alias | sed 's/^.*address //'`
-	which getent 2>&1 >/dev/null && getent ahostsv4 $1 2>&1 >/dev/null && ip4=`getent ahostsv4 $1 | awk '{ print $1}' | uniq`
+	command -v getent 2>&1 >/dev/null && getent ahostsv4 $1 2>&1 >/dev/null && ip4=`getent ahostsv4 $1 | awk '{ print $1}' | uniq`
 	NODEIP=`echo "$ip4" | head -1`
 	rDNS=`host -t PTR $NODEIP | sed -e 's/^.*pointer //' -e 's/\.$//'`
 	echo $rDNS | grep -q NXDOMAIN  && rDNS=""

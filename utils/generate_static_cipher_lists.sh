@@ -67,7 +67,7 @@ get_mapping_file() {
      fi
 
      # we haven't found the cipher file yet...
-     if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] && which readlink &>/dev/null ; then
+     if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] && command -v readlink &>/dev/null ; then
           readlink -f ls &>/dev/null && \
                TESTSSL_INSTALL_DIR=$(readlink -f $(basename ${BASH_SOURCE[0]})) || \
                TESTSSL_INSTALL_DIR=$(readlink $(basename ${BASH_SOURCE[0]}))
@@ -78,14 +78,14 @@ get_mapping_file() {
      fi
 
      # still no cipher mapping file:
-     if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] && which realpath &>/dev/null ; then
+     if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] && command -v realpath &>/dev/null ; then
           TESTSSL_INSTALL_DIR=$(dirname $(realpath ${BASH_SOURCE[0]}))
           CIPHERS_BY_STRENGTH_FILE="$TESTSSL_INSTALL_DIR/etc/cipher-mapping.txt"
           [[ -r "$TESTSSL_INSTALL_DIR/cipher-mapping.txt" ]] && CIPHERS_BY_STRENGTH_FILE="$TESTSSL_INSTALL_DIR/cipher-mapping.txt"
      fi
 
      # still no cipher mapping file (and realpath is not present):
-     if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] && which readlink &>/dev/null ; then
+     if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] && command -v readlink &>/dev/null ; then
          readlink -f ls &>/dev/null && \
               TESTSSL_INSTALL_DIR=$(dirname $(readlink -f ${BASH_SOURCE[0]})) || \
               TESTSSL_INSTALL_DIR=$(dirname $(readlink ${BASH_SOURCE[0]}))
