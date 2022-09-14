@@ -159,7 +159,7 @@ starttls_line0() {
      debugme echo "... received result: "
      cat $reply
      if [ -n "$2" ]; then
-          if egrep -q "$2" $reply; then
+          if grep -Eq "$2" $reply; then
                debugme echo "---> reply matched \"$2\""
                [ $DEBUG -eq 0 ] && rm $reply
                return 0 
