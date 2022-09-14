@@ -36,7 +36,7 @@ find_openssl_binary() {
           :    # 2. otherwise try openssl in path of testssl.sh
      elif test_openssl_suffix ../$RUN_DIR/bin; then
           :    # 3. otherwise here, this is supposed to be the standard --platform independent path in the future!!!
-     elif test_openssl_suffix "$(dirname "$(which openssl)")"; then
+     elif test_openssl_suffix "$(dirname "$(command -v openssl)")"; then
           :    # 5. we tried hard and failed, so now we use the system binaries
      fi
 
