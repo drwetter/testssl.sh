@@ -3331,6 +3331,7 @@ neat_list(){
      local -i i len
 
      kx="${3//Kx=/}"
+     kx="$(strip_trailing_space "$kx")"
      enc="${4//Enc=/}"
      # In two cases LibreSSL uses very long names for encryption algorithms
      # and doesn't include the number of bits.
