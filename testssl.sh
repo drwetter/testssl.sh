@@ -1938,7 +1938,7 @@ check_revocation_crl() {
           fileout "$jsonID" "WARN" "conversion of CRL to PEM format failed"
           return 1
      fi
-     if grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem; then
+     if grep -qe "-----BEGIN CERTIFICATE-----" $TEMPDIR/intermediatecerts.pem; then
           $OPENSSL verify -crl_check -CAfile <(cat $ADDTL_CA_FILES "$GOOD_CA_BUNDLE" "${tmpfile%%.crl}.pem") -untrusted $TEMPDIR/intermediatecerts.pem $HOSTCERT &> "${tmpfile%%.crl}.err"
      else
           $OPENSSL verify -crl_check -CAfile <(cat $ADDTL_CA_FILES "$GOOD_CA_BUNDLE" "${tmpfile%%.crl}.pem") $HOSTCERT &> "${tmpfile%%.crl}.err"
@@ -1988,7 +1988,7 @@ check_revocation_ocsp() {
           fileout "$jsonID" "WARN" "Revocation not tested as openssl ocsp doesn't support a proxy"
           return 0
      fi
-     grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem || return 0
+     grep -qe "-----BEGIN CERTIFICATE-----" $TEMPDIR/intermediatecerts.pem || return 0
      tmpfile=$TEMPDIR/${NODE}-${NODEIP}.${uri##*\/} || exit $ERR_FCREATE
      if [[ -n "$stapled_response" ]]; then
           hex2binary "$stapled_response" > "$TEMPDIR/stapled_ocsp_response.dd"
@@ -2295,7 +2295,7 @@ service_detection() {
                wait_kill $! $HEADER_MAXSLEEP
                was_killed=$?
           fi
-          head $TMPFILE | grep -aq '^HTTP\/' && SERVICE=HTTP
+          head $TMPFILE | grep -aq '^HTTP/' && SERVICE=HTTP
           [[ -z "$SERVICE" ]] && head $TMPFILE | grep -waq "SMTP|ESMTP|Exim|IdeaSmtpServer|Kerio Connect|Postfix" && SERVICE=SMTP   # I know some overlap here
           [[ -z "$SERVICE" ]] && head $TMPFILE | grep -Ewaq "POP|Gpop|MailEnable POP3 Server|OK Dovecot|Cyrus POP3" && SERVICE=POP  # I know some overlap here
           [[ -z "$SERVICE" ]] && head $TMPFILE | grep -Ewaq "IMAP|IMAP4|Cyrus IMAP4IMAP4rev1|IMAP4REV1|Gimap" && SERVICE=IMAP       # I know some overlap here
@@ -3859,7 +3859,7 @@ run_cipher_match(){
                               dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
                               kx[i]="${kx[i]} $dhlen"
                          fi
-                         "$SHOW_SIGALGO" && grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TMPFILE && \
+                         "$SHOW_SIGALGO" && grep -qe "-----BEGIN CERTIFICATE-----" $TMPFILE && \
                               sigalg[i]="$(read_sigalg_from_file "$TMPFILE")"
                     done
                done
@@ -4134,7 +4134,7 @@ run_allciphers() {
                          dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
                          kx[i]="${kx[i]} $dhlen"
                     fi
-                    "$SHOW_SIGALGO" && grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TMPFILE && \
+                    "$SHOW_SIGALGO" && grep -qe "-----BEGIN CERTIFICATE-----" $TMPFILE && \
                          sigalg[i]="$(read_sigalg_from_file "$TMPFILE")"
                done
           done
@@ -4434,7 +4434,7 @@ ciphers_by_strength() {
                                         dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
                                         kx[i]="${kx[i]} $dhlen"
                                    fi
-                                   "$wide" && "$SHOW_SIGALGO" && grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TMPFILE && \
+                                   "$wide" && "$SHOW_SIGALGO" && grep -qe "-----BEGIN CERTIFICATE-----" $TMPFILE && \
                                         sigalg[i]="$(read_sigalg_from_file "$TMPFILE")"
                               fi
                          fi
@@ -7120,7 +7120,7 @@ cipher_pref_check() {
                          enc[nr_ciphers_found]="${TLS_CIPHER_ENC[i]}"
                          export2[nr_ciphers_found]="${TLS_CIPHER_EXPORT[i]}"
                          sigalg[nr_ciphers_found]=""
-                         "$SHOW_SIGALGO" && grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TMPFILE && \
+                         "$SHOW_SIGALGO" && grep -qe "-----BEGIN CERTIFICATE-----" $TMPFILE && \
                               sigalg[nr_ciphers_found]="$(read_sigalg_from_file "$TMPFILE")"
                          nr_ciphers_found+=1
                     fi
@@ -7454,7 +7454,7 @@ determine_trust() {
      local code
      local ca_bundles=""
      local spaces="                              "
-     local -i certificates_provided=1+$(grep -c "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem)
+     local -i certificates_provided=1+$(grep -ce "-----BEGIN CERTIFICATE-----" $TEMPDIR/intermediatecerts.pem)
      local addtl_warning
 
      # If $json_postfix is not empty, then there is more than one certificate
@@ -9176,7 +9176,7 @@ certificate_info() {
      cn_finding=""
 
      if [[ -n "$sni_used" ]]; then
-          if grep -q "\-\-\-\-\-BEGIN" "$HOSTCERT.nosni"; then
+          if grep -qe "-----BEGIN" "$HOSTCERT.nosni"; then
                cn_nosni="$(get_cn_from_cert "$HOSTCERT.nosni")"
                [[ -z "$cn_nosni" ]] && cn_nosni="no CN field in subject"
           fi
@@ -9661,7 +9661,7 @@ certificate_info() {
      fi
 
      out "$indent"; pr_bold " Certificates provided"
-     certificates_provided="$(grep -ac '\-\-\-\-\-BEGIN\ CERTIFICATE\-\-\-\-\-' <<< "$intermediates")"
+     certificates_provided="$(grep -ace '-----BEGIN CERTIFICATE-----' <<< "$intermediates")"
      ((certificates_provided++))                  # plus host certificate
      out "        $certificates_provided"
      fileout "certs_countServer${json_postfix}" "INFO" "${certificates_provided}"
@@ -10477,7 +10477,7 @@ run_fs() {
                          dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
                          kx[i]="${kx[i]} $dhlen"
                     fi
-                    "$WIDE" && "$SHOW_SIGALGO" && grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TMPFILE && \
+                    "$WIDE" && "$SHOW_SIGALGO" && grep -qe "-----BEGIN CERTIFICATE-----" $TMPFILE && \
                          sigalg[i]="$(read_sigalg_from_file "$TMPFILE")"
                done
           done
@@ -12129,7 +12129,7 @@ derive-handshake-secret() {
      [[ ! -s "$pub_file" ]] && return 1
 
      priv_file="$(mktemp "$TEMPDIR/privkey.XXXXXX")" || return 7
-     if grep -q "\-\-\-\-\-BEGIN EC PARAMETERS" "$tmpfile"; then
+     if grep -qe "-----BEGIN EC PARAMETERS" "$tmpfile"; then
           awk '/-----BEGIN EC PARAMETERS/,/-----END EC PRIVATE KEY/ { print $0 }' \
                "$tmpfile" > "$priv_file"
      else
@@ -18151,7 +18151,7 @@ run_beast(){
                     dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
                     kx[i]="${kx[i]} $dhlen"
                fi
-               "$WIDE" && "$SHOW_SIGALGO" && grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TMPFILE && \
+               "$WIDE" && "$SHOW_SIGALGO" && grep -qe "-----BEGIN CERTIFICATE-----" $TMPFILE && \
                     sigalg[i]="$(read_sigalg_from_file "$TMPFILE")"
           done
           if "$using_sockets"; then
@@ -18712,7 +18712,7 @@ run_rc4() {
                     dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
                     kx[i]="${kx[i]} $dhlen"
                fi
-               "$WIDE" && "$SHOW_SIGALGO" && grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TMPFILE && \
+               "$WIDE" && "$SHOW_SIGALGO" && grep -qe "-----BEGIN CERTIFICATE-----" $TMPFILE && \
                     sigalg[i]="$(read_sigalg_from_file "$TMPFILE")"
 
                # If you use RC4 with newer protocols, you are punished harder
@@ -19811,11 +19811,11 @@ find_openssl_binary() {
      $OPENSSL s_client -help 2>$s_client_has
      $OPENSSL s_client -starttls foo </dev/null 2>$s_client_starttls_has
 
-     grep -q '\-proxy' $s_client_has && HAS_PROXY=true
-     grep -qw '\-alpn' $s_client_has && HAS_ALPN=true
-     grep -qw '\-nextprotoneg' $s_client_has && HAS_NPN=true
+     grep -qe '-proxy' $s_client_has && HAS_PROXY=true
+     grep -qwe '-alpn' $s_client_has && HAS_ALPN=true
+     grep -qwe '-nextprotoneg' $s_client_has && HAS_NPN=true
 
-     grep -qw '\-fallback_scsv' $s_client_has && HAS_FALLBACK_SCSV=true
+     grep -qwe '-fallback_scsv' $s_client_has && HAS_FALLBACK_SCSV=true
 
      # the output from 1.0.2 and 1.1.1/3.0.x is quite different
      grep -q 'xmpp' $s_client_starttls_has && HAS_XMPP=true
@@ -19830,7 +19830,7 @@ find_openssl_binary() {
 
      grep -q 'Unix-domain socket' $s_client_has && HAS_UDS=true
 
-     grep -q '\-enable_pha' $s_client_has && HAS_ENABLE_PHA=true
+     grep -qe '-enable_pha' $s_client_has && HAS_ENABLE_PHA=true
 
      # Now check whether the standard $OPENSSL has Unix-domain socket and xmpp-server support. If
      # not check /usr/bin/openssl -- if available. This is more a kludge which we shouldn't use for
@@ -20684,7 +20684,7 @@ check_resolver_bins() {
      fi
      if "$HAS_DIG"; then
           # Old dig versions don't have an option to ignore $HOME/.digrc
-          if ! dig -h | grep -qE '\-r.*~/.digrc'; then
+          if ! dig -h | grep -qEe '-r.*~/.digrc'; then
                HAS_DIG_R=false
                DIG_R=""
           fi
@@ -22115,7 +22115,7 @@ nmap_to_plain_file() {
      if [[ "$(head -1 "$FNAME")" =~ ( -oG )(.*) ]] || [[ "$(head -1 "$FNAME")" =~ ( -oA )(.*) ]] ; then
           # yes, greppable
           if [[ $(grep -c Status "$FNAME") -ge 1 ]]; then
-               [[ $(grep -c  '\/open\/' "$FNAME")  -eq 0 ]] && \
+               [[ $(grep -c  '/open/' "$FNAME")  -eq 0 ]] && \
                     fatal "Nmap file $FNAME should contain at least one open port" $ERR_FNAMEPARSE
           else
                fatal "strange, nmap grepable misses \"Status\"" -1
