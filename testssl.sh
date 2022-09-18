@@ -1938,7 +1938,7 @@ check_revocation_crl() {
           fileout "$jsonID" "WARN" "conversion of CRL to PEM format failed"
           return 1
      fi
-     if grep -qe "-----BEGIN CERTIFICATE-----" $TEMPDIR/intermediatecerts.pem; then
+     if grep -qe '-----BEGIN CERTIFICATE-----' $TEMPDIR/intermediatecerts.pem; then
           $OPENSSL verify -crl_check -CAfile <(cat $ADDTL_CA_FILES "$GOOD_CA_BUNDLE" "${tmpfile%%.crl}.pem") -untrusted $TEMPDIR/intermediatecerts.pem $HOSTCERT &> "${tmpfile%%.crl}.err"
      else
           $OPENSSL verify -crl_check -CAfile <(cat $ADDTL_CA_FILES "$GOOD_CA_BUNDLE" "${tmpfile%%.crl}.pem") $HOSTCERT &> "${tmpfile%%.crl}.err"
@@ -1988,7 +1988,7 @@ check_revocation_ocsp() {
           fileout "$jsonID" "WARN" "Revocation not tested as openssl ocsp doesn't support a proxy"
           return 0
      fi
-     grep -qe "-----BEGIN CERTIFICATE-----" $TEMPDIR/intermediatecerts.pem || return 0
+     grep -qe '-----BEGIN CERTIFICATE-----' $TEMPDIR/intermediatecerts.pem || return 0
      tmpfile=$TEMPDIR/${NODE}-${NODEIP}.${uri##*\/} || exit $ERR_FCREATE
      if [[ -n "$stapled_response" ]]; then
           hex2binary "$stapled_response" > "$TEMPDIR/stapled_ocsp_response.dd"
@@ -3859,7 +3859,7 @@ run_cipher_match(){
                               dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
                               kx[i]="${kx[i]} $dhlen"
                          fi
-                         "$SHOW_SIGALGO" && grep -qe "-----BEGIN CERTIFICATE-----" $TMPFILE && \
+                         "$SHOW_SIGALGO" && grep -qe '-----BEGIN CERTIFICATE-----' $TMPFILE && \
                               sigalg[i]="$(read_sigalg_from_file "$TMPFILE")"
                     done
                done
@@ -4134,7 +4134,7 @@ run_allciphers() {
                          dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
                          kx[i]="${kx[i]} $dhlen"
                     fi
-                    "$SHOW_SIGALGO" && grep -qe "-----BEGIN CERTIFICATE-----" $TMPFILE && \
+                    "$SHOW_SIGALGO" && grep -qe '-----BEGIN CERTIFICATE-----' $TMPFILE && \
                          sigalg[i]="$(read_sigalg_from_file "$TMPFILE")"
                done
           done
@@ -4434,7 +4434,7 @@ ciphers_by_strength() {
                                         dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
                                         kx[i]="${kx[i]} $dhlen"
                                    fi
-                                   "$wide" && "$SHOW_SIGALGO" && grep -qe "-----BEGIN CERTIFICATE-----" $TMPFILE && \
+                                   "$wide" && "$SHOW_SIGALGO" && grep -qe '-----BEGIN CERTIFICATE-----' $TMPFILE && \
                                         sigalg[i]="$(read_sigalg_from_file "$TMPFILE")"
                               fi
                          fi
@@ -7120,7 +7120,7 @@ cipher_pref_check() {
                          enc[nr_ciphers_found]="${TLS_CIPHER_ENC[i]}"
                          export2[nr_ciphers_found]="${TLS_CIPHER_EXPORT[i]}"
                          sigalg[nr_ciphers_found]=""
-                         "$SHOW_SIGALGO" && grep -qe "-----BEGIN CERTIFICATE-----" $TMPFILE && \
+                         "$SHOW_SIGALGO" && grep -qe '-----BEGIN CERTIFICATE-----' $TMPFILE && \
                               sigalg[nr_ciphers_found]="$(read_sigalg_from_file "$TMPFILE")"
                          nr_ciphers_found+=1
                     fi
@@ -7454,7 +7454,7 @@ determine_trust() {
      local code
      local ca_bundles=""
      local spaces="                              "
-     local -i certificates_provided=1+$(grep -ce "-----BEGIN CERTIFICATE-----" $TEMPDIR/intermediatecerts.pem)
+     local -i certificates_provided=1+$(grep -ce '-----BEGIN CERTIFICATE-----' $TEMPDIR/intermediatecerts.pem)
      local addtl_warning
 
      # If $json_postfix is not empty, then there is more than one certificate
@@ -9176,7 +9176,7 @@ certificate_info() {
      cn_finding=""
 
      if [[ -n "$sni_used" ]]; then
-          if grep -qe "-----BEGIN" "$HOSTCERT.nosni"; then
+          if grep -qe '-----BEGIN' "$HOSTCERT.nosni"; then
                cn_nosni="$(get_cn_from_cert "$HOSTCERT.nosni")"
                [[ -z "$cn_nosni" ]] && cn_nosni="no CN field in subject"
           fi
@@ -10477,7 +10477,7 @@ run_fs() {
                          dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
                          kx[i]="${kx[i]} $dhlen"
                     fi
-                    "$WIDE" && "$SHOW_SIGALGO" && grep -qe "-----BEGIN CERTIFICATE-----" $TMPFILE && \
+                    "$WIDE" && "$SHOW_SIGALGO" && grep -qe '-----BEGIN CERTIFICATE-----' $TMPFILE && \
                          sigalg[i]="$(read_sigalg_from_file "$TMPFILE")"
                done
           done
@@ -17453,7 +17453,7 @@ run_tls_fallback_scsv() {
           DEBUG=$debug_level
      fi
      if grep -q "CONNECTED(00" "$TMPFILE"; then
-          if grep -qa "BEGIN CERTIFICATE" "$TMPFILE"; then
+          if grep -qa 'BEGIN CERTIFICATE' "$TMPFILE"; then
                if [[ -z "$POODLE" ]]; then
                     pr_warning "Rerun including POODLE SSL check. "
                     pr_svrty_medium "Downgrade attack prevention NOT supported"
@@ -18151,7 +18151,7 @@ run_beast(){
                     dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
                     kx[i]="${kx[i]} $dhlen"
                fi
-               "$WIDE" && "$SHOW_SIGALGO" && grep -qe "-----BEGIN CERTIFICATE-----" $TMPFILE && \
+               "$WIDE" && "$SHOW_SIGALGO" && grep -qe '-----BEGIN CERTIFICATE-----' $TMPFILE && \
                     sigalg[i]="$(read_sigalg_from_file "$TMPFILE")"
           done
           if "$using_sockets"; then
@@ -18712,7 +18712,7 @@ run_rc4() {
                     dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
                     kx[i]="${kx[i]} $dhlen"
                fi
-               "$WIDE" && "$SHOW_SIGALGO" && grep -qe "-----BEGIN CERTIFICATE-----" $TMPFILE && \
+               "$WIDE" && "$SHOW_SIGALGO" && grep -qe '-----BEGIN CERTIFICATE-----' $TMPFILE && \
                     sigalg[i]="$(read_sigalg_from_file "$TMPFILE")"
 
                # If you use RC4 with newer protocols, you are punished harder
@@ -23418,7 +23418,7 @@ parse_cmd_line() {
      fi
      for fname in $ADDTL_CA_FILES; do
           [[ -s "$fname" ]] || fatal "CA file \"$fname\" does not exist" $ERR_RESOURCE
-          grep -q "BEGIN CERTIFICATE" "$fname" || fatal "\"$fname\" is not CA file in PEM format" $ERR_RESOURCE
+          grep -q 'BEGIN CERTIFICATE' "$fname" || fatal "\"$fname\" is not CA file in PEM format" $ERR_RESOURCE
      done
 
      if "$do_starttls_injection" && [[ "$STARTTLS_PROTOCOL" =~ smtp ]]; then
