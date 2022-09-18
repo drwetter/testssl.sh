@@ -2405,7 +2405,7 @@ match_httpheader_key() {
           pr_svrty_medium " ${nr}x"
           outln " -- checking first one only"
           out "$spaces"
-          HEADERVALUE="$(fgrep -Fai "$key:" $HEADERFILE | head -1)"
+          HEADERVALUE="$(grep -Fai "$key:" $HEADERFILE | head -1)"
           HEADERVALUE="${HEADERVALUE#*:}"
           HEADERVALUE="$(strip_lf "$HEADERVALUE")"
           HEADERVALUE="$(strip_leading_space "$HEADERVALUE")"
