@@ -9,8 +9,8 @@ jobs:
     name: Check for spelling errors
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: codespell-project/actions-codespell@master
+      - uses: actions/checkout@93ea575cb5d8a053eaa0ac8fa3b40d7e05a33cc8
+      - uses: codespell-project/actions-codespell@bcf481f4d5cce7b92b65f05aebe8f552d4f1442c
         with:
           skip: ca_hashes.txt,tls_data.txt,*.pem,OPENSSL-LICENSE.txt
           ignore_words_list: borken,gost,ciph,ba,bloc,isnt,chello,fo,alle

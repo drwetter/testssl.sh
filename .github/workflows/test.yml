@@ -36,9 +36,9 @@ jobs:
         perl: ['5.26']
     name: Perl ${{ matrix.perl }} on ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@93ea575cb5d8a053eaa0ac8fa3b40d7e05a33cc8
       - name: Set up perl
-        uses: shogo82148/actions-setup-perl@v1
+        uses: shogo82148/actions-setup-perl@b77e9a544f1cd528203e7cc8959f86d01f32824a
         with:
           perl-version: ${{ matrix.perl }}
       - run: perl -V
