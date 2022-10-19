@@ -18,7 +18,7 @@ I am running version ( ``git log | head -1``  / ``testssl.sh -v | grep from``)
 Is related to / couldn't find anything 
 
 **Command line / docker command to reproduce**
-Which was yoour command line? In addition the target of your scan would be helpful. If you don't want to disclose it publicly: ``grep SWCONTACT testssl.sh``.
+Which was your command line? In addition the target of your scan would be helpful. If you don't want to disclose it publicly: ``grep SWCONTACT testssl.sh``.
 
 **Expected behavior**
 A clear and concise description of what you expected to happen.
