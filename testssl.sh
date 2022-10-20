@@ -4545,12 +4545,28 @@ ciphers_by_strength() {
                fi
                
                [[ $difference_rating -lt $NO_CIPHER_ORDER_LEVEL ]] && NO_CIPHER_ORDER_LEVEL=$difference_rating
+               id="cipher_order${proto}"
                case $difference_rating in
-                    5) outln " (no server order, thus listed by strength)" ;;
-                    4) prln_svrty_low " (no server order, thus listed by strength)" ;; 
-                    3) prln_svrty_medium " (no server order, thus listed by strength)" ;;
-                    2) prln_svrty_high " (no server order, thus listed by strength)" ;;
-                    1) prln_svrty_critical " (no server order, thus listed by strength)" ;;
+                    5)
+                         outln " (no server order, thus listed by strength)"
+                         fileout "$id" "INFO" "NOT a cipher order configured"
+                         ;;
+                    4)
+                         prln_svrty_low " (no server order, thus listed by strength)"
+                         fileout "$id" "LOW" "NOT a cipher order configured"
+                         ;; 
+                    3)
+                         prln_svrty_medium " (no server order, thus listed by strength)"
+                         fileout "$id" "MEDIUM" "NOT a cipher order configured"
+                         ;;
+                    2)
+                         prln_svrty_high " (no server order, thus listed by strength)"
+                         fileout "$id" "HIGH" "NOT a cipher order configured"
+                         ;;
+                    1)
+                         prln_svrty_critical " (no server order, thus listed by strength)"
+                         fileout "$id" "CRITICAL" "NOT a cipher order configured"
+                         ;;
                esac
           fi
      elif "$wide" && "$proto_supported" || [[ $proto != -ssl2 ]]; then
@@ -7448,8 +7464,10 @@ cipher_pref_check() {
      fi
      if "$prioritize_chacha"; then
           outln " (server order -- server prioritizes ChaCha ciphers when preferred by clients)"
+          fileout "cipher_order-${proto}" "OK" "server -- server prioritizes ChaCha ciphers when preferred by clients"
      elif [[ -n "$order" ]]; then
           outln " (server order)"
+          fileout "cipher_order-${proto}" "OK" "server"
      else
           outln
      fi
