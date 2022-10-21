@@ -16482,7 +16482,7 @@ run_ticketbleed() {
      pr_bold " Ticketbleed"; out " ($cve), experiment.  "
 
      if [[ "$SERVICE" != HTTP ]] && [[ "$CLIENT_AUTH" != required ]]; then
-          outln "--   (applicable only for HTTPS)"
+          outln "(applicable only for HTTPS)"
           fileout "$jsonID" "INFO" "not applicable, not HTTP" "$cve" "$cwe"
           return 0
      fi
@@ -21631,7 +21631,7 @@ determine_optimal_proto() {
                if ! "$OSSL_SHORTCUT" || [[ ! -x /usr/bin/openssl ]] || /usr/bin/openssl s_client -tls1_3 2>&1 | grep -aiq "unknown option"; then
                     outln
                     fileout "$jsonID" "WARN" "$NODE:$PORT appears to support TLS 1.3 ONLY, but $OPENSSL does not support TLS 1.3"
-                    ignore_no_or_lame " Type \"yes\" to proceed and accept all scan problems" "yes"
+                    ignore_no_or_lame " Type \"yes\" to proceed with $OPENSSL and accept all scan problems" "yes"
                     [[ $? -ne 0 ]] && exit $ERR_CLUELESS
                     MAX_OSSL_FAIL=10
                else
