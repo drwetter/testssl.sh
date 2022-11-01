@@ -9711,7 +9711,12 @@ run_pfs() {
                               fi
                          fi
                     done
-                    [[ -z "$ciphers_to_test" ]] && [[ -z "$tls13_ciphers_to_test" ]] && break
+                    if "$HAS_TLS13"; then
+                         [[ "$proto" == -no_ssl2 ]] && [[ -z "$tls13_ciphers_to_test" ]] && break
+                         [[ "$proto" == -no_tls1_3 ]] && [[ -z "$ciphers_to_test" ]] && break
+                    else
+                         [[ -z "$ciphers_to_test" ]] && break
+                    fi
                     $OPENSSL s_client $(s_client_options "$proto -cipher "\'${ciphers_to_test:1}\'" -ciphersuites "\'${tls13_ciphers_to_test:1}\'" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") &>$TMPFILE </dev/null
                     sclient_connect_successful $? $TMPFILE || break
                     pfs_cipher=$(get_cipher $TMPFILE)
