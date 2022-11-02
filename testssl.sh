@@ -11463,7 +11463,7 @@ fd_socket() {
           fi
      fi
      # Now comes the usual case
-     if ! exec 5<>/dev/tcp/$nodeip/$PORT && [[ -z "$PROXY" ]]; then
+     if [[ -z "$PROXY" ]] && ! exec 5<>/dev/tcp/$nodeip/$PORT; then
           ((NR_SOCKET_FAIL++))
           connectivity_problem $NR_SOCKET_FAIL $MAX_SOCKET_FAIL "TCP connect problem" "repeated TCP connect problems, giving up"
           outln
