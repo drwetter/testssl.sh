@@ -12687,6 +12687,7 @@ poly1305_mac() {
      local -i d0 d1 d2 d3 d4
      local -i g0 g1 g2 g3 g4
      local -i i c f blocksize hibit
+     local padding="00000000000000000000000000000000"
 
      # poly1305_key_gen - RFC 8439, Section 2.6
      # The MAC key is actually just the first 64 characters (32 bytes) of the
@@ -12699,19 +12700,11 @@ poly1305_mac() {
      msg="$aad"
      aad_len=$((${#aad}/2))
      bytes=$(( aad_len % 16 ))
-     if [[ $bytes -ne 0 ]]; then
-          for (( i=bytes; i < 16; i++ )); do
-               msg+="00"
-          done
-     fi
+     [[ $bytes -ne 0 ]] && msg+="${padding:0:$((2*(16-bytes)))}"
      msg+="$ciphertext"
      ciphertext_len=$((${#ciphertext}/2))
      bytes=$(( ciphertext_len % 16 ))
-     if [[ $bytes -ne 0 ]]; then
-          for (( i=bytes; i < 16; i++ )); do
-               msg+="00"
-          done
-     fi
+     [[ $bytes -ne 0 ]] && msg+="${padding:0:$((2*(16-bytes)))}"
      msg+="$(u64to8 $aad_len)$(u64to8 $ciphertext_len)"
      bytes="${#msg}"
 
@@ -12740,10 +12733,7 @@ poly1305_mac() {
           else
                blocksize=$bytes
                hibit=0
-               msg+="01"
-               for (( i=bytes+2; i < 32; i+=2 )); do
-                    msg+="00"
-               done
+               msg+="01${padding:0:$((30-bytes))}"
           fi
           h0+=$(( $(u8to32 "${msg:0:8}") & 0x3ffffff ))
           h1+=$(( ($(u8to32 "${msg:6:8}") >> 2) & 0x3ffffff ))
@@ -12874,6 +12864,7 @@ ccm-compute-tag() {
      local -i tag_len="$6"
      local b tag
      local -i i aad_len plaintext_len final_block_len nr_blocks
+     local padding_bytes="00000000000000000000000000000000"
 
      aad_len=$((${#aad}/2))
      plaintext_len=$((${#plaintext}/2))
@@ -12909,21 +12900,13 @@ ccm-compute-tag() {
                return 7
           fi
           # Add padding to complete block
-          if [[ $final_block_len -ne 0 ]]; then
-               for (( i=final_block_len; i < 16; i++ )); do
-                    b+="00"
-               done
-          fi
+          [[ $final_block_len -ne 0 ]] && b+="${padding_bytes:0:$((2*(16-final_block_len)))}"
      fi
 
      # Finally add the plaintext and any padding needed to complete block
      b+="$plaintext"
      final_block_len=$((plaintext_len % 16))
-     if [[ $final_block_len -ne 0 ]]; then
-          for (( i=final_block_len; i < 16; i++ )); do
-               b+="00"
-          done
-     fi
+     [[ $final_block_len -ne 0 ]] && b+="${padding_bytes:0:$((2*(16-final_block_len)))}"
 
      # Compute the authentication tag as described in
      # Sections 6.1 and 6.2 of NIST SP 800-38C.
@@ -15156,6 +15139,7 @@ prepare_tls_clienthello() {
      local extensions_key_share="" extn_type supported_groups_c2n="" extn_psk_mode=""
      local extra_extensions extra_extensions_list="" extension_supported_versions=""
      local offer_compression=false compression_methods
+     local padding_bytes="\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00"
 
      # TLSv1.3 ClientHello messages MUST specify only the NULL compression method.
      [[ "$5" == true ]] && [[ "0x$tls_low_byte" -le "0x03" ]] && offer_compression=true
@@ -15466,17 +15450,14 @@ prepare_tls_clienthello() {
                fi
                len_padding_extension_hex=$(printf "%02x\n" $len_padding_extension)
                len2twobytes "$len_padding_extension_hex"
-               all_extensions="$all_extensions\\x00\\x15\\x${LEN_STR:0:2}\\x${LEN_STR:4:2}"
-               for (( i=0; i<len_padding_extension; i++ )); do
-                    all_extensions="$all_extensions\\x00"
-               done
+               all_extensions+="\\x00\\x15\\x${LEN_STR:0:2}\\x${LEN_STR:4:2}${padding_bytes:0:$((4*len_padding_extension))}"
                len_extension=$len_extension+$len_padding_extension+0x4
                len_extension_hex=$(printf "%02x\n" $len_extension)
           elif [[ ! "$extra_extensions_list" =~ \ 0015\  ]] && [[ $((len_all%256)) -eq 10 || $((len_all%256)) -eq 14 ]]; then
                # Some servers fail if the length of the ClientHello is 522, 778, 1034, 1290, ... bytes.
                # A few servers also fail if the length is 526, 782, 1038, 1294, ... bytes.
                # So, if the ClientHello would be one of these length, add a 5-byte padding extension.
-               all_extensions="$all_extensions\\x00\\x15\\x00\\x01\\x00"
+               all_extensions+="\\x00\\x15\\x00\\x01\\x00"
                len_extension+=5
                len_extension_hex=$(printf "%02x\n" $len_extension)
           fi
@@ -19393,6 +19374,7 @@ run_robot() {
      local aes_gcm_cbc_cipherlist="00,9d, 00,9c, 00,3d, 00,35, 00,3c, 00,2f"
      local padded_pms encrypted_pms cke_prefix client_key_exchange rnd_pad
      local rnd_pms="aa112233445566778899112233445566778899112233445566778899112233445566778899112233445566778899"
+     local rnd_padding_bytes="abcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcd"
      local change_cipher_spec finished resp
      local -a response
      local -i i subret len iteration testnum pubkeybytes
@@ -19498,8 +19480,8 @@ run_robot() {
                pubkeybits="${pubkeybits%%bit*}"
                pubkeybytes=$pubkeybits/8
                [[ $((pubkeybits%8)) -ne 0 ]] && pubkeybytes+=1
-               rnd_pad=""
-               for (( len=0; len < pubkeybytes-52; len+=2 )); do
+               rnd_pad="${rnd_padding_bytes:0:$((2*(pubkeybytes-51)))}"
+               for (( len=$((${#rnd_pad}/2)); len < pubkeybytes-52; len+=2 )); do
                     rnd_pad+="abcd"
                done
                [[ $len -eq $pubkeybytes-52 ]] && rnd_pad+="ab"
