@@ -6265,6 +6265,19 @@ run_cipherlists() {
      return $ret
 }
 
+pr_sigalg_quality() {
+     local sigalg="$1"
+
+     if [[ "$sigalg" =~ MD5 ]]; then
+          pr_svrty_high "$sigalg"
+     elif [[ "$sigalg" =~ SHA1 ]]; then
+          pr_svrty_low "$sigalg"
+     else
+          out "$sigalg"
+     fi
+}
+
+
 # The return value is an indicator of the quality of the DH key length in $1:
 #   1 = pr_svrty_critical, 2 = pr_svrty_high, 3 = pr_svrty_medium, 4 = pr_svrty_low
 #   5 = neither good nor bad, 6 = pr_svrty_good, 7 = pr_svrty_best
@@ -10319,7 +10332,7 @@ get_san_dns_from_cert() {
 run_fs() {
      local -i sclient_success
      local fs_offered=false ecdhe_offered=false ffdhe_offered=false
-     local fs_tls13_offered=false
+     local fs_tls13_offered=false fs_tls12_offered=false
      local protos_to_try proto hexc dash fs_cipher sslvers auth mac export curve dhlen
      local -a hexcode normalized_hexcode ciph rfc_ciph kx enc ciphers_found sigalg ossl_supported
      # generated from 'kEECDH:kEDH:!aNULL:!eNULL:!DES:!3DES:!RC4' with openssl 1.0.2i and openssl 1.1.0
@@ -10336,10 +10349,16 @@ run_fs() {
      local -a ffdhe_groups_hex=("01,00" "01,01" "01,02" "01,03" "01,04")
      local -a ffdhe_groups_output=("ffdhe2048" "ffdhe3072" "ffdhe4096" "ffdhe6144" "ffdhe8192")
      local -a supported_curve
+     local -a sigalgs_hex=("01,01" "01,02" "01,03" "02,01" "02,02" "02,03" "03,01" "03,02" "03,03" "04,01" "04,02" "04,03" "04,20" "05,01" "05,02" "05,03" "05,20" "06,01" "06,02" "06,03" "06,20" "07,08" "08,04" "08,05" "08,06" "08,07" "08,08" "08,09" "08,0a" "08,0b" "08,1a" "08,1b" "08,1c")
+     local -a sigalgs_strings=("RSA+MD5" "DSA+MD5" "ECDSA+MD5" "RSA+SHA1" "DSA+SHA1" "ECDSA+SHA1" "RSA+SHA224" "DSA+SHA224" "ECDSA+SHA224" "RSA+SHA256" "DSA+SHA256" "ECDSA+SHA256" "RSA+SHA256" "RSA+SHA384" "DSA+SHA384" "ECDSA+SHA384" "RSA+SHA384" "RSA+SHA512" "DSA+SHA512" "ECDSA+SHA512" "RSA+SHA512" "SM2+SM3" "RSA-PSS+SHA256" "RSA-PSS+SHA384" "RSA-PSS+SHA512" "Ed25519" "Ed448" "RSA-PSS+SHA256" "RSA-PSS+SHA384" "RSA-PSS+SHA512" "ECDSA+SHA256" "ECDSA+SHA384" "ECDSA+SHA512")
+     local -a tls13_supported_sigalgs=("false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false")
+     local -a tls12_supported_sigalgs=("false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false" "false")
+     local rsa_cipher="" ecdsa_cipher="" dss_cipher=""
+     local sigalgs_to_test tls12_supported_sigalg_list="" tls13_supported_sigalg_list=""
      local -i nr_supported_ciphers=0 nr_curves=0 nr_ossl_curves=0 i j low high
      local fs_ciphers curves_offered="" curves_to_test temp
      local curves_option="" curves_list1="" curves_list2=""
-     local len1 len2 curve_found
+     local len1 len2 curve_found sigalg_found
      local key_bitstring quality_str
      local -i len_dh_p quality
      local has_dh_bits="$HAS_DH_BITS"
@@ -10526,6 +10545,9 @@ run_fs() {
                          "$WIDE" && kx[i]="$(read_dhtype_from_file $TMPFILE)"
                     elif [[ "$fs_cipher" == ECDHE-* ]]; then
                          ecdhe_offered=true
+                         ! "$fs_tls12_offered" && [[ "$(get_protocol "$TMPFILE")" == TLSv1.2 ]] && fs_tls12_offered=true
+                    else
+                         ! "$fs_tls12_offered" && [[ "$(get_protocol "$TMPFILE")" == TLSv1.2 ]] && fs_tls12_offered=true
                     fi
                     if "$WIDE"; then
                          dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
@@ -10569,6 +10591,12 @@ run_fs() {
                          fi
                          "$WIDE" && "$SHOW_SIGALGO" && [[ -r "$HOSTCERT" ]] && \
                               sigalg[i]="$(read_sigalg_from_file "$HOSTCERT")"
+                         if [[ "$proto" == 03 ]]; then
+                              [[ $sclient_success -eq 0 ]] && fs_tls12_offered=true
+                         elif ! "$fs_tls12_offered" && [[ $sclient_success -eq 2 ]] && \
+                              [[ "$(get_protocol "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")" == TLSv1.2 ]]; then
+                              fs_tls12_offered=true
+                         fi
                     done
                done
           fi
@@ -10861,9 +10889,112 @@ run_fs() {
                else
                     fileout "DH_groups" "$quality_str" "$curves_offered"
                fi
+               outln
           fi
      fi
-     outln
+     if "$using_sockets"; then
+          protos_to_try=""
+          "$fs_tls13_offered" && protos_to_try="04"
+          # For TLS 1.2, find a supported cipher suite corresponding to each of the key types (RSA, ECDSA, DSS).
+          # Need to try each key type separately, otherwise not all supported signature algorithms will be found.
+          if "$fs_tls12_offered"; then
+               for (( i=0; i < nr_supported_ciphers; i++ )); do
+                    ! "${ciphers_found[i]}" && continue
+                    if [[ -z "$rsa_cipher" ]] && { [[ "${rfc_ciph[i]}" == TLS_DHE_RSA* ]] ||
+                       [[ "${rfc_ciph[i]}" == TLS_ECDHE_RSA* ]] || [[ "${ciph[i]}" == DHE-RSA-* ]] ||
+                       [[ "${ciph[i]}" == ECDHE-RSA-* ]]; }; then
+                         rsa_cipher="${hexcode[i]}"
+                    elif [[ -z "$ecdsa_cipher" ]] && { [[ "${rfc_ciph[i]}" == TLS_ECDHE_ECDSA* ]] || [[ "${ciph[i]}" == ECDHE-ECDSA-* ]]; }; then
+                         ecdsa_cipher="${hexcode[i]}"
+                    elif [[ -z "$dss_cipher" ]] && { [[ "${rfc_ciph[i]}" == TLS_DHE_DSS* ]] || [[ "${ciph[i]}" == DHE-DSS-* ]]; }; then
+                         dss_cipher="${hexcode[i]}"
+                    fi
+               done
+               [[ -n "$rsa_cipher" ]] && protos_to_try+=" 03-$rsa_cipher"
+               [[ -n "$ecdsa_cipher" ]] && protos_to_try+=" 03-$ecdsa_cipher"
+               [[ -n "$dss_cipher" ]] && protos_to_try+=" 03-$dss_cipher"
+          fi
+          for proto in $protos_to_try; do
+               while true; do
+                    i=0
+                    sigalgs_to_test=""
+                    for hexc in "${sigalgs_hex[@]}"; do
+                         if [[ "$proto" == 04 ]]; then
+                              ! "${tls13_supported_sigalgs[i]}" && sigalgs_to_test+=", $hexc"
+                         else
+                              ! "${tls12_supported_sigalgs[i]}" && sigalgs_to_test+=", $hexc"
+                         fi
+                         i+=1
+                    done
+                    [[ -z "$sigalgs_to_test" ]] && break
+                    len1=$(printf "%02x" "$((2*${#sigalgs_to_test}/7))")
+                    len2=$(printf "%02x" "$((2*${#sigalgs_to_test}/7+2))")
+                    if [[ "$proto" == 04 ]]; then
+                         tls_sockets "$proto" "$TLS13_CIPHER" "all+" "00,0d, 00,$len2, 00,$len1, ${sigalgs_to_test:2}"
+                    else
+                         tls_sockets "${proto%-*}" "${proto#*-}, 00,ff" "ephemeralkey" "00,0d, 00,$len2, 00,$len1, ${sigalgs_to_test:2}"
+                    fi
+                    [[ $? -eq 0 ]] || break
+                    sigalg_found="$(awk -F ': ' '/^Peer signing digest/  { print $2 } ' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")"
+                    [[ -n "$sigalg_found" ]] && sigalg_found="+$sigalg_found"
+                    sigalg_found="$(awk -F ': ' '/^Peer signature type/  { print $2 } ' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")$sigalg_found"
+                    i=0
+                    for hexc in "${sigalgs_hex[@]}"; do
+                         [[ "${sigalgs_strings[i]}" == $sigalg_found ]] && break
+                         i+=1
+                    done
+                    [[ -z "${sigalgs_hex[i]}" ]] && break
+                    if [[ "$proto" == 04 ]]; then
+                         "${tls13_supported_sigalgs[i]}" && break
+                         tls13_supported_sigalgs[i]=true
+                         tls13_supported_sigalg_list+=" $sigalg_found"
+                    else
+                         "${tls12_supported_sigalgs[i]}" && break
+                         tls12_supported_sigalgs[i]=true
+                         tls12_supported_sigalg_list+=" $sigalg_found"
+                    fi
+               done
+          done
+          tls12_supported_sigalg_list="${tls12_supported_sigalg_list:1}"
+          tls13_supported_sigalg_list="${tls13_supported_sigalg_list:1}"
+          if "$fs_tls12_offered"; then
+               pr_bold " TLS 1.2 sig_algs offered:    "
+               if [[ -z "$(sed -e 's/[A-Za-z\-]*+SHA1//g' -e 's/[A-Za-z\-]*+MD5//g' -e 's/ //g' <<< "$tls12_supported_sigalg_list")" ]]; then
+                    prln_svrty_critical "$(out_row_aligned_max_width "$tls12_supported_sigalg_list " "                              " $TERM_WIDTH)"
+                    fileout "${jsonID}_TLS12_sig_algs" "CRITICAL" "$tls12_supported_sigalg_list"
+               else
+                    out_row_aligned_max_width_by_entry "$tls12_supported_sigalg_list " "                              " $TERM_WIDTH pr_sigalg_quality
+                    outln
+                    if [[ "$tls12_supported_sigalg_list" =~ MD5 ]]; then
+                         fileout "${jsonID}_TLS12_sig_algs" "HIGH" "$tls12_supported_sigalg_list"
+                    elif [[ "$tls12_supported_sigalg_list" =~ SHA1 ]]; then
+                         fileout "${jsonID}_TLS12_sig_algs" "LOW" "$tls12_supported_sigalg_list"
+                    else
+                         fileout "${jsonID}_TLS12_sig_algs" "INFO" "$tls12_supported_sigalg_list"
+                    fi
+               fi
+          fi
+          if "$fs_tls13_offered"; then
+               pr_bold " TLS 1.3 sig_algs offered:    "
+               # If only SHA1 and MD5 signature algorithms are supported, this is a critical finding.
+               # If SHA1 and/or MD5 are supported, but stronger algorithms are also supported, the
+               # severity is less.
+               if [[ -z "$(sed -e 's/[A-Za-z\-]*+SHA1//g' -e 's/[A-Za-z\-]*+MD5//g' -e 's/ //g' <<< "$tls13_supported_sigalg_list")" ]]; then
+                    prln_svrty_critical "$(out_row_aligned_max_width "$tls13_supported_sigalg_list " "                              " $TERM_WIDTH)"
+                    fileout "${jsonID}_TLS13_sig_algs" "CRITICAL" "$tls13_supported_sigalg_list"
+               else
+                    out_row_aligned_max_width_by_entry "$tls13_supported_sigalg_list " "                              " $TERM_WIDTH pr_sigalg_quality
+                    outln
+                    if [[ "$tls13_supported_sigalg_list" =~ MD5 ]]; then
+                         fileout "${jsonID}_TLS13_sig_algs" "HIGH" "$tls13_supported_sigalg_list"
+                    elif [[ "$tls13_supported_sigalg_list" =~ SHA1 ]]; then
+                         fileout "${jsonID}_TLS13_sig_algs" "LOW" "$tls13_supported_sigalg_list"
+                    else
+                         fileout "${jsonID}_TLS13_sig_algs" "INFO" "$tls13_supported_sigalg_list"
+                    fi
+               fi
+          fi
+     fi
 
      tmpfile_handle ${FUNCNAME[0]}.txt
      "$using_sockets" && HAS_DH_BITS="$has_dh_bits"
