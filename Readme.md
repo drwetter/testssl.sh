@@ -45,7 +45,7 @@ due to bash-socket-based checks. As a result you can also use e.g. LibreSSL or O
 (silent) check for binaries is done when you start testssl.sh . System V needs probably
 to have GNU grep installed. MacOS X and Windows (using MSYS2, Cygwin or WSL) work too.
 
-Update notification here or @ [twitter](https://twitter.com/drwetter).
+Update notification here or @ [mastodon](https://infosec.exchange/@testssl) (old: [twitter](https://twitter.com/drwetter))
 
 ### Installation
 
