@@ -8918,7 +8918,7 @@ certificate_info() {
      out "$indent" ; pr_bold " Signature Algorithm          "
      jsonID="cert_signatureAlgorithm"
      case $cert_sig_algo in
-          sha1WithRSAEncryption)
+          sha1WithRSA|sha1WithRSAEncryption)
                pr_svrty_medium "SHA1 with RSA"
                if [[ "$SERVICE" == HTTP ]] || "$ASSUME_HTTP"; then
                     out " -- besides: users will receive a "; pr_svrty_high "strong browser WARNING"
