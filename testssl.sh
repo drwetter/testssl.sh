@@ -10557,7 +10557,12 @@ run_fs() {
                               fi
                          fi
                     done
-                    [[ -z "$ciphers_to_test" ]] && [[ -z "$tls13_ciphers_to_test" ]] && break
+                    if "$HAS_TLS13"; then
+                         [[ "$proto" == -no_ssl2 ]] && [[ -z "$tls13_ciphers_to_test" ]] && break
+                         [[ "$proto" =~ -no_tls1_3 ]] && [[ -z "$ciphers_to_test" ]] && break
+                    else
+                         [[ -z "$ciphers_to_test" ]] && break
+                    fi
                     if [[ "$proto" =~ curves1 ]]; then
                          curves_option="-curves $curves_list1"
                     elif [[ "$proto" =~ curves2 ]]; then
