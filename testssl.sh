@@ -15646,7 +15646,7 @@ run_drown() {
      # to $CERT_FINGERPRINT_SHA2, so if $CERT_FINGERPRINT_SHA2 is not empty, but
      # $RSA_CERT_FINGERPRINT_SHA2 is empty, then the server doesn't have an RSA certificate.
      if [[ -z "$CERT_FINGERPRINT_SHA2" ]]; then
-          get_host_cert "-cipher aRSA"
+          get_host_cert "-cipher aRSA -no_ssl2"
           [[ $? -eq 0 ]] && cert_fingerprint_sha2="$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha256 2>>$ERRFILE | sed -e 's/^.*Fingerprint=//' -e 's/://g' )"
      else
           cert_fingerprint_sha2="$RSA_CERT_FINGERPRINT_SHA2"
