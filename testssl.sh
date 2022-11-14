@@ -10894,7 +10894,7 @@ run_fs() {
      fi
      if "$using_sockets"; then
           protos_to_try=""
-          "$fs_tls13_offered" && protos_to_try="04"
+          "$fs_tls13_offered" && protos_to_try="04-01 04-02"
           # For TLS 1.2, find a supported cipher suite corresponding to each of the key types (RSA, ECDSA, DSS).
           # Need to try each key type separately, otherwise not all supported signature algorithms will be found.
           if "$fs_tls12_offered"; then
@@ -10910,29 +10910,48 @@ run_fs() {
                          dss_cipher="${hexcode[i]}"
                     fi
                done
-               [[ -n "$rsa_cipher" ]] && protos_to_try+=" 03-$rsa_cipher"
-               [[ -n "$ecdsa_cipher" ]] && protos_to_try+=" 03-$ecdsa_cipher"
-               [[ -n "$dss_cipher" ]] && protos_to_try+=" 03-$dss_cipher"
+               [[ -n "$rsa_cipher" ]] && protos_to_try+=" 03-rsa-$rsa_cipher"
+               [[ -n "$ecdsa_cipher" ]] && protos_to_try+=" 03-ecdsa-$ecdsa_cipher"
+               [[ -n "$dss_cipher" ]] && protos_to_try+=" 03-dss-$dss_cipher"
           fi
           for proto in $protos_to_try; do
                while true; do
                     i=0
                     sigalgs_to_test=""
+                    # A few servers get confused if the signature_algorithms extension contains too many entries. So:
+                    # * For TLS 1.3, break the list into two and test each half separately.
+                    # * For TLS 1.2, generally limit the signature_algorithms extension to algorithms that are consistent with the key type.
                     for hexc in "${sigalgs_hex[@]}"; do
-                         if [[ "$proto" == 04 ]]; then
-                              ! "${tls13_supported_sigalgs[i]}" && sigalgs_to_test+=", $hexc"
-                         else
-                              ! "${tls12_supported_sigalgs[i]}" && sigalgs_to_test+=", $hexc"
+                         if [[ "$proto" == 04* ]]; then
+                              if ! "${tls13_supported_sigalgs[i]}"; then
+                                   if [[ "${proto##*-}" == 01 ]]; then
+                                        [[ $i -le 16 ]] && sigalgs_to_test+=", $hexc"
+                                   else
+                                        [[ $i -gt 16 ]] && sigalgs_to_test+=", $hexc"
+                                   fi
+                              fi
+                         elif ! "${tls12_supported_sigalgs[i]}"; then
+                              if [[ "$proto" =~ rsa ]]; then
+                                   if [[ "${hexc:3:2}" == 01 ]] || [[ "${hexc:0:2}" == 08 ]]; then
+                                        sigalgs_to_test+=", $hexc"
+                                   fi
+                              elif [[ "$proto" =~ dss ]]; then
+                                   [[ "${hexc:3:2}" == 02 ]] && sigalgs_to_test+=", $hexc"
+                              else
+                                   if [[ "${hexc:3:2}" == 03 ]] || [[ "${hexc:0:2}" == 08 ]]; then
+                                        sigalgs_to_test+=", $hexc"
+                                   fi
+                              fi
                          fi
                          i+=1
                     done
                     [[ -z "$sigalgs_to_test" ]] && break
                     len1=$(printf "%02x" "$((2*${#sigalgs_to_test}/7))")
                     len2=$(printf "%02x" "$((2*${#sigalgs_to_test}/7+2))")
-                    if [[ "$proto" == 04 ]]; then
-                         tls_sockets "$proto" "$TLS13_CIPHER" "all+" "00,0d, 00,$len2, 00,$len1, ${sigalgs_to_test:2}"
+                    if [[ "$proto" == 04* ]]; then
+                         tls_sockets "${proto%%-*}" "$TLS13_CIPHER" "all+" "00,0d, 00,$len2, 00,$len1, ${sigalgs_to_test:2}"
                     else
-                         tls_sockets "${proto%-*}" "${proto#*-}, 00,ff" "ephemeralkey" "00,0d, 00,$len2, 00,$len1, ${sigalgs_to_test:2}"
+                         tls_sockets "${proto%%-*}" "${proto##*-}, 00,ff" "ephemeralkey" "00,0d, 00,$len2, 00,$len1, ${sigalgs_to_test:2}"
                     fi
                     [[ $? -eq 0 ]] || break
                     sigalg_found="$(awk -F ': ' '/^Peer signing digest/  { print $2 } ' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")"
@@ -10944,7 +10963,7 @@ run_fs() {
                          i+=1
                     done
                     [[ -z "${sigalgs_hex[i]}" ]] && break
-                    if [[ "$proto" == 04 ]]; then
+                    if [[ "$proto" == 04* ]]; then
                          "${tls13_supported_sigalgs[i]}" && break
                          tls13_supported_sigalgs[i]=true
                          tls13_supported_sigalg_list+=" $sigalg_found"
