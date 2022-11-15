@@ -6912,7 +6912,7 @@ run_server_preference() {
           fi
      elif ! "$has_cipher_order" && "$has_tls13_cipher_order"; then
           case "$fileout_rating" in
-               "INFO") 
+               "INFO")
                     out "only for TLS 1.3"
                     fileout "$jsonID" "INFO" "server -- < TLS 1.3 client determined"
                     ;;
@@ -6961,80 +6961,6 @@ run_server_preference() {
           fileout "$jsonID" "$fileout_rating" "$fileout_msg"
      fi
      outln
-
-     pr_bold " Negotiated protocol          "
-     jsonID="protocol_negotiated"
-
-     case "$default_proto" in
-          *TLSv1.3)
-               prln_svrty_best $default_proto
-               fileout "$jsonID" "OK" "Default protocol TLS1.3"
-               ;;
-          *TLSv1.2)
-               prln_svrty_best $default_proto
-               fileout "$jsonID" "OK" "Default protocol TLS1.2"
-               ;;
-          *TLSv1.1)
-               prln_svrty_low $default_proto
-               fileout "$jsonID" "LOW" "Default protocol TLS1.1"
-               ;;
-          *TLSv1)
-               prln_svrty_low $default_proto
-               fileout "$jsonID" "LOW" "Default protocol TLS1.0"
-               ;;
-          *SSLv2)
-               prln_svrty_critical $default_proto
-               fileout "$jsonID" "CRITICAL" "Default protocol SSLv2"
-               ;;
-          *SSLv3)
-               prln_svrty_critical $default_proto
-               fileout "$jsonID" "CRITICAL" "Default protocol SSLv3"
-               ;;
-          "")
-               pr_warning "default proto empty"
-               if [[ $OSSL_VER == 1.0.2* ]]; then
-                    outln " (Hint: if IIS6 give OpenSSL 1.0.1 a try)"
-                    fileout "$jsonID" "WARN" "Default protocol empty (Hint: if IIS6 give OpenSSL 1.0.1 a try)"
-               else
-                    outln
-                    fileout "$jsonID" "WARN" "Default protocol empty"
-               fi
-               ret=1
-               ;;
-          *)
-               pr_warning "FIXME line $LINENO: $default_proto"
-               fileout "$jsonID" "WARN" "FIXME line $LINENO: $default_proto"
-               ret=1
-               ;;
-     esac
-
-     pr_bold " Negotiated cipher            "
-     jsonID="cipher_negotiated"
-     pr_cipher_quality "$default_cipher"
-     case $? in
-          1)   fileout "$jsonID" "CRITICAL" "$default_cipher$(read_dhbits_from_file "$TEMPDIR/$NODEIP.run_server_preference.txt" "string") $limitedsense"
-               ;;
-          2)   fileout "$jsonID" "HIGH" "$default_cipher$(read_dhbits_from_file "$TEMPDIR/$NODEIP.run_server_preference.txt" "string") $limitedsense"
-               ;;
-          3)   fileout "$jsonID" "MEDIUM" "$default_cipher$(read_dhbits_from_file "$TEMPDIR/$NODEIP.run_server_preference.txt" "string") $limitedsense"
-               ;;
-          6|7) fileout "$jsonID" "OK" "$default_cipher$(read_dhbits_from_file "$TEMPDIR/$NODEIP.run_server_preference.txt" "string") $limitedsense"
-               ;;   # best ones
-          4)   fileout "$jsonID" "LOW" "$default_cipher$(read_dhbits_from_file "$TEMPDIR/$NODEIP.run_server_preference.txt" "string") (cbc) $limitedsense"
-               ;;  # it's CBC. --> lucky13
-          0)   pr_warning "default cipher empty" ;
-               if [[ $OSSL_VER == 1.0.2* ]]; then
-                    out " (Hint: if IIS6 give OpenSSL 1.0.1 a try)"
-                    fileout "$jsonID" "WARN" "Default cipher empty  (if IIS6 give OpenSSL 1.0.1 a try) $limitedsense"
-               else
-                    fileout "$jsonID" "WARN" "Default cipher empty $limitedsense"
-               fi
-               ret=1
-               ;;
-          *)   fileout "$jsonID" "INFO" "$default_cipher$(read_dhbits_from_file "$TEMPDIR/$NODEIP.run_server_preference.txt" "string") $limitedsense"
-               ;;
-     esac
-     [[ -n "$default_cipher" ]] && read_dhbits_from_file "$TEMPDIR/$NODEIP.run_server_preference.txt"
 
      if [[ "$cipher0" != $cipher1 ]]; then
           pr_warning " -- inconclusive test, matching cipher in list missing"
