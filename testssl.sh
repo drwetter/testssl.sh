@@ -872,6 +872,26 @@ strip_quote() (
      )"
 )
 
+# Converts a string containing PEM encoded data to one line.
+pem_to_one_line() {
+   local pem="$1"
+   local header="" footer=""
+
+   if [[ "$pem" =~ .*-+BEGIN\ [A-Za-z0-9]+-+ ]]; then
+        header="$BASH_REMATCH"
+        pem="${pem/$header/}"
+   fi
+   if [[ "$pem" =~ -+END\ [A-Za-z0-9]+-+.* ]]; then
+        footer="$BASH_REMATCH"
+        pem="${pem/$footer/}"
+   fi
+   pem="$(strip_spaces "$(newline_to_spaces "$pem")")"
+   [[ -n "$header" ]] && pem="$header\\\n$pem"
+   [[ -n "$footer" ]] && pem+="\\\n$footer"
+   printf -- "%s" "$pem"
+   return 0
+}
+
 is_ipv4addr() {
      local octet="(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])"
      local ipv4address="$octet\\.$octet\\.$octet\\.$octet"
@@ -1355,7 +1375,6 @@ fileout() {
 
      if { "$do_pretty_json" && [[ "$1" == service ]]; } || show_finding "$severity"; then
           local finding=$(strip_lf "$(newline_to_spaces "$(strip_quote "$3")")")           # additional quotes will mess up screen output
-          finding="${finding//\\n/ }"
           [[ -e "$JSONFILE" ]] && [[ ! -d "$JSONFILE" ]] && fileout_json_finding "$1" "$severity" "$finding" "$cve" "$cwe" "$hint"
           "$do_csv" && [[ -n "$CSVFILE" ]] && [[ ! -d "$CSVFILE" ]] && \
                fileout_csv_finding "$1" "$NODE/$NODEIP" "$PORT" "$severity" "$finding" "$cve" "$cwe" "$hint"
@@ -9181,8 +9200,7 @@ certificate_info() {
      fileout "cert_fingerprintSHA256${json_postfix}" "INFO" "${cert_fingerprint_sha2}"
      outln "${spaces}SHA256 ${cert_fingerprint_sha2}"
 
-     # " " needs to be converted back to lf in JSON/CSV output. watch out leading/ending line containing "CERTIFICATE"
-     fileout "cert${json_postfix}" "INFO" "$hostcert"
+     fileout "cert${json_postfix}" "INFO" "$(pem_to_one_line "$hostcert")"
 
      [[ -z $CERT_FINGERPRINT_SHA2 ]] && \
           CERT_FINGERPRINT_SHA2="$cert_fingerprint_sha2" ||
@@ -9757,7 +9775,7 @@ certificate_info() {
           intermediates="${intermediates#${cert}-----END CERTIFICATE-----}"
           cert="-----BEGIN CERTIFICATE-----${cert}-----END CERTIFICATE-----"
 
-          fileout "intermediate_cert <#${i}>${json_postfix}" "INFO" "$cert"
+          fileout "intermediate_cert <#${i}>${json_postfix}" "INFO" "$(pem_to_one_line "$cert")"
           fileout "intermediate_cert_fingerprintSHA256 <#${i}>${json_postfix}" "INFO" "$(determine_cert_fingerprint_serial "$cert" "-fingerprint -sha256")"
 
           intermediate_certs_txt[i]="$($OPENSSL x509 -text -noout 2>/dev/null <<< "$cert")"
@@ -20443,7 +20461,7 @@ fatal() {
      fi
      # Make sure we don't try to write into files when not created yet.
      # No shorthand expression to avoid errors when $CMDLINE_PARSED haven't been filled yet.
-     [[ $CMDLINE_PARSED == true ]] && fileout "scanProblem" "FATAL" "$1"
+     [[ $CMDLINE_PARSED == true ]] && fileout "scanProblem" "FATAL" "${1//\\n/ }" # See issue #2049.
      exit $2
 }
 
