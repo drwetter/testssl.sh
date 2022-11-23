@@ -21299,14 +21299,19 @@ print_dn() {
 # distinguished names that are in the CA list.
 extract_calist() {
      local response="$1"
-     local is_tls13=false
+     local is_tls12=false is_tls13=false
      local certreq calist="" certtypes sigalgs dn
      local calist_string=""
      local -i len type
 
-     # Determine whether this is a TLS 1.3 response, since the information
-     # is encoded in a different place for TLS 1.3.
-     [[ "$response" =~ \<\<\<\ TLS\ 1.3[\,]?\ Handshake\ \[length\ [0-9a-fA-F]*\]\,\ CertificateRequest ]] && is_tls13=true
+     # Determine whether this is a TLS 1.2 or TLS 1.3 response, since the information
+     # is encoded in a different place for TLS 1.3 and the CertificateRequest message
+     # differs between TLS 1.2 and TLS 1.1 and earlier.
+     if [[ "$response" =~ \<\<\<\ TLS\ 1.3[\,]?\ Handshake\ \[length\ [0-9a-fA-F]*\]\,\ CertificateRequest ]]; then
+          is_tls13=true
+     elif [[ "$response" =~ \<\<\<\ TLS\ 1.2[\,]?\ Handshake\ \[length\ [0-9a-fA-F]*\]\,\ CertificateRequest ]]; then
+          is_tls12=true
+     fi
 
      # Extract just the CertificateRequest message as an ASCII-HEX string.
      certreq="${response##*CertificateRequest}"
@@ -21342,15 +21347,17 @@ extract_calist() {
           # struct {
           #     ClientCertificateType certificate_types<1..2^8-1>;
           #     SignatureAndHashAlgorithm
-          #     supported_signature_algorithms<2^16-1>;
+          #     supported_signature_algorithms<2^16-1>; - only present in TLS 1.2
           #     DistinguishedName certificate_authorities<0..2^16-1>;
           # } CertificateRequest;
           len=2*$(hex2dec "${certreq:0:2}")
           certtypes="${certreq:2:len}"
           certreq="${certreq:$((len+2))}"
-          len=2*$(hex2dec "${certreq:0:4}")
-          sigalgs="${certreq:4:len}"
-          certreq="${certreq:$((len+4))}"
+          if "$is_tls12"; then
+             len=2*$(hex2dec "${certreq:0:4}")
+             sigalgs="${certreq:4:len}"
+             certreq="${certreq:$((len+4))}"
+          fi
           len=2*$(hex2dec "${certreq:0:4}")
           calist="${certreq:4:len}"
      fi
