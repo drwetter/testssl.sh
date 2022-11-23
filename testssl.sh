@@ -189,6 +189,7 @@ HAS_IPv6=${HAS_IPv6:-false}             # if you have OpenSSL with IPv6 support 
 ALL_CLIENTS=${ALL_CLIENTS:-false}       # do you want to run all client simulation form all clients supplied by SSLlabs?
 OFFENSIVE=${OFFENSIVE:-true}            # do you want to include offensive vulnerability tests which may cause blocking by an IDS?
 ADDTL_CA_FILES="${ADDTL_CA_FILES:-""}"  # single file with a CA in PEM format or comma separated lists of them
+ABORT_NO_TLS=${ABORT_NO_TLS:-false}     # abort if no TLS/SSL is detected
 
 ########### Tuning vars which cannot be set by a cmd line switch. Use instead e.g "HEADER_MAXSLEEP=10 ./testssl.sh <your_args_here>"
 #
@@ -4562,7 +4563,7 @@ ciphers_by_strength() {
                               ;;
                     esac
                fi
-               
+
                [[ $difference_rating -lt $NO_CIPHER_ORDER_LEVEL ]] && NO_CIPHER_ORDER_LEVEL=$difference_rating
                id="cipher_order${proto}"
                case $difference_rating in
@@ -4573,7 +4574,7 @@ ciphers_by_strength() {
                     4)
                          prln_svrty_low " (no server order, thus listed by strength)"
                          fileout "$id" "LOW" "NOT a cipher order configured"
-                         ;; 
+                         ;;
                     3)
                          prln_svrty_medium " (no server order, thus listed by strength)"
                          fileout "$id" "MEDIUM" "NOT a cipher order configured"
@@ -20273,6 +20274,7 @@ tuning / connect options (most also can be preset via environment variables):
      --add-ca <CA files|CA dir>    path to <CAdir> with *.pem or a comma separated list of CA files to include in trust check
      --basicauth <user:pass>       provide HTTP basic auth information.
      --reqheader <header>          add custom http request headers
+     --abort-no-tls                abort if no TLS/SSL can be detected
 
 output options (can also be preset via environment variables):
      --quiet                       don't output the banner. By doing this you acknowledge usage terms normally appearing in the banner
@@ -21749,6 +21751,7 @@ determine_optimal_proto() {
           fi
           tmpfile_handle ${FUNCNAME[0]}.txt
           prln_bold "doesn't seem to be a TLS/SSL enabled server";
+          [[ $ABORT_NO_TLS ]] && exit $ALLOK
           ignore_no_or_lame " The results might look ok but they could be nonsense. Really proceed ? (\"yes\" to continue)" "yes"
           [[ $? -ne 0 ]] && exit $ERR_CLUELESS
      elif ! "$all_failed" && "$ALL_FAILED_SOCKETS" && ! "$SSL_NATIVE"; then
@@ -23577,6 +23580,9 @@ parse_cmd_line() {
                     REQHEADER="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     REQHEADERS+=("$REQHEADER")
+                    ;;
+               --abort-no-tls)
+                    ABORT_NO_TLS=true
                     ;;
                (--) shift
                     break

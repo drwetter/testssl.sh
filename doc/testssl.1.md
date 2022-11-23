@@ -152,6 +152,7 @@ in `/etc/hosts`.  The use of the switch is only useful if you either can't or ar
 
 `--add-ca <CAfile>` enables you to add your own CA(s) in PEM format for trust chain checks. `CAfile` can be a directory containing files with a \.pem extension, a single file or multiple files as a comma separated list of root CAs. Internally they will be added during runtime to all CA stores. This is (only) useful for internal hosts whose certificates are issued by internal CAs. Alternatively ADDTL_CA_FILES is the environment variable for this.
 
+`--abort-no-tls` is a switch which cause testssl to abort on the first sign, that the target does not use TLS/SSL.
 
 ### SINGLE CHECK OPTIONS
 
