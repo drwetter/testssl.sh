@@ -874,22 +874,22 @@ strip_quote() (
 
 # Converts a string containing PEM encoded data to one line.
 pem_to_one_line() {
-   local pem="$1"
-   local header="" footer=""
+     local pem="$1"
+     local header="" footer=""
 
-   if [[ "$pem" =~ .*-+BEGIN\ [A-Za-z0-9]+-+ ]]; then
-        header="$BASH_REMATCH"
-        pem="${pem/$header/}"
-   fi
-   if [[ "$pem" =~ -+END\ [A-Za-z0-9]+-+.* ]]; then
-        footer="$BASH_REMATCH"
-        pem="${pem/$footer/}"
-   fi
-   pem="$(strip_spaces "$(newline_to_spaces "$pem")")"
-   [[ -n "$header" ]] && pem="$header\\\n$pem"
-   [[ -n "$footer" ]] && pem+="\\\n$footer"
-   printf -- "%s" "$pem"
-   return 0
+     if [[ "$pem" =~ .*-+BEGIN\ [A-Za-z0-9]+-+ ]]; then
+          header="$BASH_REMATCH"
+          pem="${pem/$header/}"
+     fi
+     if [[ "$pem" =~ -+END\ [A-Za-z0-9]+-+.* ]]; then
+          footer="$BASH_REMATCH"
+          pem="${pem/$footer/}"
+     fi
+     pem="$(strip_spaces "$(newline_to_spaces "$pem")")"
+     [[ -n "$header" ]] && pem="$header\\\n$pem"
+     [[ -n "$footer" ]] && pem+="\\\n$footer"
+     printf -- "%s" "$pem"
+     return 0
 }
 
 is_ipv4addr() {
@@ -4562,7 +4562,7 @@ ciphers_by_strength() {
                               ;;
                     esac
                fi
-               
+
                [[ $difference_rating -lt $NO_CIPHER_ORDER_LEVEL ]] && NO_CIPHER_ORDER_LEVEL=$difference_rating
                id="cipher_order${proto}"
                case $difference_rating in
@@ -4573,7 +4573,7 @@ ciphers_by_strength() {
                     4)
                          prln_svrty_low " (no server order, thus listed by strength)"
                          fileout "$id" "LOW" "NOT a cipher order configured"
-                         ;; 
+                         ;;
                     3)
                          prln_svrty_medium " (no server order, thus listed by strength)"
                          fileout "$id" "MEDIUM" "NOT a cipher order configured"
@@ -21354,9 +21354,9 @@ extract_calist() {
           certtypes="${certreq:2:len}"
           certreq="${certreq:$((len+2))}"
           if "$is_tls12"; then
-             len=2*$(hex2dec "${certreq:0:4}")
-             sigalgs="${certreq:4:len}"
-             certreq="${certreq:$((len+4))}"
+               len=2*$(hex2dec "${certreq:0:4}")
+               sigalgs="${certreq:4:len}"
+               certreq="${certreq:$((len+4))}"
           fi
           len=2*$(hex2dec "${certreq:0:4}")
           calist="${certreq:4:len}"
