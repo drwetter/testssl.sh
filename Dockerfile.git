@@ -1,6 +1,6 @@
 # Build using git repo
 
-FROM alpine:3.14
+FROM alpine:3.16
 
 WORKDIR /home/testssl
 
