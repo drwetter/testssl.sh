@@ -11422,10 +11422,13 @@ starttls_postgres_dialog() {
 }
 
 
-# RFC 2830
+# RFC 2830, RFC 4511
+#
 starttls_ldap_dialog() {
      local debugpad="  > "
      local -i ret=0
+     local msg_lenstr=""
+     local -i msg_len=0
      local result=""
      local starttls_init=",
      x30, x1d, x02, x01,                                                             # LDAP extendedReq
@@ -11436,17 +11439,31 @@ starttls_ldap_dialog() {
      debugme echo "=== starting LDAP STARTTLS dialog ==="
      socksend "${starttls_init}"   0    && debugme echo "${debugpad}initiated STARTTLS" &&
      result=$(sockread_fast 256)
-     [[ $DEBUG -ge 6 ]] && safe_echo "$debugpad $result\n"
+     [[ $DEBUG -ge 4 ]] && safe_echo "$debugpad $result\n"
 
      # response is typically 30 0c 02 01 01 78 07 0a 01 00 04 00 04 00
      #                                                  ^^ == success!  [9] is checked below
-     if [[ ${result:18:2} == 00 ]]; then
-          ret=0
-     elif [[ ${result:18:2} == 01 ]]; then
-          ret=1
-     else
-          ret=127
-     fi
+     #
+     # definitions in https://git.openldap.org/openldap/openldap/-/blob/master/include/ldap.h
+
+     case "${result:18:2}" in
+          00)  ret=0 ;;
+               # "success"
+          01)  ret=1
+               ;;
+          02)  ret=2
+               # normally: unsupported extended operation (~ STARTTLS not supported)
+               if [[ $DEBUG -ge 2 ]]; then
+                    msg_lenstr=$(hex2dec ${result:26:02})
+                    msg_len=$((2 * msg_lenstr))
+                    echo "$debugpad $(hex2binary "${result:28:$msg_len}")"
+               fi ;;
+          *)
+               ret=127
+               if [[ $DEBUG -ge 2 ]]; then
+                    echo "$debugpad $(hex2dec "${result:28:2}")"
+               fi ;;
+     esac
      debugme echo "=== finished LDAP STARTTLS dialog with ${ret} ==="
      return $ret
 }
