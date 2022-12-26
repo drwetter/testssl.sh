@@ -11456,12 +11456,12 @@ starttls_ldap_dialog() {
                if [[ $DEBUG -ge 2 ]]; then
                     msg_lenstr=$(hex2dec ${result:26:02})
                     msg_len=$((2 * msg_lenstr))
-                    echo "$debugpad $(hex2binary "${result:28:$msg_len}")"
+                    safe_echo "$debugpad $(hex2binary "${result:28:$msg_len}")"
                fi ;;
           *)
                ret=127
                if [[ $DEBUG -ge 2 ]]; then
-                    echo "$debugpad $(hex2dec "${result:28:2}")"
+                    safe_echo "$debugpad $(hex2dec "${result:28:2}")"
                fi ;;
      esac
      debugme echo "=== finished LDAP STARTTLS dialog with ${ret} ==="
