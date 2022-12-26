@@ -11422,7 +11422,7 @@ starttls_postgres_dialog() {
 }
 
 
-# RFC 2830, RFC 4511
+# RFC 2251, 2830, RFC 4511
 #
 starttls_ldap_dialog() {
      local debugpad="  > "
@@ -11442,17 +11442,18 @@ starttls_ldap_dialog() {
      [[ $DEBUG -ge 4 ]] && safe_echo "$debugpad $result\n"
 
      # response is typically 30 0c 02 01 01 78 07 0a 01 00 04 00 04 00
-     #                                                  ^^ == success!  [9] is checked below
+     #                                                  ^^ 0 would be success in 9th byte
      #
-     # definitions in https://git.openldap.org/openldap/openldap/-/blob/master/include/ldap.h
+     # return values in https://www.rfc-editor.org/rfc/rfc2251#page-45 and e.g.
+     #                  https://git.openldap.org/openldap/openldap/-/blob/master/include/ldap.h
 
      case "${result:18:2}" in
           00)  ret=0 ;;
-               # "success"
-          01)  ret=1
-               ;;
+               # success
+          01)  ret=1 ;;
+               # operationsError
           02)  ret=2
-               # normally: unsupported extended operation (~ STARTTLS not supported)
+               # protocolError (text msg: "unsupported extended operation") e.g. when STARTTLS not supported
                if [[ $DEBUG -ge 2 ]]; then
                     msg_lenstr=$(hex2dec ${result:26:02})
                     msg_len=$((2 * msg_lenstr))
