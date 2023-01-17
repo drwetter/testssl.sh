@@ -30,6 +30,12 @@ Full contribution, see git log.
   - pwnedkeys.com support
   - CT support
   - RFC 8879, certificate compression
+  - 128 cipher limit, padding
+  - compatibility for LibreSSL and different OpenSSL versions
+  - Check for ffdhe groups
+  - Show server supported signature algorithms
+  - Show supported certification authorities sent by the server when client auth is requested
+  - Provide a better verdict wrt to server order: Now per protocol and ciphers are weighted for each protocol
   - Lots of fixes and improvements
 
 ##### Further credits (in alphabetical order)

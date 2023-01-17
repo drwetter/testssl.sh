@@ -1,7 +1,7 @@
 
 ## Change Log
 
-### Features implemented / improvements in 3.1dev
+### Features implemented / improvements in 3.2rcX
 
 * Extend Server (cipher) preference: always now in wide mode instead of running all ciphers in the end (per default)
 * Improved compatibility with OpenSSL 3.0
@@ -31,6 +31,17 @@
 * Client simulation runs in wide mode which is even better readable
 * Added --reqheader to support custom headers in HTTP requests
 * Test for support for RFC 8879 certificate compression
+* Check for ffdhe groups
+* New set of OpenSSL-bad binaries with STARTTLS xmpp-server
+* Save a few cycles for ROBOT
+* Provide a better verdict wrt to server order: Now per protocol and ciphers are
+  weighted for each protocol
+* Remove "negotiated cipher / protocol"
+* Extract CA list shows supported certification authorities sent by the server
+* Show server supported signature algorithms
+* Compatible to GNU grep 3.8
+* STARTTLS on active directory service works now
+
 
 ### Features implemented / improvements in 3.0
 
