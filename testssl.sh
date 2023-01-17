@@ -11429,7 +11429,8 @@ starttls_ldap_dialog() {
      local -i ret=0
      local msg_lenstr=""
      local -i msg_len=0
-     local result=""
+     local buffer="" buffsize=""
+     local result_code="00"
      local starttls_init=",
      x30, x1d, x02, x01,                                                             # LDAP extendedReq
      x01,                                                                            # messageID: 1
@@ -11438,33 +11439,57 @@ starttls_ldap_dialog() {
 
      debugme echo "=== starting LDAP STARTTLS dialog ==="
      socksend "${starttls_init}"   0    && debugme echo "${debugpad}initiated STARTTLS" &&
-     result=$(sockread_fast 256)
-     [[ $DEBUG -ge 4 ]] && safe_echo "$debugpad $result\n"
+     buffer=$(sockread_fast 256)
+     [[ $DEBUG -ge 4 ]] && safe_echo "$debugpad $buffer\n"
 
-     # response is typically 30 0c 02 01 01 78 07 0a 01 00 04 00 04 00
-     #                                                  ^^ 0 would be success in 9th byte
+     # We have two different scenarios: AD and OpenLDAP. And maybe more we don't more of yet.
+     # OpenLDAP-like reply is
+     # 30 0c 02 01 01 78 07 0a 01 00 04 00 04 00
+     #    ^^ buffsize             ^^ LDAP result code (0 -> success)
      #
+     # see https://git.openldap.org/openldap/openldap/-/blob/master/include/ldap.h
      # return values in https://www.rfc-editor.org/rfc/rfc2251#page-45 and e.g.
-     #                  https://git.openldap.org/openldap/openldap/-/blob/master/include/ldap.h
 
-     case "${result:18:2}" in
+     # AD-like is
+     # error:  30 84 00 00 00 7d 02 01 01 78 84 00 00 00 74 0a 01 34 04 00 04 55 30 30 [.. LdapErr, string, OID.. ]
+     # success 30 84 00 00 00 28 02 01 01 78 84 00 00 00 1F 0A 01 00 04 00 04 00 8A 16 [ .. OID .. ]
+     #            ^^ buffsize                                     ^^ LDAP result code (0 -> success)
+
+     # We assume that AD servers probably all have x84. It was deducted from a number of hosts.
+     # It maybe needs to be amended for other implementations.
+     # Basically using ldap_ExtendedResponse_parse() in apps/s_client.c of openssl would be
+     # more robust but it is kind of hard to understand.
+     #
+     # Bottom line: We'll look at the 9th or the 17th byte when retrieving the result code
+     # depending what the buffsize is.
+
+     buffsize="${buffer:2:2}"
+
+     case $buffsize in
+          0C)  result_code="${buffer:18:2}" ;;
+          84)  result_code="${buffer:34:2}" ;;
+     esac
+     [[ $DEBUG -ge 2 ]] && safe_echo "$debugpad buffsize: $buffsize / LDAP result code: $result_code \n"
+
+     case $result_code in
           00)  ret=0 ;;
                # success
           01)  ret=1 ;;
-               # operationsError
+               # OpenLDAP: operationsError
           02)  ret=2
-               # protocolError (text msg: "unsupported extended operation") e.g. when STARTTLS not supported
+               # OpenLDAP: protocolError (text msg: "unsupported extended operation") e.g. when STARTTLS not supported
                if [[ $DEBUG -ge 2 ]]; then
-                    msg_lenstr=$(hex2dec ${result:26:02})
+                    msg_lenstr=$(hex2dec ${buffer:26:02})
                     msg_len=$((2 * msg_lenstr))
-                    safe_echo "$debugpad $(hex2binary "${result:28:$msg_len}")"
+                    safe_echo "$debugpad $(hex2binary "${buffer:28:$msg_len}")"
                fi ;;
-          *)
-               ret=127
-               if [[ $DEBUG -ge 2 ]]; then
-                    safe_echo "$debugpad $(hex2dec "${result:28:2}")"
-               fi ;;
+          34)  # This (52 in dec) seems to be the error code for AD when there's no STARTTLS
+               [[ $DEBUG -ge 2 ]] && safe_echo "     seems AD server with no STARTTLS\n"
+               ret=52 ;;
+          *)   [[ $DEBUG -ge 2 ]] && safe_echo "$debugpad $(hex2dec "${buffer:28:2}")"
+               ret=127 ;;
      esac
+
      debugme echo "=== finished LDAP STARTTLS dialog with ${ret} ==="
      return $ret
 }
