@@ -11429,7 +11429,7 @@ starttls_ldap_dialog() {
      local -i ret=0
      local msg_lenstr=""
      local -i msg_len=0
-     local result=""
+     local result="" buffsize=""
      local starttls_init=",
      x30, x1d, x02, x01,                                                             # LDAP extendedReq
      x01,                                                                            # messageID: 1
@@ -11441,13 +11441,26 @@ starttls_ldap_dialog() {
      result=$(sockread_fast 256)
      [[ $DEBUG -ge 4 ]] && safe_echo "$debugpad $result\n"
 
-     # response is typically 30 0c 02 01 01 78 07 0a 01 00 04 00 04 00
-     #                                                  ^^ 0 would be success in 9th byte
-     #
+     # For ~ OpenLDAP: response is typically 30 0c 02 01 01 78 07 0a 01 00 04 00 04 00
+     #                                          ^^ buffsize             ^^ ret value (0 -> success)
+     # see https://git.openldap.org/openldap/openldap/-/blob/master/include/ldap.h
      # return values in https://www.rfc-editor.org/rfc/rfc2251#page-45 and e.g.
-     #                  https://git.openldap.org/openldap/openldap/-/blob/master/include/ldap.h
 
-     case "${result:18:2}" in
+     # We have two different scenarios though. x0C is the buffsize reply from openldap-like servers
+     # whereas AD servers probably have x84 and return also the OID. The following is kind of
+     # hackish as ldap_ExtendedResponse_parse() in apps/s_client.c of openssl is kind of hard
+     # to understand. It was deducted from a number of hosts.
+     # Bottom line: We'll look at the 9th byte or at the 17th when retrieving the result code
+
+     buffsize="${result:2:2}"
+
+     case $buffsize in
+          0C)  result_code="${result:18:2}" ;;
+          84)  result_code="${result:34:2}" ;;
+     esac
+     [[ $DEBUG -ge 2 ]] && safe_echo "$debugpad buffsize: $buffsize / LDAP result_code: $result_code \n"
+
+     case $result_code in
           00)  ret=0 ;;
                # success
           01)  ret=1 ;;
@@ -11459,12 +11472,13 @@ starttls_ldap_dialog() {
                     msg_len=$((2 * msg_lenstr))
                     safe_echo "$debugpad $(hex2binary "${result:28:$msg_len}")"
                fi ;;
-          *)
-               ret=127
-               if [[ $DEBUG -ge 2 ]]; then
-                    safe_echo "$debugpad $(hex2dec "${result:28:2}")"
-               fi ;;
+          34)  [[ $DEBUG -ge 2 ]] && safe_echo "     seems AD server with no STARTTLS\n"
+               ret=52 ;;
+          *)   [[ $DEBUG -ge 2 ]] && safe_echo "$debugpad $(hex2dec "${result:28:2}")"
+               ret=127 ;;
      esac
+
+
      debugme echo "=== finished LDAP STARTTLS dialog with ${ret} ==="
      return $ret
 }
