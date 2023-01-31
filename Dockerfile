@@ -4,8 +4,9 @@ FROM alpine:3.17
 RUN <<EOF
   apk --no-cache --upgrade add bash procps drill git coreutils libidn curl socat openssl xxd
 
-  addgroup testssl
-  adduser -G testssl -g "testssl user" -s /bin/bash -D testssl
+  # Create testssl user (and group) with no password (-D) and default shell to bash (-s):
+  adduser -D -s /bin/bash testssl
+
   ln -s /home/testssl/testssl.sh /usr/local/bin/
   mkdir -m 755 -p /home/testssl/etc /home/testssl/bin
 EOF
