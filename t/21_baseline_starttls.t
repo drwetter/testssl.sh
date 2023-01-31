@@ -156,15 +156,13 @@ unlike($openssl_out, qr/$openssl_regex_bl/, "");
 $tests++;
 
 
+# For NNTP there doesn't seem to be reliable host out there
+#$uri="144.76.182.167:119";
 
-$uri="144.76.182.167:119";
-
-# unlink "tmp.json";
-printf "\n%s\n", "STARTTLS NNTP unit tests via sockets --> $uri ...";
-$socket_out = `./testssl.sh $check2run -t nntp $uri 2>&1`;
-# $socket_json = json('tmp.json');
-unlike($socket_out, qr/$socket_regex_bl/, "");
-$tests++;
+#printf "\n%s\n", "STARTTLS NNTP unit tests via sockets --> $uri ...";
+#$socket_out = `./testssl.sh $check2run -t nntp $uri 2>&1`;
+#unlike($socket_out, qr/$socket_regex_bl/, "");
+#$tests++;
 
 # commented out, bc of travis' limits
 #
