@@ -8,7 +8,6 @@ RUN <<EOF
   adduser -D -s /bin/bash testssl
 
   ln -s /home/testssl/testssl.sh /usr/local/bin/
-  mkdir -m 755 -p /home/testssl/etc /home/testssl/bin
 EOF
 
 USER testssl
