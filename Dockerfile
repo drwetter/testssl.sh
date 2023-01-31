@@ -1,7 +1,7 @@
-FROM alpine:3.16
+FROM alpine:3.17.1@sha256:f271e74b17ced29b915d351685fd4644785c6d1559dd1f2d4189a5e851ef753a
 
 RUN apk update && \
-    apk upgrade && \
+    apk upgrade -a && \
     apk add bash procps drill git coreutils libidn curl socat openssl xxd && \
     rm -rf /var/cache/apk/* && \
     addgroup testssl && \
