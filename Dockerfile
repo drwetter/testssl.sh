@@ -2,10 +2,8 @@
 FROM alpine:3.17
 
 RUN <<EOF
-  apk update
-  apk upgrade
-  apk add bash procps drill git coreutils libidn curl socat openssl xxd
-  rm -rf /var/cache/apk/*
+  apk --no-cache --upgrade add bash procps drill git coreutils libidn curl socat openssl xxd
+
   addgroup testssl
   adduser -G testssl -g "testssl user" -s /bin/bash -D testssl
   ln -s /home/testssl/testssl.sh /usr/local/bin/
