@@ -1,2 +1,11 @@
+# Exclude everything from the Docker build context:
+*
+
+# Except for this content:
+!bin/
+!etc/
+!testssl.sh
+
+# But additionally exclude this nested content:
 bin/openssl.Darwin.*
 bin/openssl.FreeBSD.*
