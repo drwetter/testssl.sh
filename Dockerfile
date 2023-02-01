@@ -2,7 +2,7 @@
 FROM alpine:3.17
 
 RUN <<EOF
-  apk --no-cache --upgrade add bash procps drill git coreutils libidn curl socat openssl xxd
+  apk --no-cache --upgrade add bash procps coreutils drill libidn curl socat openssl openssl1.1-compat xxd
 
   # Create testssl user (and group) with no password (-D) and default shell to bash (-s):
   adduser -D -s /bin/bash testssl
