@@ -9416,8 +9416,8 @@ certificate_info() {
 
      out "$indent"; pr_bold " Chain of trust"; out "               "
      jsonID="cert_chain_of_trust"
-     # Looks for CA's that have their trust removed by the first part of their Organization Name as they can only used verified names
-     if [[ "$issuer_O" =~ ^(TrustCor Systems|WoSign|StartCom) ]]; then
+     # Looks for CA's that have their trust removed by the first part of their Organization Name, add multiple with ^(TrustCor Systems|WoSign) etc.
+     if [[ "$issuer_O" =~ ^(TrustCor Systems) ]]; then
           # Shortcut for this special case here. There is a difference between not being in a root store and being removed from a root store.
           pr_italic "$issuer_O"; out " is " ; prln_svrty_critical "actively removed from one or more root stores (NOT ok)"
           fileout "${jsonID}${json_postfix}" "CRITICAL" "Issuer removed from one or more root stores ($issuer_O)"
