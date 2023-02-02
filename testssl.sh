@@ -9416,10 +9416,11 @@ certificate_info() {
 
      out "$indent"; pr_bold " Chain of trust"; out "               "
      jsonID="cert_chain_of_trust"
-     if [[ "$issuer_O" =~ StartCom ]] || [[ "$issuer_O" =~ WoSign ]] || [[ "$issuer_CN" =~ StartCom ]] || [[ "$issuer_CN" =~ WoSign ]]; then
-          # Shortcut for this special case here.
-          pr_italic "WoSign/StartCom"; out " are " ; prln_svrty_critical "not trusted anymore (NOT ok)"
-          fileout "${jsonID}${json_postfix}" "CRITICAL" "Issuer not trusted anymore (WoSign/StartCom)"
+     # Looks for CA's that have their trust removed by the first part of their Organization Name as they can only used verified names
+     if [[ "$issuer_O" =~ ^(TrustCor Systems|WoSign|StartCom) ]]; then
+          # Shortcut for this special case here. There is a difference between not being in a root store and being removed from a root store.
+          pr_italic "$issuer_O"; out " is " ; prln_svrty_critical "actively removed from one or more root stores (NOT ok)"
+          fileout "${jsonID}${json_postfix}" "CRITICAL" "Issuer removed from one or more root stores ($issuer_O)"
           set_grade_cap "T" "Untrusted certificate chain"
      else
           # Also handles fileout, keep error if happened
