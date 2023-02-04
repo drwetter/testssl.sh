@@ -535,11 +535,11 @@ html_reserved(){
      local output
      "$do_html" || return 0
      #sed  -e 's/\&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g' -e "s/'/\&apos;/g" <<< "$1"
-     output="${1//&/&amp;}"
-     output="${output//</&lt;}"
-     output="${output//>/&gt;}"
-     output="${output//\"/&quot;}"
-     output="${output//\'/&apos;}"
+     output="${1//&/$'&'amp;}"
+     output="${output//</$'&'lt;}"
+     output="${output//>/$'&'gt;}"
+     output="${output//\"/$'&'quot;}"
+     output="${output//\'/$'&'apos;}"
      printf -- "%s" "$output"
      return 0
 }
