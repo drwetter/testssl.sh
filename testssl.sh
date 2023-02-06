@@ -8791,7 +8791,6 @@ certificate_info() {
           # Shortcut for this special case here. There is a difference between not being in a root store and being removed from a root store.
           pr_italic "$issuer_O"; out " is " ; prln_svrty_critical "actively removed from one or more root stores (NOT ok)"
           fileout "${jsonID}${json_postfix}" "CRITICAL" "Issuer removed from one or more root stores ($issuer_O)"
-          set_grade_cap "T" "Untrusted certificate chain"
      else
           # Also handles fileout, keep error if happened
           determine_trust "$jsonID" "$json_postfix" || ((ret++))
