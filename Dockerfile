@@ -13,7 +13,7 @@ USER testssl
 WORKDIR /home/testssl/
 
 # Copy over build context (after filtered by .dockerignore): bin/ etc/ testssl.sh
-COPY --chown=testssl . /home/testssl/
+COPY --chown=testssl:testssl . /home/testssl/
 
 ENTRYPOINT ["testssl.sh"]
 
