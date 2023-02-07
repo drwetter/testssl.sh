@@ -5,8 +5,7 @@ RUN apk update && \
     apk add bash procps drill git coreutils libidn curl socat openssl xxd && \
     rm -rf /var/cache/apk/* && \
     adduser -D -s /bin/bash testssl && \
-    ln -s /home/testssl/testssl.sh /usr/local/bin/ && \
-    mkdir -m 755 -p /home/testssl/etc /home/testssl/bin
+    ln -s /home/testssl/testssl.sh /usr/local/bin/ 
 
 USER testssl
 WORKDIR /home/testssl/
