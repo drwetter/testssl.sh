@@ -10,9 +10,8 @@ RUN apk update && \
 USER testssl
 WORKDIR /home/testssl/
 
-COPY --chown=testssl:testssl etc/. /home/testssl/etc/
-COPY --chown=testssl:testssl bin/. /home/testssl/bin/
-COPY --chown=testssl:testssl testssl.sh /home/testssl/
+# Copy over build context (after filtered by .dockerignore): bin/ etc/ testssl.sh
+COPY --chown=testssl:testssl . /home/testssl/
 
 ENTRYPOINT ["testssl.sh"]
 
