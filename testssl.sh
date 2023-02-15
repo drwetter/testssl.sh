@@ -535,11 +535,11 @@ html_reserved(){
      local output
      "$do_html" || return 0
      #sed  -e 's/\&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g' -e "s/'/\&apos;/g" <<< "$1"
-     output="${1//&/&amp;}"
-     output="${output//</&lt;}"
-     output="${output//>/&gt;}"
-     output="${output//\"/&quot;}"
-     output="${output//\'/&apos;}"
+     output="${1//&/$'&'amp;}"
+     output="${output//</$'&'lt;}"
+     output="${output//>/$'&'gt;}"
+     output="${output//\"/$'&'quot;}"
+     output="${output//\'/$'&'apos;}"
      printf -- "%s" "$output"
      return 0
 }
@@ -6254,11 +6254,11 @@ run_cipherlists() {
      ret=$((ret + $?))
      sub_cipherlists "$ossl_tdes_ciphers"      "" " Triple DES Ciphers / IDEA                       "     3 "3DES_IDEA" "$tdes_ciphers"    "$sslv2_tdes_ciphers"   "$using_sockets" "$cve" "$cwe2"
      ret=$((ret + $?))
-     sub_cipherlists "$ossl_obsoleted_ciphers" "" " Obsoleted CBC ciphers (AES, ARIA etc.)          "     4 "AVERAGE"   "$obsoleted_ciphers"  ""                   "$using_sockets" "$cve" "$cwe2"
+     sub_cipherlists "$ossl_obsoleted_ciphers" "" " Obsoleted CBC ciphers (AES, ARIA etc.)          "     4 "OBSOLETED"   "$obsoleted_ciphers"  ""                   "$using_sockets" "$cve" "$cwe2"
      ret=$((ret + $?))
-     sub_cipherlists "$ossl_good_ciphers"      "" " Strong encryption (AEAD ciphers) with no FS     "     6 "GOOD"      "$good_ciphers"     ""                     "$using_sockets" ""      ""
+     sub_cipherlists "$ossl_good_ciphers"      "" " Strong encryption (AEAD ciphers) with no FS     "     6 "STRONG_NOFS"      "$good_ciphers"     ""                     "$using_sockets" ""      ""
      ret=$((ret + $?))
-     sub_cipherlists "$ossl_strong_ciphers" 'ALL' " Forward Secrecy strong encryption (AEAD ciphers)"    7 "STRONG"     "$strong_ciphers"   ""                     "$using_sockets" ""      ""
+     sub_cipherlists "$ossl_strong_ciphers" 'ALL' " Forward Secrecy strong encryption (AEAD ciphers)"    7 "STRONG_FS"     "$strong_ciphers"   ""                     "$using_sockets" ""      ""
      ret=$((ret + $?))
 
      outln
@@ -9416,10 +9416,11 @@ certificate_info() {
 
      out "$indent"; pr_bold " Chain of trust"; out "               "
      jsonID="cert_chain_of_trust"
-     if [[ "$issuer_O" =~ StartCom ]] || [[ "$issuer_O" =~ WoSign ]] || [[ "$issuer_CN" =~ StartCom ]] || [[ "$issuer_CN" =~ WoSign ]]; then
-          # Shortcut for this special case here.
-          pr_italic "WoSign/StartCom"; out " are " ; prln_svrty_critical "not trusted anymore (NOT ok)"
-          fileout "${jsonID}${json_postfix}" "CRITICAL" "Issuer not trusted anymore (WoSign/StartCom)"
+     # Looks for CA's that have their trust removed by the first part of their Organization Name, add multiple with ^(TrustCor Systems|WoSign) etc.
+     if [[ "$issuer_O" =~ ^(TrustCor Systems) ]]; then
+          # Shortcut for this special case here. There is a difference between not being in a root store and being removed from a root store.
+          pr_italic "$issuer_O"; out " is " ; prln_svrty_critical "actively removed from one or more root stores (NOT ok)"
+          fileout "${jsonID}${json_postfix}" "CRITICAL" "Issuer removed from one or more root stores ($issuer_O)"
           set_grade_cap "T" "Untrusted certificate chain"
      else
           # Also handles fileout, keep error if happened

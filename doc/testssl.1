@@ -128,13 +128,15 @@ Any single check switch supplied as an argument prevents testssl\.sh from doing 
 .IP "\[ci]" 4
 \fBExport ciphers\fR (w/o the preceding ones): 'EXPORT:!ADH:!NULL'
 .IP "\[ci]" 4
-\fBLOW\fR (64 Bit + DES ciphers, without EXPORT ciphers): 'LOW:DES:RC2:RC4:!ADH:!EXP:!NULL:!eNULL'
+\fBLOW\fR (64 Bit + DES ciphers, without EXPORT ciphers): 'LOW:DES:RC2:RC4:MD5:!ADH:!EXP:!NULL:!eNULL:!AECDH'
 .IP "\[ci]" 4
-\fB3DES + IDEA Ciphers\fR: '3DES:IDEA:!aNULL:!ADH'
+\fB3DES + IDEA ciphers\fR: '3DES:IDEA:!aNULL:!ADH:!MD5'
 .IP "\[ci]" 4
-\fBAverage grade Ciphers\fR: 'HIGH:MEDIUM:AES:CAMELLIA:ARIA:!IDEA:!CHACHA20:!3DES:!RC2:!RC4:!AESCCM8:!AESCCM:!AESGCM:!ARIAGCM:!aNULL'
+\fBObsoleted CBC ciphers\fR: 'HIGH:MEDIUM:AES:CAMELLIA:ARIA:!IDEA:!CHACHA20:!3DES:!RC2:!RC4:!AESCCM8:!AESCCM:!AESGCM:!ARIAGCM:!aNULL:!MD5'
 .IP "\[ci]" 4
-\fBStrong grade Ciphers\fR (AEAD): 'AESGCM:CHACHA20:CamelliaGCM:AESCCM8:AESCCM'
+\fBStrong ciphers with no FS\fR (AEAD): 'AESGCM:CHACHA20:CamelliaGCM:AESCCM:ARIAGCM:!kEECDH:!kEDH:!kDHE:!kDHEPSK:!kECDHEPSK:!aNULL'
+.IP "\[ci]" 4
+\fBForward Secrecy strong ciphers\fR (AEAD): 'AESGCM:CHACHA20:CamelliaGCM:AESCCM:ARIAGCM:!kPSK:!kRSAPSK:!kRSA:!kDH:!kECDH:!aNULL'
 .IP "" 0
 .P
 \fB\-f, \-\-fs, \-\-nsa, \-\-forward\-secrecy\fR Checks robust forward secrecy key exchange\. "Robust" means that ciphers having intrinsic severe weaknesses like Null Authentication or Encryption, 3DES and RC4 won't be considered here\. There shouldn't be the wrong impression that a secure key exchange has been taking place and everything is fine when in reality the encryption sucks\. Also this section lists the available elliptical curves and Diffie Hellman groups, as well as FFDHE groups (TLS 1\.2 and TLS 1\.3)\.

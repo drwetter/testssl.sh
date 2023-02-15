@@ -247,13 +247,15 @@ in <code>/etc/hosts</code>.  The use of the switch is only useful if you either 
   <li>
 <code>Export ciphers</code> (w/o the preceding ones): 'EXPORT:!ADH:!NULL'</li>
   <li>
-<code>LOW</code> (64 Bit + DES ciphers, without EXPORT ciphers): 'LOW:DES:RC2:RC4:!ADH:!EXP:!NULL:!eNULL'</li>
+<code>LOW</code> (64 Bit + DES ciphers, without EXPORT ciphers): 'LOW:DES:RC2:RC4:MD5:!ADH:!EXP:!NULL:!eNULL:!AECDH'</li>
   <li>
-<code>3DES + IDEA Ciphers</code>: '3DES:IDEA:!aNULL:!ADH'</li>
+<code>3DES + IDEA ciphers</code>: '3DES:IDEA:!aNULL:!ADH:!MD5'</li>
   <li>
-<code>Average grade Ciphers</code>: 'HIGH:MEDIUM:AES:CAMELLIA:ARIA:!IDEA:!CHACHA20:!3DES:!RC2:!RC4:!AESCCM8:!AESCCM:!AESGCM:!ARIAGCM:!aNULL'</li>
+<code>Obsoleted CBC ciphers</code>: 'HIGH:MEDIUM:AES:CAMELLIA:ARIA:!IDEA:!CHACHA20:!3DES:!RC2:!RC4:!AESCCM8:!AESCCM:!AESGCM:!ARIAGCM:!aNULL:!MD5'</li>
   <li>
-<code>Strong grade Ciphers</code> (AEAD): 'AESGCM:CHACHA20:CamelliaGCM:AESCCM8:AESCCM'</li>
+<code>Strong ciphers with no FS</code> (AEAD): 'AESGCM:CHACHA20:CamelliaGCM:AESCCM:ARIAGCM:!kEECDH:!kEDH:!kDHE:!kDHEPSK:!kECDHEPSK:!aNULL'</li>
+  <li>
+<code>Forward Secrecy strong ciphers</code> (AEAD): 'AESGCM:CHACHA20:CamelliaGCM:AESCCM:ARIAGCM:!kPSK:!kRSAPSK:!kRSA:!kDH:!kECDH:!aNULL'</li>
 </ul>
 
 <p><code>-f, --fs, --nsa, --forward-secrecy</code> Checks robust forward secrecy key exchange. "Robust" means that ciphers having intrinsic severe weaknesses like Null Authentication or Encryption, 3DES and RC4 won't be considered here. There shouldn't be the wrong impression that a secure key exchange has been taking place and everything is fine when in reality the encryption sucks. Also this section lists the available elliptical curves and Diffie Hellman groups, as well as FFDHE groups (TLS 1.2 and TLS 1.3).</p>
