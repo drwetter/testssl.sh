@@ -14809,7 +14809,7 @@ run_breach() {
      [[ "$NODE" =~ google ]] && referer="https://yandex.ru/"     # otherwise we have a false positive for google.com
      useragent="$UA_STD"
      $SNEAKY && useragent="$UA_SNEAKY"
-     printf "GET $url HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $useragent\r\nReferer: $referer\r\nConnection: Close\r\nAccept-encoding: gzip,deflate,compress,br\r\nAccept: text/*\r\n\r\n" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") 1>$TMPFILE 2>$ERRFILE &
+     printf "GET $url HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $useragent\r\nReferer: $referer\r\nConnection: Close\r\nAccept-encoding: gzip,deflate,compress,br\r\nAccept: */*\r\n\r\n" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") 1>$TMPFILE 2>$ERRFILE &
      wait_kill $! $HEADER_MAXSLEEP
      was_killed=$?                           # !=0 was killed
      result="$(grep -ia Content-Encoding: $TMPFILE)"
@@ -18763,7 +18763,7 @@ determine_service() {
           if [[ -n "$BASICAUTH" ]]; then
                basicauth_header="Authorization: Basic $(safe_echo "$BASICAUTH" | $OPENSSL base64 2>/dev/null)\r\n"
           fi
-          GET_REQ11="GET $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $ua\r\n${basicauth_header}Accept-Encoding: identity\r\nAccept: text/*\r\nConnection: Close\r\n\r\n"
+          GET_REQ11="GET $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $ua\r\n${basicauth_header}Accept-Encoding: identity\r\nAccept: */*\r\nConnection: Close\r\n\r\n"
           # returns always 0:
           service_detection $OPTIMAL_PROTO
      else # STARTTLS
