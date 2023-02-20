@@ -17193,7 +17193,7 @@ run_breach() {
      # Assemble the GET command with all available compressions and send them all, initially.
      # If the result is negative: we can just tell the finding and return. If it's
      # positive: We already have identified 1x compression
-     get_command="GET $url HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $useragent\r\nReferer: $referer\r\nConnection: Close\r\nAccept-encoding: ${compressions// /,}\r\nAccept: text/*\r\n\r\n"
+     get_command="GET $url HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $useragent\r\nReferer: $referer\r\nConnection: Close\r\nAccept-encoding: ${compressions// /,}\r\nAccept: */*\r\n\r\n"
      detected_compression=$(sub_breach_helper "$get_command")
      case "$detected_compression" in
           warn_stalled)
@@ -17216,7 +17216,7 @@ run_breach() {
                has_compression+=("$detected_compression:yes")
                compressions="${compressions//$detected_compression/}"
                for c in $compressions; do
-                    get_command="GET $url HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $useragent\r\nReferer: $referer\r\nConnection: Close\r\nAccept-encoding: ${c}\r\nAccept: text/*\r\n\r\n"
+                    get_command="GET $url HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $useragent\r\nReferer: $referer\r\nConnection: Close\r\nAccept-encoding: ${c}\r\nAccept: */*\r\n\r\n"
                     detected_compression=$(sub_breach_helper "$get_command")
                     if [[ $? -ne 0 ]]; then
                          # This failure unlikely here. The initial request must have succeeded and this one then
@@ -21854,7 +21854,7 @@ determine_service() {
           if [[ -n "$REQHEADERS" ]]; then
                reqheader="$(join_by "\r\n" "${REQHEADERS[@]}")\r\n" #Add all required custom http headers to one string with newlines
           fi
-          GET_REQ11="GET $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $ua\r\n${basicauth_header}${reqheader}Accept-Encoding: identity\r\nAccept: text/*\r\nConnection: Close\r\n\r\n"
+          GET_REQ11="GET $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $ua\r\n${basicauth_header}${reqheader}Accept-Encoding: identity\r\nAccept: */*\r\nConnection: Close\r\n\r\n"
           determine_optimal_proto
           # returns always 0:
           service_detection $OPTIMAL_PROTO
