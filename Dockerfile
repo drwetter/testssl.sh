@@ -1,6 +1,7 @@
 FROM alpine:3.17
 
-RUN apk --no-cache --upgrade add bash procps drill git coreutils libidn curl socat openssl xxd && \
+RUN apk --no-cache upgrade --available && \
+    apk --no-cache add bash procps drill git coreutils libidn curl socat openssl xxd && \
     adduser -D -s /bin/bash testssl && \
     ln -s /home/testssl/testssl.sh /usr/local/bin/ 
 
