@@ -19986,7 +19986,7 @@ find_openssl_binary() {
      HAS_ZLIB=false
      HAS_UDS=false
      HAS_UDS2=false
-      TRUSTED1ST=""
+     TRUSTED1ST=""
      HAS_ENABLE_PHA=false
 
      $OPENSSL ciphers -s 2>&1 | grep -aiq "unknown option" || OSSL_CIPHERS_S="-s"
