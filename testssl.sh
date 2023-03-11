@@ -534,7 +534,6 @@ show_finding() {
 html_reserved(){
      local output
      "$do_html" || return 0
-     #sed  -e 's/\&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g' -e "s/'/\&apos;/g" <<< "$1"
      output="${1//&/$'&'amp;}"
      output="${output//</$'&'lt;}"
      output="${output//>/$'&'gt;}"
@@ -545,8 +544,26 @@ html_reserved(){
 }
 
 html_out() {
+     local outstr="$1"
+
      "$do_html" || return 0
-     [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]] && printf -- "%b" "$1" >> "$HTMLFILE"
+     if [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]]; then
+          if [[ "$outstr" =~ [[:cntrl:]] ]]; then
+               outstr="$(sanitize_fileout "$outstr")"
+          fi
+          printf -- "%b" "$outstr" >> "$HTMLFILE"
+     fi
+}
+
+# Removes on printable chars in CSV, JSON, HTML, see #2330
+sanitize_fileout() {
+     tr -d '\000-\011,\013-\037' <<< "$1"
+}
+
+# Removes on printable chars in terminal output (log files)
+# We need to keep the icolor ANSI escape code, see #2330
+sanitize_termout() {
+     tr -d '\000-\011,\013-\032,\034-\037' <<< "$1"
 }
 
 # This is intentionally the same.
@@ -1227,6 +1244,9 @@ fileout_json_print_parameter() {
           spaces="              " || \
           spaces="                                "
      if [[ -n "$value" ]] || [[ "$parameter" == finding ]]; then
+          if [[ "$value" =~ [[:cntrl:]] ]]; then
+               value="$(sanitize_fileout "$value")"
+          fi
           printf -- "%b%b%b%b" "$spaces" "\"$parameter\"" "$filler" ": \"$value\"" >> "$JSONFILE"
           "$not_last" && printf ",\n" >> "$JSONFILE"
      fi
@@ -1350,12 +1370,19 @@ fileout_insert_warning() {
      fi
 }
 
+# args: "id" "fqdn/ip" "port" "severity" "finding" "cve" "cwe" "hint"
+#
 fileout_csv_finding() {
+     local finding="$5"
+
+     if [[ "$finding" =~ [[:cntrl:]] ]]; then
+          finding="$(sanitize_fileout "$finding")"
+     fi
      safe_echo "\"$1\"," >> "$CSVFILE"
      safe_echo "\"$2\"," >> "$CSVFILE"
      safe_echo "\"$3\"," >> "$CSVFILE"
      safe_echo "\"$4\"," >> "$CSVFILE"
-     safe_echo "\"$5\"," >> "$CSVFILE"
+     safe_echo "\"$finding\"," >> "$CSVFILE"
      safe_echo "\"$6\"," >> "$CSVFILE"
      if "$GIVE_HINTS"; then
           safe_echo "\"$7\"," >> "$CSVFILE"
