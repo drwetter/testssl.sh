@@ -3129,16 +3129,18 @@ run_server_banner() {
      grep -ai '^Server' $HEADERFILE >$TMPFILE
      if [[ $? -eq 0 ]]; then
           serverbanner=$(sed -e 's/^Server: //' -e 's/^server: //' $TMPFILE)
-          if [[ "$serverbanner" == $'\n' ]] || [[ "$serverbanner" == $'\r' ]] || [[ "$serverbanner" == $'\n\r' ]] || [[ -z "$serverbanner" ]]; then
+          serverbanner=${serverbanner//$'\r'}
+          serverbanner=${serverbanner//$'\n'}
+          if [[ -z "$serverbanner" ]]; then
                outln "exists but empty string"
                fileout "$jsonID" "INFO" "Server banner is empty"
           else
                emphasize_stuff_in_headers "$serverbanner"
                fileout "$jsonID" "INFO" "$serverbanner"
                if [[ "$serverbanner" == *Microsoft-IIS/6.* ]] && [[ $OSSL_VER == 1.0.2* ]]; then
-                    prln_warning "                              It's recommended to run another test w/ OpenSSL 1.0.1 !"
+                    prln_warning "                              It's recommended to run another test w/ OpenSSL >= 1.0.1 !"
                     # see https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892
-                    fileout "${jsonID}" "WARN" "IIS6_openssl_mismatch: Recommended to rerun this test w/ OpenSSL 1.0.1. See https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892"
+                    fileout "${jsonID}" "WARN" "IIS6_openssl_mismatch: Recommended to rerun this test w/ OpenSSL >= 1.0.1. See https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892"
                fi
           fi
           # mozilla.github.io/server-side-tls/ssl-config-generator/
