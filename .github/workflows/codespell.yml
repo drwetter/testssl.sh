@@ -12,5 +12,5 @@ jobs:
       - uses: actions/checkout@v3
       - uses: codespell-project/actions-codespell@master
         with:
-          skip: ca_hashes.txt,tls_data.txt,*.pem,OPENSSL-LICENSE.txt
-          ignore_words_list: borken,gost,ciph,ba,bloc,isnt,chello,fo,alle,nmake
+          skip: ca_hashes.txt,tls_data.txt,*.pem,OPENSSL-LICENSE.txt,.git
+          ignore_words_list: borken,gost,ciph,ba,bloc,isnt,chello,fo,alle,nmake,aNULL
