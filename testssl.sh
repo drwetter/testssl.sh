@@ -490,7 +490,6 @@ show_finding() {
 html_reserved(){
      local output
      "$do_html" || return 0
-     #sed  -e 's/\&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g' -e "s/'/\&apos;/g" <<< "$1"
      output="${1//&/$'&'amp;}"
      output="${output//</$'&'lt;}"
      output="${output//>/$'&'gt;}"
@@ -501,8 +500,26 @@ html_reserved(){
 }
 
 html_out() {
+     local outstr="$1"
+
      "$do_html" || return 0
-     [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]] && printf -- "%b" "$1" >> "$HTMLFILE"
+     if [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]]; then
+          if [[ "$outstr" =~ [[:cntrl:]] ]]; then
+               outstr="$(sanitize_fileout "$outstr")"
+          fi
+          printf -- "%b" "$outstr" >> "$HTMLFILE"
+     fi
+}
+
+# Removes non-printable chars in CSV, JSON, HTML, see #2330
+sanitize_fileout() {
+     tr -d '\000-\011\013-\037' <<< "$1"
+}
+
+# Removes non-printable chars in terminal output (log files)
+# We need to keep the color ANSI escape code x1b, o33, see #2330
+sanitize_termout() {
+     tr -d '\000-\011\013-\032\034-\037' <<< "$1"
 }
 
 # This is intentionally the same.
@@ -806,6 +823,9 @@ fileout_json_print_parameter() {
           spaces="              " || \
           spaces="                                "
      if [[ -n "$value" ]] || [[ "$parameter" == finding ]]; then
+          if [[ "$value" =~ [[:cntrl:]] ]]; then
+               value="$(sanitize_fileout "$value")"
+          fi
           printf -- "%b%b%b%b" "$spaces" "\"$parameter\"" "$filler" ": \"$value\"" >> "$JSONFILE"
           "$not_last" && printf ",\n" >> "$JSONFILE"
      fi
@@ -931,12 +951,19 @@ fileout_insert_warning() {
      fi
 }
 
+# args: "id" "fqdn/ip" "port" "severity" "finding" "cve" "cwe" "hint"
+#
 fileout_csv_finding() {
+     local finding="$5"
+
+     if [[ "$finding" =~ [[:cntrl:]] ]]; then
+          finding="$(sanitize_fileout "$finding")"
+     fi
      safe_echo "\"$1\"," >> "$CSVFILE"
      safe_echo "\"$2\"," >> "$CSVFILE"
      safe_echo "\"$3\"," >> "$CSVFILE"
      safe_echo "\"$4\"," >> "$CSVFILE"
-     safe_echo "\"$5\"," >> "$CSVFILE"
+     safe_echo "\"$finding\"," >> "$CSVFILE"
      safe_echo "\"$6\"," >> "$CSVFILE"
      if "$GIVE_HINTS"; then
           safe_echo "\"$7\"," >> "$CSVFILE"
@@ -2855,16 +2882,18 @@ run_server_banner() {
      grep -ai '^Server' $HEADERFILE >$TMPFILE
      if [[ $? -eq 0 ]]; then
           serverbanner=$(sed -e 's/^Server: //' -e 's/^server: //' $TMPFILE)
-          if [[ "$serverbanner" == $'\n' ]] || [[ "$serverbanner" == $'\r' ]] || [[ "$serverbanner" == $'\n\r' ]] || [[ -z "$serverbanner" ]]; then
+          serverbanner=${serverbanner//$'\r'}
+          serverbanner=${serverbanner//$'\n'}
+          if [[ -z "$serverbanner" ]]; then
                outln "exists but empty string"
                fileout "$jsonID" "INFO" "Server banner is empty"
           else
                emphasize_stuff_in_headers "$serverbanner"
                fileout "$jsonID" "INFO" "$serverbanner"
                if [[ "$serverbanner" == *Microsoft-IIS/6.* ]] && [[ $OSSL_VER == 1.0.2* ]]; then
-                    prln_warning "                              It's recommended to run another test w/ OpenSSL 1.0.1 !"
+                    prln_warning "                              It's recommended to run another test w/ OpenSSL >= 1.0.1 !"
                     # see https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892
-                    fileout "${jsonID}" "WARN" "IIS6_openssl_mismatch: Recommended to rerun this test w/ OpenSSL 1.0.1. See https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892"
+                    fileout "${jsonID}" "WARN" "IIS6_openssl_mismatch: Recommended to rerun this test w/ OpenSSL >= 1.0.1. See https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892"
                fi
           fi
           # mozilla.github.io/server-side-tls/ssl-config-generator/
