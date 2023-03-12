@@ -15,22 +15,23 @@ my $out="";
 my $html="";
 my $debughtml="";
 my $edited_html="";
-my $check2run="--ip=one --ids-friendly --color 0 --htmlfile tmp.html";
+my $htmlfile="tmp.html";
+my $check2run="--ip=one --ids-friendly --color 0 --htmlfile $htmlfile";
 my $diff="";
 die "Unable to open $prg" unless -f $prg;
 
 printf "\n%s\n", "Doing HTML output checks";
-unlink 'tmp.html';
+unlink $htmlfile;
 
 #1
 printf "%s\n", " .. running $prg against \"$uri\" to create HTML and terminal outputs (may take ~2 minutes)";
 # specify a TERM_WIDTH so that the two calls to testssl.sh don't create HTML files with different values of TERM_WIDTH
 $out = `TERM_WIDTH=120 $prg $check2run $uri`;
-$html = `cat tmp.html`;
+$html = `cat $htmlfile`;
 # $edited_html will contain the HTML with formatting information removed in order to compare against terminal output
 # Start by removing the HTML header.
-$edited_html = `tail -n +11 tmp.html`;
-unlink 'tmp.html';
+$edited_html = `tail -n +11 $htmlfile`;
+unlink $htmlfile;
 
 # Remove the HTML footer
 $edited_html =~ s/\n\<\/pre\>\n\<\/body\>\n\<\/html\>//;
@@ -51,12 +52,13 @@ $tests++;
 $diff = diff \$edited_html, \$out;
 printf "\n%s\n", "$diff";
 
+
 #2
 printf "\n%s\n", " .. running again $prg against \"$uri\", now with --debug 4 to create HTML output (may take another ~2 minutes)";
 # Redirect stderr to /dev/null in order to avoid some unexplained "date: invalid date" error messages
 $out = `TERM_WIDTH=120 $prg $check2run --debug 4 $uri 2> /dev/null`;
-$debughtml = `cat tmp.html`;
-unlink 'tmp.html';
+$debughtml = `cat $htmlfile`;
+unlink $htmlfile;
 
 # Remove date information from the Start and Done banners in the two HTML files, since they were created at different times
 $html =~ s/Start 2[0-9][0-9][0-9]-[0-3][0-9]-[0-3][0-9] [0-2][0-9]:[0-5][0-9]:[0-5][0-9]/Start XXXX-XX-XX XX:XX:XX/;
@@ -72,6 +74,7 @@ $debughtml =~ s/HTTP clock skew              \+?-?[0-9]* /HTTP clock skew       
 $debughtml =~ s/ Pre-test: .*\n//g;
 $debughtml =~ s/.*OK: below 825 days.*\n//g;
 $debughtml =~ s/.*DEBUG:.*\n//g;
+$debughtml =~ s/No engine or GOST support via engine with your.*\n//g;
 
 cmp_ok($debughtml, "eq", $html, "HTML file created with --debug 4 matches HTML file created without --debug");
 $tests++;
