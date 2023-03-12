@@ -9,6 +9,7 @@ tmp.html
 *.log
 *.xml
 *.iml
+*.script
 *.swp
 *.swo
 *~
