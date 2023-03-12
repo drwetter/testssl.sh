@@ -555,15 +555,15 @@ html_out() {
      fi
 }
 
-# Removes on printable chars in CSV, JSON, HTML, see #2330
+# Removes non-printable chars in CSV, JSON, HTML, see #2330
 sanitize_fileout() {
-     tr -d '\000-\011,\013-\037' <<< "$1"
+     tr -d '\000-\011\013-\037' <<< "$1"
 }
 
-# Removes on printable chars in terminal output (log files)
-# We need to keep the icolor ANSI escape code, see #2330
+# Removes non-printable chars in terminal output (log files)
+# We need to keep the color ANSI escape code x1b, o33, see #2330
 sanitize_termout() {
-     tr -d '\000-\011,\013-\032,\034-\037' <<< "$1"
+     tr -d '\000-\011\013-\032\034-\037' <<< "$1"
 }
 
 # This is intentionally the same.
