@@ -2,7 +2,7 @@ FROM alpine:3.17
 
 RUN apk update && \
     apk upgrade && \
-    apk add --no-cache bash procps drill git coreutils libidn curl && \
+    apk add --no-cache bash procps drill coreutils libidn curl openssl1.1-compat && \
     addgroup testssl && \
     adduser -G testssl -g "testssl user"  -s /bin/bash -D testssl && \
     ln -s /home/testssl/testssl.sh /usr/local/bin/ && \
