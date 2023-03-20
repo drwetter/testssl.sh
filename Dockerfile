@@ -6,7 +6,8 @@ RUN apk update && \
     addgroup testssl && \
     adduser -G testssl -g "testssl user"  -s /bin/bash -D testssl && \
     ln -s /home/testssl/testssl.sh /usr/local/bin/ && \
-    mkdir -m 755 -p /home/testssl/etc /home/testssl/bin
+    mkdir -m 755 -p /home/testssl/etc /home/testssl/bin && \
+    ln -s /usr/bin/openssl1.1 /usr/bin/openssl
 
 USER testssl
 WORKDIR /home/testssl/
