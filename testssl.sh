@@ -8828,7 +8828,7 @@ certificate_info() {
      local cn_finding trustfinding trustfinding_nosni
      local cnok="OK"
      local expfinding expok="OK"
-     local -i ret=0
+     local -i ret=0 tmp=0
      local json_postfix=""                   # string to place at the end of JSON IDs when there is more than one certificate
      local jsonID=""                         # string to place at beginning of JSON IDs
      local json_rating json_msg
@@ -9686,6 +9686,8 @@ certificate_info() {
      caa=""
      while [[ -z "$caa" ]] &&  [[ -n "$caa_node" ]]; do
           caa="$(get_caa_rr_record $caa_node)"
+          tmp=${PIPESTATUS[@]}
+          [[ $DEBUG -ge 4 ]] && echo "get_caa_rr_record: $tmp"
           [[ $caa_node =~ '.'$ ]] || caa_node+="."
           caa_node=${caa_node#*.}
      done
@@ -9707,6 +9709,9 @@ certificate_info() {
      elif [[ -n "$NODNS" ]]; then
           out "(instructed to minimize DNS queries)"
           fileout "${jsonID}${json_postfix}" "INFO" "check skipped as instructed"
+     elif "$DNS_VIA_PROXY"; then
+          out "(instructed to use the proxy for DNS only)"
+          fileout "${jsonID}${json_postfix}" "INFO" "check skipped as instructed (proxy)"
      else
           pr_svrty_low "not offered"
           fileout "${jsonID}${json_postfix}" "LOW" "--"
@@ -20308,7 +20313,8 @@ tuning / connect options (most also can be preset via environment variables):
      --proxy <host:port|auto>      (experimental) proxy connects via <host:port>, auto: values from \$env (\$http(s)_proxy)
      -6                            also use IPv6. Works only with supporting OpenSSL version and IPv6 connectivity
      --ip <ip>                     a) tests the supplied <ip> v4 or v6 address instead of resolving host(s) in URI
-                                   b) arg "one" means: just test the first DNS returns (useful for multiple IPs)
+                                   b) "one" means: just test the first DNS returns (useful for multiple IPs)
+                                   c) "proxy" means: dns resolution via proxy. Needed when host has no DNS.
      -n, --nodns <min|none>        if "none": do not try any DNS lookups, "min" queries A, AAAA and MX records
      --sneaky                      leave less traces in target logs: user agent, referer
      --user-agent <user agent>     set a custom user agent instead of the standard user agent
@@ -21026,7 +21032,8 @@ get_caa_rr_record() {
 
      "$HAS_DIG_NOIDNOUT" && noidnout="+noidnout"
 
-     [[ -n "$NODNS" ]] && return 0           # if minimum DNS lookup was instructed, leave here
+     [[ -n "$NODNS" ]] && return 2          # if minimum DNS lookup was instructed, leave here
+
      # if there's a type257 record there are two output formats here, mostly depending on age of distribution
      # roughly that's the difference between text and binary format
      # 1) 'google.com has CAA record 0 issue "symantec.com"'
