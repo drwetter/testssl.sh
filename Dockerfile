@@ -70,24 +70,14 @@ EOF
 FROM scratch
 ARG INSTALL_ROOT
 COPY --link --from=builder ${INSTALL_ROOT} /
-RUN <<EOF
-  # Create user:
-  echo 'testssl:x:1000:1000::/home/testssl:/bin/bash' >> /etc/passwd
-  echo 'testssl:x:1000:' >> /etc/group
-  echo 'testssl:!::0:::::' >> /etc/shadow
-
-  # Create user home with SGID set:
-  install --mode 2755 --owner testssl --group testssl --directory /home/testssl
-
-  # Add relative symlink to point to content that will COPY later:
-  ln -sr /home/testssl/testssl.sh /usr/local/bin/
+WORKDIR /home/testssl
+RUN --mount=type=bind,from=busybox:latest,source=/bin,target=/bin <<EOF
+  /bin/adduser -D -s /bin/bash testssl
+  /bin/ln -s /home/testssl/testssl.sh /usr/local/bin/
 EOF
-
-USER testssl
-WORKDIR /home/testssl/
 
 # Copy over build context (after filtered by .dockerignore): bin/ etc/ testssl.sh
 COPY --chown=testssl:testssl . /home/testssl/
-
+USER testssl
 ENTRYPOINT ["testssl.sh"]
 CMD ["--help"]
