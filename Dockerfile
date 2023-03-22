@@ -70,17 +70,17 @@ EOF
 FROM scratch
 ARG INSTALL_ROOT
 COPY --link --from=builder ${INSTALL_ROOT} /
+RUN <<EOF
+  # Create user:
+  echo 'testssl:x:1000:1000::/home/testssl:/bin/bash' >> /etc/passwd
+  echo 'testssl:x:1000:' >> /etc/group
+  echo 'testssl:!::0:::::' >> /etc/shadow
 
-# zypper package `busybox-adduser` fails to install with `--installroot`,
-# while the `shadow` package is too heavy just to add a user.
-#
-# Temporarily bind mount the `/bin` dir from another image that already
-# has the `adduser` command, and it'll update `/etc/{group,passwd,shadow}` for us:
-# Absolute path provided as some base images PATH would use those binaries instead,
-# `adduser` varies in supported args, so this should avoid any surprises:
-RUN --mount=type=bind,from=busybox:latest,source=/bin,target=/bin <<EOF
-  /bin/adduser -D -s /bin/bash testssl
-  /bin/ln -s /home/testssl/testssl.sh /usr/local/bin/
+  # Create user home with SGID set:
+  install --mode 2755 --owner testssl --group testssl --directory /home/testssl
+
+  # Add relative symlink to point to content that will COPY later:
+  ln -sr /home/testssl/testssl.sh /usr/local/bin/
 EOF
 
 USER testssl
