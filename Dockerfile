@@ -6,21 +6,18 @@ ARG INSTALL_ROOT=/rootfs
 FROM opensuse/leap:${LEAP_VERSION} as builder
 ARG CACHE_ZYPPER=/tmp/cache/zypper
 ARG INSTALL_ROOT
-# Usually you could source this from /etc/os-release
-# Might not always match the image tag:
-ARG VERSION_ID=15.4
-RUN  zypper --releasever "${VERSION_ID}" --installroot "${INSTALL_ROOT}" --cache-dir "${CACHE_ZYPPER}" \
-       --gpg-auto-import-keys refresh \
-  && zypper --releasever "${VERSION_ID}" --installroot "${INSTALL_ROOT}" --cache-dir "${CACHE_ZYPPER}" \
-       --non-interactive install --download-in-advance --no-recommends \
+# /etc/os-release provides $VERSION_ID
+RUN source /etc/os-release \
+  && export ZYPPER_OPTIONS=( --releasever "${VERSION_ID}" --installroot "${INSTALL_ROOT}" --cache-dir "${CACHE_ZYPPER}" ) \
+  && zypper "${ZYPPER_OPTIONS[@]}" --gpg-auto-import-keys refresh \
+  && zypper "${ZYPPER_OPTIONS[@]}" --non-interactive install --download-in-advance --no-recommends \
        bash procps grep gawk sed coreutils busybox-util-linux busybox-vi ldns libidn2-0 socat openssl curl \
-  && zypper --releasever "${VERSION_ID}" --installroot "${INSTALL_ROOT}" --cache-dir "${CACHE_ZYPPER}" \
-       clean --all
+  && zypper "${ZYPPER_OPTIONS[@]}" clean --all
 ## Cleanup (reclaim approx 13 MiB):
 # None of this content should be relevant to the container:
 RUN  rm -r "${INSTALL_ROOT}/usr/share/"{licenses,man,locale,doc,help,info}
 # Functionality that the container doesn't need:
-RUN  rm "${INSTALL_ROOT}/usr/share/misc/termcap" \
+RUN  rm    "${INSTALL_ROOT}/usr/share/misc/termcap" \
   && rm -r "${INSTALL_ROOT}/usr/lib/sysimage/rpm"
 
 
