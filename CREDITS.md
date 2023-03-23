@@ -84,6 +84,9 @@ Full contribution, see git log.
 * Hubert Kario
   - helped with avoiding accidental TCP fragmentation
 
+* Brandon Kinney
+  - refactored multistage Dockerfiles: performance gain+address bugs/inconsistencies
+
 * Magnus Larsen
   - SSL Labs Rating
 

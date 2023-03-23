@@ -31,6 +31,7 @@
 * Client simulation runs in wide mode which is even better readable
 * Added --reqheader to support custom headers in HTTP requests
 * Test for support for RFC 8879 certificate compression
+* Dockerfiles refactored to be multistaged: performance gain+address bugs/inconsistencies
 
 ### Features implemented / improvements in 3.0
 
