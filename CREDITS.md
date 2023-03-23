@@ -176,6 +176,9 @@ Full contribution, see git log.
 * @nvsofts (NV)
   - LibreSSL patch for GOST
 
+* @w4ntun
+  - fixed DNS via proxy
+
 Probably more I forgot to mention which did give me feedback, bug reports and helped one way or another.
 
 
