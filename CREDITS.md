@@ -84,6 +84,9 @@ Full contribution, see git log.
 * Hubert Kario
   - helped with avoiding accidental TCP fragmentation
 
+* Brennan Kinney
+  - refactored multistage Dockerfiles: performance gain+address bugs/inconsistencies
+
 * Magnus Larsen
   - SSL Labs Rating
 
@@ -172,6 +175,9 @@ Full contribution, see git log.
 
 * @nvsofts (NV)
   - LibreSSL patch for GOST
+
+* @w4ntun
+  - fixed DNS via proxy
 
 Probably more I forgot to mention which did give me feedback, bug reports and helped one way or another.
 
