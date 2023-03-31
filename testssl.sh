@@ -8015,9 +8015,9 @@ get_server_certificate() {
           [[ $(has_server_protocol "tls1_3") -eq 1 ]] && return 1
           if "$HAS_TLS13" && "$HAS_SIGALGS" && [[ ! "$1" =~ tls1_3_EdDSA ]]; then
                if [[ "$1" =~ tls1_3_RSA ]]; then
-                    $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -showcerts -connect $NODEIP:$PORT $PROXY $SNI -tls1_3 -tlsextdebug -status -msg -sigalgs PSS+SHA256:PSS+SHA384") </dev/null 2>$ERRFILE >$TMPFILE
+                    $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -showcerts -connect $NODEIP:$PORT $PROXY $SNI -tls1_3 -tlsextdebug -status -msg -sigalgs PSS+SHA256:PSS+SHA384:PSS+SHA512:rsa_pss_pss_sha256:rsa_pss_pss_sha384:rsa_pss_pss_sha512") </dev/null 2>$ERRFILE >$TMPFILE
                elif [[ "$1" =~ tls1_3_ECDSA ]]; then
-                    $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -showcerts -connect $NODEIP:$PORT $PROXY $SNI -tls1_3 -tlsextdebug -status -msg -sigalgs ECDSA+SHA256:ECDSA+SHA384") </dev/null 2>$ERRFILE >$TMPFILE
+                    $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -showcerts -connect $NODEIP:$PORT $PROXY $SNI -tls1_3 -tlsextdebug -status -msg -sigalgs ECDSA+SHA256:ECDSA+SHA384:ECDSA+SHA512") </dev/null 2>$ERRFILE >$TMPFILE
                else
                     return 1
                fi
@@ -8031,7 +8031,7 @@ get_server_certificate() {
                if [[ "$STARTTLS" =~ irc ]]; then
                     return 1
                elif [[ "$1" =~ tls1_3_RSA ]]; then
-                    tls_sockets "04" "$TLS13_CIPHER" "all+" "00,12,00,00, 00,05,00,05,01,00,00,00,00, 00,0d,00,10,00,0e,08,04,08,05,08,06,04,01,05,01,06,01,02,01"
+                    tls_sockets "04" "$TLS13_CIPHER" "all+" "00,12,00,00, 00,05,00,05,01,00,00,00,00, 00,0d,00,16,00,14,08,04,08,05,08,06,04,01,05,01,06,01,02,01,08,09,08,0a,08,0b"
                elif [[ "$1" =~ tls1_3_ECDSA ]]; then
                     tls_sockets "04" "$TLS13_CIPHER" "all+" "00,12,00,00, 00,05,00,05,01,00,00,00,00, 00,0d,00,0a,00,08,04,03,05,03,06,03,02,03"
                elif [[ "$1" =~ tls1_3_EdDSA ]]; then
