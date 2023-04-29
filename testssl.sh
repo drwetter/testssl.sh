@@ -21126,18 +21126,20 @@ get_caa_rr_record() {
           #caa_property_value="$(awk '{ print $3 }' <<< "$raw_caa")"
           safe_echo "$(sort <<< "$(awk '{ print $2"="$3 }' <<< "$raw_caa")")"
           return 0
-     elif [[ "$(echo "$raw_caa" | sed 's/[[:space:]]*$//g')" == *. ]]; then
+     elif [[ "$(get_last_char "$(strip_spaces "$raw_caa")")" == "." ]]; then
           # trimmed caa ends with a . which indicates, that the caa should be found by querying the caa for the returned url (remove . at the end to align with the normal call convention)
-          NEW_CAA_HOST="$(echo "$raw_caa" | sed 's/[[:space:]]*$//g' | sed 's/.$//')"
+          TRIMMED_CAA_HOST="$(strip_spaces "$raw_caa")"
+          NEW_CAA_HOST="${TRIMMED_CAA_HOST:0:-1}"
           outln "CAA for $1 points to the CAA for $NEW_CAA_HOST"
-          get_caa_rr_record $NEW_CAA_HOST
+          get_caa_rr_record "$NEW_CAA_HOST"
           return $?
      else
           # no caa record ... according to rfc8659, we should "climb the DNS tree" if no caa was found (will only go up to x.y e.g. google.com and not all the way to com)
-          if [ $(tr -cd '.' <<< $1 | wc -c) -gt 1 ]; then
-               NEW_CAA_HOST="$(echo "$1" | sed 's/^[^\.]*\.//')"
+          COUNT_FULL_STOP="$1//[^.]}"
+          if [ ${#COUNT_FULL_STOP} -gt 1 ]; then
+               NEW_CAA_HOST="${1#*.}"
                outln "CAA not found for $1. Trying to climb the DNS tree, so will look up the CAA for $NEW_CAA_HOST"
-               get_caa_rr_record $NEW_CAA_HOST
+               get_caa_rr_record "$NEW_CAA_HOST"
                return $?
            else
                return 1
