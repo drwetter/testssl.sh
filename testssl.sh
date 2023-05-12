@@ -16896,7 +16896,7 @@ run_renego() {
      local hint=""
      local jsonID=""
      local ssl_reneg_attempts=$SSL_RENEG_ATTEMPTS
-     # No SNI needed here as there won't be two different SSL stacks for one IP
+     # SNI is needed here as openssl return an error if missing
 
      "$HAS_TLS13" && [[ -z "$proto" ]] && proto="-no_tls1_3"
 
@@ -16913,7 +16913,7 @@ run_renego() {
           fileout "$jsonID" "OK" "TLS 1.3 only server" "$cve" "$cwe"
      else
           # first fingerprint for the Line "Secure Renegotiation IS NOT" or "Secure Renegotiation IS "
-          $OPENSSL s_client $(s_client_options "$proto $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY") 2>&1 </dev/null >$TMPFILE 2>$ERRFILE
+          $OPENSSL s_client $(s_client_options "$proto $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") 2>&1 </dev/null >$TMPFILE 2>$ERRFILE
           if sclient_connect_successful $? $TMPFILE; then
                grep -iaq "Secure Renegotiation IS NOT" $TMPFILE
                sec_renego=$?                                                    # 0= Secure Renegotiation IS NOT supported
