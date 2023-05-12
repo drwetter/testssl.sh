@@ -16896,7 +16896,7 @@ run_renego() {
      local hint=""
      local jsonID=""
      local ssl_reneg_attempts=$SSL_RENEG_ATTEMPTS
-     # SNI is needed here as openssl return an error if missing
+     # SNI is needed here as openssl returns an error if missing
 
      "$HAS_TLS13" && [[ -z "$proto" ]] && proto="-no_tls1_3"
 
