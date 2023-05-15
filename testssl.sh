@@ -16896,7 +16896,7 @@ run_renego() {
      local hint=""
      local jsonID=""
      local ssl_reneg_attempts=$SSL_RENEG_ATTEMPTS
-     # In cases where there's no default host configured we need SNI here as openssl then would return otherwise an error and the test will fail
+     # SNI is needed here as openssl returns an error if missing
 
      "$HAS_TLS13" && [[ -z "$proto" ]] && proto="-no_tls1_3"
 
