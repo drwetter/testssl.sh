@@ -9736,7 +9736,7 @@ certificate_info() {
           pr_italic "$(out_row_aligned_max_width "$all_caa" "$indent                              " $TERM_WIDTH)"
           fileout "${jsonID}${json_postfix}" "OK" "$all_caa"
      elif [[ -n "$NODNS" ]]; then
-          out "(instructed to minimize DNS queries)"
+          out "(instructed to minimize/skip DNS queries)"
           fileout "${jsonID}${json_postfix}" "INFO" "check skipped as instructed"
      elif "$DNS_VIA_PROXY"; then
           out "(instructed to use the proxy for DNS only)"
@@ -21268,9 +21268,10 @@ determine_rdns() {
      local saved_openssl_conf="$OPENSSL_CONF"
      local nodeip="" rdns="" line=""
 
-     [[ -n "$NODNS" ]] && rDNS="(instructed to minimize DNS queries)" && return 0   # PTR records were not asked for
-     local nodeip="$(tr -d '[]' <<< $NODEIP)"     # for DNS we do not need the square brackets of IPv6 addresses
-     OPENSSL_CONF=""                              # see https://github.com/drwetter/testssl.sh/issues/134
+     [[ "$NODNS" == none ]] && rDNS="(instructed to skip DNS queries)" && return 0        # No DNS lookups at all
+     [[ "$NODNS" == min ]] && rDNS="(instructed to minimize DNS queries)" && return 0     # PTR records were not asked for
+     local nodeip="$(tr -d '[]' <<< $NODEIP)"               # for DNS we do not need the square brackets of IPv6 addresses
+     OPENSSL_CONF=""                                        # see https://github.com/drwetter/testssl.sh/issues/134
      if [[ "$NODE" == *.local ]]; then
           if "$HAS_AVAHIRESOLVE"; then
                rDNS=$(avahi-resolve -a $nodeip 2>/dev/null | awk '{ print $2 }')
