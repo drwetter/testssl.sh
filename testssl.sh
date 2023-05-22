@@ -1979,7 +1979,8 @@ check_revocation_crl() {
           return 1
      fi
      # -crl_download could be more elegant but is supported from 1.0.2 onwards only
-     $OPENSSL crl -inform DER -in "$tmpfile" -outform PEM -out "${tmpfile%%.crl}.pem" &>$ERRFILE
+     cp "$tmpfile" "${tmpfile%%.crl}.pem"
+     grep -qe 'BEGIN X509 CRL' "${tmpfile%%.crl}.pem" || $OPENSSL crl -inform DER -in "$tmpfile" -outform PEM -out "${tmpfile%%.crl}.pem" &>$ERRFILE
      if [[ $? -ne 0 ]]; then
           pr_warning "conversion of \"$tmpfile\" failed"
           fileout "$jsonID" "WARN" "conversion of CRL to PEM format failed"
