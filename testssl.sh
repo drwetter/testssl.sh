@@ -1981,9 +1981,13 @@ check_revocation_crl() {
      # -crl_download could be more elegant but is supported from 1.0.2 onwards only
      $OPENSSL crl -inform DER -in "$tmpfile" -outform PEM -out "${tmpfile%%.crl}.pem" &>$ERRFILE
      if [[ $? -ne 0 ]]; then
-          pr_warning "conversion of \"$tmpfile\" failed"
-          fileout "$jsonID" "WARN" "conversion of CRL to PEM format failed"
-          return 1
+          if grep -qe 'BEGIN X509 CRL' "$tmpfile"; then
+               mv "$tmpfile" "${tmpfile%%.crl}.pem"
+          else
+               pr_warning "conversion of \"$tmpfile\" failed"
+               fileout "$jsonID" "WARN" "conversion of CRL to PEM format failed"
+               return 1
+          fi
      fi
      if grep -qe '-----BEGIN CERTIFICATE-----' $TEMPDIR/intermediatecerts.pem; then
           $OPENSSL verify -crl_check -CAfile <(cat $ADDTL_CA_FILES "$GOOD_CA_BUNDLE" "${tmpfile%%.crl}.pem") -untrusted $TEMPDIR/intermediatecerts.pem $HOSTCERT &> "${tmpfile%%.crl}.err"
