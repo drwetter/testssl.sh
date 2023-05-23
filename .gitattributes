@@ -1,0 +1,11 @@
+*.sh    eol=lf
+*.bash  eol=lf
+*.md    eol=lf
+*.html  eol=lf
+*.txt   eol=lf
+*.txt   eol=lf
+*.1     eol=lf
+*.t     eol=lf
+*.yml   eol=lf
+Dockerfile*  eol=lf
+*.csvfile    eol=lf
