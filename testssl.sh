@@ -2,7 +2,7 @@
 #
 # vim:ts=5:sw=5:expandtab
 # we have a spaces softtab, that ensures readability with other editors too
-
+# JUST A TEST
 # testssl.sh is a program for spotting weak SSL/TLS encryption, ciphers, protocols and some
 # vulnerabilities or features. It may or may be not distributed by your distribution.
 # The upstream versions are available (please leave the links intact):
