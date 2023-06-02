@@ -12156,7 +12156,7 @@ parse_sslv2_serverhello() {
           elif [[ $v2_hello_initbyte != "8" ]] || [[ $v2_hello_handshake != "04" ]]; then
                ret=1
                if [[ $DEBUG -ge 2 ]]; then
-                    echo "no correct server hello"
+                    echo "no correct (SSLv2) ServerHello"
                     echo "SSLv2 server init byte:    0x0$v2_hello_initbyte"
                     echo "SSLv2 hello handshake :    0x$v2_hello_handshake"
                fi
