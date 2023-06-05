@@ -12126,7 +12126,7 @@ parse_sslv2_serverhello() {
      [[ "$DEBUG" -ge 5 ]] && echo "$v2_hello_ascii"
      if [[ -z "$v2_hello_ascii" ]]; then
           ret=0                                      # 1 line without any blanks: no server hello received
-          debugme echo "server hello empty"
+          debugme echo "(SSLv2) ServerHello empty"
      else
           # now scrape two bytes out of the reply per byte
           v2_hello_initbyte="${v2_hello_ascii:0:1}"  # normally this belongs to the next, should be 8!
@@ -12156,7 +12156,7 @@ parse_sslv2_serverhello() {
           elif [[ $v2_hello_initbyte != "8" ]] || [[ $v2_hello_handshake != "04" ]]; then
                ret=1
                if [[ $DEBUG -ge 2 ]]; then
-                    echo "no correct server hello"
+                    echo "no correct (SSLv2) ServerHello"
                     echo "SSLv2 server init byte:    0x0$v2_hello_initbyte"
                     echo "SSLv2 hello handshake :    0x$v2_hello_handshake"
                fi
@@ -14179,7 +14179,7 @@ parse_tls_serverhello() {
      done
 
      if [[ $tls_serverhello_ascii_len -eq 0 ]]; then
-          debugme echo "server hello empty, TCP connection closed"
+          debugme echo "(TLS) ServerHello empty, TCP connection closed"
           DETECTED_TLS_VERSION="closed TCP connection "
           [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
           return 1              # no server hello received
