@@ -10,13 +10,13 @@ use Text::Diff;
 
 my $tests = 0;
 my $prg="./testssl.sh";
-my $uri="example.com";
+my $uri="heise.de";
 my $out="";
 my $html="";
 my $debughtml="";
 my $edited_html="";
 my $htmlfile="tmp.html";
-my $check2run="--ip=one --ids-friendly --color 0 --htmlfile $htmlfile";
+my $check2run="--ip=one --sneaky --ids-friendly --color 0 --htmlfile $htmlfile";
 my $diff="";
 die "Unable to open $prg" unless -f $prg;
 
