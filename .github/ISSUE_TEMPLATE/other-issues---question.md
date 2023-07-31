@@ -8,4 +8,4 @@ assignees: ''
 ---
 
 **Which version are you referring to**
-3.0.x or 3.1dev? (please check also how old your version is compare to the ones here)
+3.0.x or 3.2? (please check also how old your version is compare to the ones here)

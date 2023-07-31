@@ -16,7 +16,7 @@ my $html="";
 my $debughtml="";
 my $edited_html="";
 my $htmlfile="tmp.html";
-my $check2run="--ip=one --ids-friendly --color 0 --htmlfile $htmlfile";
+my $check2run="--ip=one --sneaky --ids-friendly --color 0 --htmlfile $htmlfile";
 my $diff="";
 die "Unable to open $prg" unless -f $prg;
 

@@ -1,7 +1,7 @@
 
 ## Change Log
 
-### Features implemented / improvements in 3.1dev
+### Features implemented / improvements in 3.2
 
 * Extend Server (cipher) preference: always now in wide mode instead of running all ciphers in the end (per default)
 * Improved compatibility with OpenSSL 3.0
