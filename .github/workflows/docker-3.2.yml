@@ -1,21 +1,21 @@
-name: docker-3.1dev
+name: docker-3.2
 
 on:
   push:
     branches:
-      - 3.1dev
+      - 3.2
   workflow_dispatch:
   schedule:
     - cron: "0 8 * * 1"
 
 env:
-  BUILD_VERSION: "3.1dev"
+  BUILD_VERSION: "3.2"
   DOCKER_CLI_EXPERIMENTAL: enabled
 
 jobs:
 
   deploy:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Source checkout
