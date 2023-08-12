@@ -115,9 +115,6 @@ Please address questions not specifically to the code of testssl.sh to the respe
 #### Mass scanner w parallel scans and elastic searching the results
 * https://github.com/TKCERT/testssl.sh-masscan
 
-#### Another ready-to-go docker image is at:
-* https://quay.io/repository/jumanjiman/testssl
-
 #### Privacy checker using testssl.sh
 * https://privacyscore.org
 
