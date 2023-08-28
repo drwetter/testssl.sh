@@ -20349,7 +20349,6 @@ single check as <options>  ("$PROG_NAME URI" does everything except -E and -g):
      -4, --rc4, --appelbaum        which RC4 ciphers are being offered?
 
 tuning / connect options (most also can be preset via environment variables):
-     --fast                        omits some checks: using openssl for all ciphers (-e), show only first preferred cipher.
      -9, --full                    includes tests for implementation bugs and cipher per protocol (could disappear)
      --bugs                        enables the "-bugs" option of s_client, needed e.g. for some buggy F5s
      --assume-http                 if protocol check fails it assumes HTTP protocol and enforces HTTP checks
@@ -23724,6 +23723,8 @@ parse_cmd_line() {
           [[ -s "$fname" ]] || fatal "CA file \"$fname\" does not exist" $ERR_RESOURCE
           grep -q 'BEGIN CERTIFICATE' "$fname" || fatal "\"$fname\" is not CA file in PEM format" $ERR_RESOURCE
      done
+
+     "$FAST" && pr_warning "\n'--fast' can have some undesired side effects thus it is not recommended to use anymore\n"
 
      if "$do_starttls_injection" && [[ "$STARTTLS_PROTOCOL" =~ smtp ]]; then
           ((VULN_COUNT++))
