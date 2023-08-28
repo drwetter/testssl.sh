@@ -3271,7 +3271,7 @@ sub_f5_bigip_check() {
                ip="$(f5_hex2ip6 ${cookievalue:$offset:32})"
                out "${spaces}F5 cookie (IPv6 pool in routed domain "; pr_svrty_medium "$routed_domain"; out "): "; pr_italic "$cookiename "; prln_svrty_medium "${ip}:${port}"
                fileout "cookie_bigip_f5" "MEDIUM" "Information leakage: F5 cookie $cookiename $cookievalue is IPv6 pool member in routed domain $routed_domain ${ip}:${port}" "$cve" "$cwe"
-          elif grep -Eq '^\!.*=$' <<< "$cookievalue"; then
+          elif grep -Eq '^!.*=$' <<< "$cookievalue"; then
                if [[ "${#cookievalue}" -eq 81 ]] ; then
                     savedcookies="${savedcookies}     ${cookiename}=${cookievalue:1:79}"
                     out "${spaces}Encrypted F5 cookie named "; pr_italic "${cookiename}"; outln " detected"
