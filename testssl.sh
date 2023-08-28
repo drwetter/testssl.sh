@@ -244,6 +244,7 @@ CIPHERS_BY_STRENGTH_FILE=""
 TLS_DATA_FILE=""                        # mandatory file for socket-based handshakes
 OPENSSL=""                              # If you run this from GitHub it's ~/bin/openssl.$(uname).$(uname -m) otherwise /usr/bin/openssl
 OPENSSL2=""                             # When running from GitHub, this will be openssl version >=1.1.1 (auto determined)
+OPENSSL2_HAS_TLS_1_3=false              # If we run with supplied binary AND /usr/bin/openssl supports TLS 1.3 this is set to true
 OPENSSL_LOCATION=""
 IKNOW_FNAME=false
 FIRST_FINDING=true                      # is this the first finding we are outputting to file?
@@ -20109,6 +20110,7 @@ find_openssl_binary() {
      # Now check whether the standard $OPENSSL has Unix-domain socket and xmpp-server support. If
      # not check /usr/bin/openssl -- if available. This is more a kludge which we shouldn't use for
      # every openssl feature. At some point we need to decide which with openssl version we go.
+     # We also check, whether there's /usr/bin/openssl which has TLS 1.3
      OPENSSL2=/usr/bin/openssl
      if [[ ! "$OSSL_NAME" =~ LibreSSL ]] && [[ ! $OSSL_VER =~ 1.1.1 ]] && [[ ! $OSSL_VER_MAJOR =~ 3 ]]; then
           if [[ -x $OPENSSL2 ]]; then
@@ -20116,6 +20118,10 @@ find_openssl_binary() {
                $OPENSSL2 s_client -starttls foo 2>$s_client_starttls_has2
                grep -q 'Unix-domain socket' $s_client_has2 && HAS_UDS2=true
                grep -q 'xmpp-server' $s_client_starttls_has2 && HAS_XMPP_SERVER2=true
+               # Likely we don't need the following second check here, see 6 lines above
+               if grep -wq 'tls1_3' $s_client_has2 && [[ $OPENSSL != /usr/bin/openssl ]]; then
+                    OPENSSL2_HAS_TLS_1_3=true
+               fi
           fi
      fi
 
