@@ -23718,6 +23718,8 @@ parse_cmd_line() {
           grep -q 'BEGIN CERTIFICATE' "$fname" || fatal "\"$fname\" is not CA file in PEM format" $ERR_RESOURCE
      done
 
+     "$FAST" && pr_warning "\n'--fast' can have some undesired side effects thus it is not recommended to use anymore\n"
+
      if "$do_starttls_injection" && [[ "$STARTTLS_PROTOCOL" =~ smtp ]]; then
           ((VULN_COUNT++))
      fi
