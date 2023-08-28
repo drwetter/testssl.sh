@@ -2715,28 +2715,40 @@ run_hsts() {
      match_httpheader_key "Strict-Transport-Security" "HSTS" "$spaces" "true"
      if [[ $? -ne 0 ]]; then
           echo "$HEADERVALUE" >$TMPFILE
-          hsts_age_sec="${HEADERVALUE//[^0-9]/}"
-          debugme echo "hsts_age_sec: $hsts_age_sec"
-          if [[ -n $hsts_age_sec ]]; then
-               hsts_age_days=$(( hsts_age_sec / 86400))
-          else
-               hsts_age_days=-1
+          # strict parsing now as suggested in #2381
+          hsts_age_sec="${HEADERVALUE#*=}"
+          hsts_age_sec=${hsts_age_sec%%;*}
+          if [[ $hsts_age_sec =~ \" ]]; then
+               # remove first an last " in $hsts_age_sec (borrowed from strip_trailing_space/strip_leading_space):
+               hsts_age_sec=$(printf "%s" "${hsts_age_sec#"${hsts_age_sec%%[!\"]*}"}")
+               hsts_age_sec=$(printf "%s" "${hsts_age_sec%"${hsts_age_sec##*[!\"]}"}")
           fi
-          if [[ $hsts_age_days -eq -1 ]]; then
-               pr_svrty_medium "misconfiguration: HSTS max-age (recommended > $HSTS_MIN seconds = $((HSTS_MIN/86400)) days ) is required but missing"
-               fileout "${jsonID}_time" "MEDIUM" "misconfiguration, parameter max-age (recommended > $HSTS_MIN seconds = $((HSTS_MIN/86400)) days) missing"
-               set_grade_cap "A" "HSTS max-age is misconfigured"
-          elif [[ $hsts_age_sec -eq 0 ]]; then
-               pr_svrty_low "HSTS max-age is set to 0. HSTS is disabled"
-               fileout "${jsonID}_time" "LOW" "0. HSTS is disabled"
-               set_grade_cap "A" "HSTS is disabled"
-          elif [[ $hsts_age_sec -ge $HSTS_MIN ]]; then
-               pr_svrty_good "$hsts_age_days days" ; out "=$hsts_age_sec s"
-               fileout "${jsonID}_time" "OK" "$hsts_age_days days (=$hsts_age_sec seconds) > $HSTS_MIN seconds"
+          debugme echo "hsts_age_sec: $hsts_age_sec"
+          if ! is_number "$hsts_age_sec"; then
+               pr_svrty_medium "misconfiguration: \'"$hsts_age_sec"\' is not a valid max-age specification"
+               fileout "${jsonID}_time" "MEDIUM" "misconfiguration, specified not a number for max-age"
           else
-               pr_svrty_medium "$hsts_age_sec s = $hsts_age_days days is too short ( >= $HSTS_MIN seconds recommended)"
-               fileout "${jsonID}_time" "MEDIUM" "max-age too short. $hsts_age_days days (=$hsts_age_sec seconds) < $HSTS_MIN seconds"
-               set_grade_cap "A" "HSTS max-age is too short"
+               if [[ -n $hsts_age_sec ]]; then
+                    hsts_age_days=$(( hsts_age_sec / 86400))
+               else
+                    hsts_age_days=-1
+               fi
+               if [[ $hsts_age_days -eq -1 ]]; then
+                    pr_svrty_medium "misconfiguration: HSTS max-age (recommended > $HSTS_MIN seconds = $((HSTS_MIN/86400)) days ) is required but missing"
+                    fileout "${jsonID}_time" "MEDIUM" "misconfiguration, parameter max-age (recommended > $HSTS_MIN seconds = $((HSTS_MIN/86400)) days) missing"
+                    set_grade_cap "A" "HSTS max-age is misconfigured"
+               elif [[ $hsts_age_sec -eq 0 ]]; then
+                    pr_svrty_low "HSTS max-age is set to 0. HSTS is disabled"
+                    fileout "${jsonID}_time" "LOW" "0. HSTS is disabled"
+                    set_grade_cap "A" "HSTS is disabled"
+               elif [[ $hsts_age_sec -ge $HSTS_MIN ]]; then
+                    pr_svrty_good "$hsts_age_days days" ; out "=$hsts_age_sec s"
+                    fileout "${jsonID}_time" "OK" "$hsts_age_days days (=$hsts_age_sec seconds) > $HSTS_MIN seconds"
+               else
+                    pr_svrty_medium "$hsts_age_sec s = $hsts_age_days days is too short ( >= $HSTS_MIN seconds recommended)"
+                    fileout "${jsonID}_time" "MEDIUM" "max-age too short. $hsts_age_days days (=$hsts_age_sec seconds) < $HSTS_MIN seconds"
+                    set_grade_cap "A" "HSTS max-age is too short"
+               fi
           fi
           if includeSubDomains "$TMPFILE"; then
                fileout "${jsonID}_subdomains" "OK" "includes subdomains"
