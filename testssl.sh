@@ -7756,7 +7756,7 @@ sclient_connect_successful() {
      local re='Master-Key: ([^\
 ]*)'
 
-     [[ $1 -eq 0 ]] && connect_success=true
+     [[ $1 -eq 0 ]] && [[ ! "$server_hello" =~ SSL\ handshake\ has\ read\ 0\ bytes\ and\ written ]] && connect_success=true
      if ! "$connect_success" && [[ "$server_hello" =~ $re ]]; then
           [[ -n "${BASH_REMATCH[1]}" ]] && connect_success=true
      fi
@@ -21570,7 +21570,7 @@ sclient_auth() {
 ]*)'
      local connect_success=false
 
-     [[ $1 -eq 0 ]] && connect_success=true
+     [[ $1 -eq 0 ]] && [[ ! "$server_hello" =~ SSL\ handshake\ has\ read\ 0\ bytes\ and\ written ]] && connect_success=true
 
      ! "$connect_success" && [[ "$server_hello" =~ $re ]] && \
           [[ -n "${BASH_REMATCH[1]}" ]] && connect_success=true
