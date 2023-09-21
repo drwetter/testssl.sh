@@ -175,7 +175,7 @@ Any single check switch supplied as an argument prevents testssl.sh from doing a
 
 `-p, --protocols`  checks TLS/SSL protocols SSLv2, SSLv3, TLS 1.0 through TLS 1.3 and for HTTP: SPDY (NPN) and ALPN, a.k.a. HTTP/2. For TLS 1.3 several drafts (from 18 on) and final are supported and being tested for.
 
-`-P, --preference`  displays the servers preferences: cipher order, with used openssl client: negotiated protocol and cipher. If there's a cipher order enforced by the server it displays it for each protocol (openssl+sockets). If there's not, it displays instead which ciphers from the server were picked with each protocol.
+`-P, --server-preference, --preference`  displays the servers preferences: cipher order, with used openssl client: negotiated protocol and cipher. If there's a cipher order enforced by the server it displays it for each protocol (openssl+sockets). If there's not, it displays instead which ciphers from the server were picked with each protocol.
 
 `-S, --server_defaults`  displays information from the server hello(s):
 
