@@ -17814,7 +17814,7 @@ run_tls_fallback_scsv() {
                pr_svrty_good "Probably OK. "
                fileout "$jsonID" "OK" "Probably oK"
                # see RFC 7507, https://github.com/drwetter/testssl.sh/issues/121
-               # other case reported by Nicolas was F5 and at costumer of mine: the same
+               # other case reported by Nicolas was F5 and at customer of mine: the same
                pr_svrty_medium "But received non-RFC-compliant \"handshake failure\" instead of \"inappropriate fallback\""
                fileout "$jsonID" "MEDIUM" "received non-RFC-compliant \"handshake failure\" instead of \"inappropriate fallback\""
           elif grep -qa "ssl handshake failure" "$TMPFILE"; then

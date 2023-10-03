@@ -13,4 +13,4 @@ jobs:
       - uses: codespell-project/actions-codespell@master
         with:
           skip: ca_hashes.txt,tls_data.txt,*.pem,OPENSSL-LICENSE.txt
-          ignore_words_list: borken,gost,ciph,ba,bloc,isnt,chello,fo,alle,anull
+          ignore_words_list: borken,gost,ciph,ba,bloc,isnt,chello,fo,alle,anull,Widgits,Manuel
