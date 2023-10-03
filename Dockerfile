@@ -25,7 +25,7 @@ RUN  rm    "${INSTALL_ROOT}/usr/share/misc/termcap" \
 FROM scratch
 ARG INSTALL_ROOT
 COPY --link --from=builder ${INSTALL_ROOT} /
-# Create user + (home with SGID set):
+# Link busybox to tar, see #2403. Create user + (home with SGID set):
 RUN  ln -s /usr/bin/busybox /usr/bin/tar \
   && echo 'testssl:x:1000:1000::/home/testssl:/bin/bash' >> /etc/passwd \
   && echo 'testssl:x:1000:' >> /etc/group \
