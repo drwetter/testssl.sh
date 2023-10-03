@@ -20438,7 +20438,7 @@ tuning / connect options (most also can be preset via environment variables):
      -9, --full                    includes tests for implementation bugs and cipher per protocol (could disappear)
      --bugs                        enables the "-bugs" option of s_client, needed e.g. for some buggy F5s
      --assume-http                 if protocol check fails it assumes HTTP protocol and enforces HTTP checks
-     --ssl-native                  fallback to checks with OpenSSL where sockets are normally used
+     --ssl-native                  use OpenSSL where sockets are normally used. Faster but inaccurate, avoid it when possible
      --openssl <PATH>              use this openssl binary (default: look in \$PATH, \$RUN_DIR of $PROG_NAME)
      --proxy <host:port|auto>      (experimental) proxy connects via <host:port>, auto: values from \$env (\$http(s)_proxy)
      -6                            also use IPv6. Works only with supporting OpenSSL version and IPv6 connectivity
@@ -23804,6 +23804,7 @@ parse_cmd_line() {
      done
 
      "$FAST" && pr_warning "\n'--fast' can have some undesired side effects thus it is not recommended to use anymore\n"
+     "$SSL_NATIVE" && pr_warning "\nusage of '--ssl-native' is not recommended as it will return incomplete and may even return incorrect results\n"
 
      if "$do_starttls_injection" && [[ "$STARTTLS_PROTOCOL" =~ smtp ]]; then
           ((VULN_COUNT++))
