@@ -9569,7 +9569,7 @@ run_server_defaults() {
           if $TLS13_ONLY; then
                generic_nonfatal "Client problem: We need openssl supporting TLS 1.3. We can't continue with \"server defaults\" as we cannot retrieve the certificate. "
           else
-               generic_nonfatal "Client problem, No server cerificate could be retrieved. Thus we can't continue with \"server defaults\"."
+               generic_nonfatal "Client problem, No server certificate could be retrieved. Thus we can't continue with \"server defaults\"."
           fi
      fi
      [[ $DEBUG -ge 1 ]] && [[ -e $HOSTCERT.nosni ]] && $OPENSSL x509 -in $HOSTCERT.nosni -text -noout 2>>$ERRFILE > $HOSTCERT.nosni.txt
@@ -15248,7 +15248,7 @@ run_tls_fallback_scsv() {
                pr_svrty_good "Probably OK. "
                fileout "$jsonID" "OK" "Probably oK"
                # see RFC 7507, https://github.com/drwetter/testssl.sh/issues/121
-               # other case reported by Nicolas was F5 and at costumer of mine: the same
+               # other case reported by Nicolas was F5 and at customer of mine: the same
                pr_svrty_medium "But received non-RFC-compliant \"handshake failure\" instead of \"inappropriate fallback\""
                fileout "$jsonID" "MEDIUM" "received non-RFC-compliant \"handshake failure\" instead of \"inappropriate fallback\""
           elif grep -qa "ssl handshake failure" "$TMPFILE"; then
