@@ -2353,8 +2353,8 @@ service_detection() {
           fi
           head $TMPFILE | grep -aq '^HTTP/' && SERVICE=HTTP
           [[ -z "$SERVICE" ]] && head $TMPFILE | grep -waq "SMTP|ESMTP|Exim|IdeaSmtpServer|Kerio Connect|Postfix" && SERVICE=SMTP   # I know some overlap here
-          [[ -z "$SERVICE" ]] && head $TMPFILE | grep -Ewaq "POP|Gpop|MailEnable POP3 Server|OK Dovecot|Cyrus POP3" && SERVICE=POP  # I know some overlap here
-          [[ -z "$SERVICE" ]] && head $TMPFILE | grep -Ewaq "IMAP|IMAP4|Cyrus IMAP4IMAP4rev1|IMAP4REV1|Gimap" && SERVICE=IMAP       # I know some overlap here
+          [[ -z "$SERVICE" ]] && head $TMPFILE | grep -Ewaq "POP|POP3|Gpop|OK Dovecot" && SERVICE=POP                               # I know some overlap here
+          [[ -z "$SERVICE" ]] && head $TMPFILE | grep -Ewaqi "IMAP|IMAP4|Cyrus IMAP4IMAP4rev1|IMAP4rev1|Gimap" && SERVICE=IMAP      # I know some overlap here
           [[ -z "$SERVICE" ]] && head $TMPFILE | grep -aq FTP && SERVICE=FTP
           [[ -z "$SERVICE" ]] && head $TMPFILE | grep -Eaqi "jabber|xmpp" && SERVICE=XMPP
           [[ -z "$SERVICE" ]] && head $TMPFILE | grep -Eaqw "Jive News|InterNetNews|NNRP|INN|Kerio Connect|NNTP Service|Kerio MailServer|NNTP server" && SERVICE=NNTP
