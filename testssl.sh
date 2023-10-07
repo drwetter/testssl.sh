@@ -2352,7 +2352,7 @@ service_detection() {
                was_killed=$?
           fi
           head $TMPFILE | grep -aq '^HTTP/' && SERVICE=HTTP
-          [[ -z "$SERVICE" ]] && head $TMPFILE | grep -waq "SMTP|ESMTP|Exim|IdeaSmtpServer|Kerio Connect|Postfix" && SERVICE=SMTP   # I know some overlap here
+          [[ -z "$SERVICE" ]] && head $TMPFILE | grep -Ewaq "SMTP|ESMTP|Exim|IdeaSmtpServer|Kerio Connect|Postfix" && SERVICE=SMTP  # I know some overlap here
           [[ -z "$SERVICE" ]] && head $TMPFILE | grep -Ewaq "POP|POP3|Gpop|OK Dovecot" && SERVICE=POP                               # I know some overlap here
           [[ -z "$SERVICE" ]] && head $TMPFILE | grep -Ewaqi "IMAP|IMAP4|Cyrus IMAP4IMAP4rev1|IMAP4rev1|Gimap" && SERVICE=IMAP      # I know some overlap here
           [[ -z "$SERVICE" ]] && head $TMPFILE | grep -aq FTP && SERVICE=FTP
