@@ -4,9 +4,9 @@
 The certificate trust stores were retrieved from
 
 * **Linux:** Copied from an up-to-date Debian Linux machine
-* **Mozilla:** https://curl.haxx.se/docs/caextract.html
-* **Java:** extracted (``keytool -list -rfc -keystore lib/security/cacerts | grep -E -v '^$|^\*\*\*\*\*|^Entry |^Creation |^Alias '``) from a JDK LTS version from https://jdk.java.net/. Use dos2unix for the store which you generated.
-* **Microsoft:** Following command pulls all certificates from Windows Update services: ``CertUtil -syncWithWU -f -f . `` (see also http://aka.ms/RootCertDownload, https://technet.microsoft.com/en-us/library/dn265983(v=ws.11).aspx#BKMK_CertUtilOptions). They are in DER format. Convert them like ``for f in *.crt; do echo $f >/dev/stderr; openssl x509 -in $f -inform DER -outform PEM ;done >/tmp/Microsoft.pem``
+* **Mozilla:** https://curl.haxx.se/docs/caextract.html (MPL 2.0)
+* **Java:** extracted (``keytool -list -rfc -keystore lib/security/cacerts | grep -E -v '^$|^\*\*\*\*\*|^Entry |^Creation |^Alias'``) from a JDK LTS version from https://jdk.java.net/. Use dos2unix for the store which you generated.
+* **Microsoft:** Following command pulls all certificates from Windows Update services: ``CertUtil -syncWithWU -f -f . `` (see also https://aka.ms/RootCertDownload, https://technet.microsoft.com/en-us/library/dn265983(v=ws.11).aspx#BKMK_CertUtilOptions). They are in DER format. Convert them like ``for f in *.crt; do echo $f >/dev/stderr; openssl x509 -in $f -inform DER -outform PEM ;done >/tmp/Microsoft.pem`
 * **Apple:**
     1. __System:__ from Apple OS X keychain app.  Open Keychain Access utility, i.e.
   In the Finder window, under Favorites --> "Applications" --> "Utilities"
@@ -16,11 +16,16 @@ The certificate trust stores were retrieved from
   Select all CA certificates except for "Developer ID Certification Authority", omit expired ones,  "File" --> "Export Items"
     2. __Internet:__ Pick the latest subdir (=highest number) from https://opensource.apple.com/source/security_certificates/. They are in all DER format despite their file extension. Download them with ``wget --level=1 --cut-dirs=5 --mirror --convert-links --adjust-extension --page-requisites --no-parent https://opensource.apple.com/source/security_certificates/security_certificates-<latest>/certificates/roots/``. Then: ``for f in *.cer *.der *.crt; do echo $f >/dev/stderr; openssl x509 -in $f -inform DER -outform PEM ;done >/tmp/Apple.pem``
 
-**ATTENTION**: From each store you need to remove the _DST Root CA X3_ which is for your reference in this directory. See file ``DST Root CA X3.txt`` in this directory. Apple's file name is ``IdenTrust_Root_X3.der``. For the Microsoft store you have to identify the file beforehand like `` for f in *.crt; do echo $f >/dev/stderr; openssl x509 -in $f -inform DER -text -noout | grep DST ;done`` 
+**ATTENTION**: From each store you need to remove the _DST Root CA X3_ which is for your reference in this directory. See file ``DST Root CA X3.txt`` in this directory. Apple's file name is ``IdenTrust_Root_X3.der``. For the Microsoft store you have/had to identify the file beforehand like ``for f in *.crt; do  openssl x509 -in $f -inform DER -text -noout  | grep -q 'DST' && echo $f ;done``
 
 Google Chromium uses basically the trust stores above, see https://www.chromium.org/Home/chromium-security/root-ca-policy.
 
 If you want to check trust against e.g. a company internal CA you need to use ``./testssl.sh --add-ca companyCA1.pem,companyCA2.pem <further_cmds>`` or ``ADDTL_CA_FILES=companyCA1.pem,companyCA2.pem ./testssl.sh <further_cmds>``.
+
+
+#### License
+
+Please note that the licenses of the certificate stores might not be GPLv2 in all the cases. In general the root and intermediate certificates are free for use -- otherwise the internet wouldn't work. Besides the certificate vendors also browsers use them. Apple and Microsoft however didn't list licenses for those certificates. Microsoft is (as Mozilla and Google) a member of the Common CA Database though, see https://www.ccadb.org/ .
 
 
 #### Further files
@@ -43,3 +48,5 @@ If you want to check trust against e.g. a company internal CA you need to use ``
 * SSLSocketClient.java as the name indicates is a simple socket client in Java to generate a TLS/SSL handshake. It's taken from
   https://docs.oracle.com/javase/10/security/sample-code-illustrating-secure-socket-connection-client-and-server.htm . It's not
   ours and it's not GPLv2. There wasn't any license mentioned, it's only added for your convenience.
+
+
