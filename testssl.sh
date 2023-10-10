@@ -21090,8 +21090,10 @@ get_a_record() {
                ip4=$(filter_ip4_address $(avahi-resolve -4 -n "$1" 2>/dev/null | awk '{ print $2 }'))
           elif "$HAS_DIG"; then
                ip4=$(filter_ip4_address $(dig $DIG_R @224.0.0.251 -p 5353 +short -t a +notcp "$1" 2>/dev/null | sed '/^;;/d'))
+          elif "$HAS_DRILL"; then
+               ip4=$(filter_ip4_address $(drill @224.0.0.251 -p 5353 "$1" | awk '/ANSWER SECTION/,/AUTHORITY SECTION/ { print $NF }' | awk '/^[0-9]/'))
           else
-               fatal "Local hostname given but no 'avahi-resolve' or 'dig' available." $ERR_DNSBIN
+               fatal "Local hostname given but neither 'avahi-resolve', 'dig' or 'drill' is available." $ERR_DNSBIN
           fi
      fi
      if [[ -z "$ip4" ]] && "$HAS_DIG"; then
@@ -21134,8 +21136,10 @@ get_aaaa_record() {
                     ip6=$(filter_ip6_address $(avahi-resolve -6 -n "$1" 2>/dev/null | awk '{ print $2 }'))
                elif "$HAS_DIG"; then
                     ip6=$(filter_ip6_address $(dig $DIG_R @ff02::fb -p 5353 -t aaaa +short +notcp "$NODE"))
+               elif "$HAS_DRILL"; then
+                    ip6=$(filter_ip6_address $(drill @ff02::fb -p 5353 "$1" | awk '/ANSWER SECTION/,/AUTHORITY SECTION/ { print $NF }' | awk '/^[0-9]/'))
                else
-                    fatal "Local hostname given but no 'avahi-resolve' or 'dig' available." $ERR_DNSBIN
+                    fatal "Local hostname given but neither 'avahi-resolve', 'dig' or 'drill' is available." $ERR_DNSBIN
                fi
           elif "$HAS_DIG"; then
                ip6=$(filter_ip6_address $(dig +search $DIG_R +short +timeout=2 +tries=2 $noidnout -t aaaa "$1" 2>/dev/null | awk '/^[0-9]/ { print $1 }'))
