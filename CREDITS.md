@@ -9,7 +9,7 @@ Full contribution, see git log.
 * David Cooper (main contributor)
   - Major extensions to socket support for all protocols
   - extended parsing of TLS ServerHello messages
-  - TLS 1.3 support (final and pre-final)
+  - TLS 1.3 support (final and pre-final) with needed en/decryption
   - add several TLS extensions
   - Detection + output of multiple certificates
   - several cleanups of server certificate related stuff
@@ -29,7 +29,16 @@ Full contribution, see git log.
   - several protocol preferences improvements
   - pwnedkeys.com support
   - CT support
+  - Extract CA list CertificateRequest message is encountered
   - RFC 8879, certificate compression
+  - 128 cipher limit, padding
+  - compatibility for LibreSSL and different OpenSSL versions
+  - Check for ffdhe groups
+  - TLS 1.2 and TLS 1.3 sig algs added
+  - Show server supported signature algorithms
+  - Show supported certification authorities sent by the server when client auth is requested
+  - Provide a better verdict wrt to server order: Now per protocol and ciphers are weighted for each protocol
+ -  Provide compatibility to every LibreSSL/OpenSSL versions
   - Lots of fixes and improvements
 
 ##### Further credits (in alphabetical order)
