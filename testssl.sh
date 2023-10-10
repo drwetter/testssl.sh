@@ -5612,7 +5612,7 @@ run_protocols() {
                add_proto_offered tls1 no
                if [[ -z $latest_supported ]]; then
                     outln
-                    fileout "$jsonID" "INFO" "not offered"       # neither good or bad
+                    fileout "$jsonID" "INFO" "not offered"       # neither good nor bad
                else
                     prln_svrty_critical " -- connection failed rather than downgrading to $latest_supported_string (NOT ok)"
                     fileout "$jsonID" "CRITICAL" "connection failed rather than downgrading to $latest_supported_string"
@@ -5694,7 +5694,7 @@ run_protocols() {
                add_proto_offered tls1_1 no
                if [[ -z $latest_supported ]]; then
                     outln
-                    fileout "$jsonID" "INFO" "not offered"    # neither good or bad
+                    fileout "$jsonID" "INFO" "not offered"    # neither good nor bad
                else
                     prln_svrty_critical " -- connection failed rather than downgrading to $latest_supported_string"
                     fileout "$jsonID" "CRITICAL" "connection failed rather than downgrading to $latest_supported_string"
@@ -21049,7 +21049,7 @@ check_resolver_bins() {
      type -p idn2 &>/dev/null && HAS_IDN2=true
 
      if ! "$HAS_DIG" && ! "$HAS_HOST" && ! "$HAS_DRILL" && ! "$HAS_NSLOOKUP"; then
-          fatal "Neither \"dig\", \"host\", \"drill\" or \"nslookup\" is present" $ERR_DNSBIN
+          fatal "Neither \"dig\", \"host\", \"drill\" nor \"nslookup\" is present" $ERR_DNSBIN
      fi
      if "$HAS_DIG"; then
           # Old dig versions don't have an option to ignore $HOME/.digrc
@@ -21091,10 +21091,11 @@ get_a_record() {
           elif "$HAS_DIG"; then
                ip4=$(filter_ip4_address $(dig $DIG_R @224.0.0.251 -p 5353 +short -t a +notcp "$1" 2>/dev/null | sed '/^;;/d'))
           elif "$HAS_DRILL"; then
-               ip4=$(filter_ip4_address $(drill @224.0.0.251 -p 5353 "$1" | awk '/ANSWER SECTION/,/AUTHORITY SECTION/ { print $NF }' | awk '/^[0-9]/'))
+               ip4=$(filter_ip4_address $(drill @224.0.0.251 -p 5353 "$1" 2>/dev/null | awk '/ANSWER SECTION/,/AUTHORITY SECTION/ { print $NF }' | awk '/^[0-9]/'))
           else
-               fatal "Local hostname given but neither 'avahi-resolve', 'dig' or 'drill' is available." $ERR_DNSBIN
+               fatal "Local hostname given but neither 'avahi-resolve', 'dig' nor 'drill' is available." $ERR_DNSBIN
           fi
+          [[ -z "$ip4" && "$DEBUG" -ge 1 ]] && echo ".local IP address requested but mDNS resolution failed" 1>&2
      fi
      if [[ -z "$ip4" ]] && "$HAS_DIG"; then
           ip4=$(filter_ip4_address $(dig +search $DIG_R +short +timeout=2 +tries=2 $noidnout -t a "$1" 2>/dev/null | awk '/^[0-9]/ { print $1 }'))
@@ -21135,13 +21136,17 @@ get_aaaa_record() {
                if "$HAS_AVAHIRESOLVE"; then
                     ip6=$(filter_ip6_address $(avahi-resolve -6 -n "$1" 2>/dev/null | awk '{ print $2 }'))
                elif "$HAS_DIG"; then
-                    ip6=$(filter_ip6_address $(dig $DIG_R @ff02::fb -p 5353 -t aaaa +short +notcp "$NODE"))
+                    ip6=$(filter_ip6_address $(dig $DIG_R @ff02::fb -p 5353 -t aaaa +short +notcp "$NODE" 2>/dev/null))
                elif "$HAS_DRILL"; then
-                    ip6=$(filter_ip6_address $(drill @ff02::fb -p 5353 "$1" | awk '/ANSWER SECTION/,/AUTHORITY SECTION/ { print $NF }' | awk '/^[0-9]/'))
+                    ip6=$(filter_ip6_address $(drill @ff02::fb -p 5353 "$1" 2>/dev/null | awk '/ANSWER SECTION/,/AUTHORITY SECTION/ { print $NF }' | awk '/^[0-9]/'))
                else
-                    fatal "Local hostname given but neither 'avahi-resolve', 'dig' or 'drill' is available." $ERR_DNSBIN
+                    fatal "Local hostname given but neither 'avahi-resolve', 'dig' nor 'drill' is available." $ERR_DNSBIN
                fi
-          elif "$HAS_DIG"; then
+               [[ -z "$ip6" && "$DEBUG" -ge 1 ]] && echo ".local IP address requested but mDNS resolution failed" 1>&2
+          fi
+     fi
+     if [[ -z "$ip6" ]]; then
+          if "$HAS_DIG"; then
                ip6=$(filter_ip6_address $(dig +search $DIG_R +short +timeout=2 +tries=2 $noidnout -t aaaa "$1" 2>/dev/null | awk '/^[0-9]/ { print $1 }'))
           elif "$HAS_HOST"; then
                ip6=$(filter_ip6_address $(host -t aaaa "$1" | awk '/address/ { print $NF }'))
