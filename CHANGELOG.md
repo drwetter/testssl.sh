@@ -3,44 +3,50 @@
 
 ### Features implemented / improvements in 3.2rcX
 
+* Rating (SSL Labs, not complete)
 * Extend Server (cipher) preference: always now in wide mode instead of running all ciphers in the end (per default)
 * Improved compatibility with OpenSSL 3.0
+* Improved compatibility with Open/LibreSSL versions not suppoting TLS 1.0-1.1 anymore
 * Renamed PFS/perfect forward secrecy --> FS/forward secrecy
+* Cipher list straightening
 * Improved mass testing
-* Align better colors of ciphers with standard cipherlists
-* Added several ciphers to colored ciphers
+* switched to multi-stage image with opensuse base to avoid musl libc issues
+* Btter align colors of ciphers with standard cipherlists
+* Several ciphers more colorized
 * Percent output char problem fixed
 * Several display/output fixes
 * BREACH check: list all compression methods and add brotli
 * Test for old winshock vulnerability
 * Test for STARTTLS injection vulnerabilities (SMTP, POP3, IMAP)
-* Security fix: DNS input
-* Don't use external pwd anymore
 * STARTTLS: XMPP server support
-* Code improvements to STARTTLS
-* Detect better when no STARTTLS is offered
-* Rating (SSL Labs, not complete)
+* Several code improvements to STARTTLS, also better detection when no STARTTLS is offered
+* STARTTLS on active directory service support
+* Security fixes: DNS and other input from servers
 * Don't penalize missing trust in rating when CA not in Java store
 * Added support for certificates with EdDSA signatures and public keys
+* Extract CA list shows supported certification authorities sent by the server
+* TLS 1.2 and TLS 1.3 sig algs added
+* Check for ffdhe groups
+* Show server supported signature algorithms
 * --add-ca can also now be a directory with \*.pem files
 * Warning of 398 day limit for certificates issued after 2020/9/1
 * Added environment variable for amount of attempts for ssl renegotiation check
 * Added --user-agent argument to support using a custom User Agent
 * Added --overwrite argument to support overwriting output files without warning
 * Headerflag X-XSS-Protection is now labeled as INFO
+* Strict parser for HSTS
+* DNS via proxy improvements
 * Client simulation runs in wide mode which is even better readable
 * Added --reqheader to support custom headers in HTTP requests
 * Test for support for RFC 8879 certificate compression
-* Check for ffdhe groups
 * New set of OpenSSL-bad binaries with STARTTLS xmpp-server
 * Save a few cycles for ROBOT
 * Provide a better verdict wrt to server order: Now per protocol and ciphers are
   weighted for each protocol
 * Remove "negotiated cipher / protocol"
-* Extract CA list shows supported certification authorities sent by the server
-* Show server supported signature algorithms
+* Deprecating --fast and --ssl-native (warning but still av)
 * Compatible to GNU grep 3.8
-* STARTTLS on active directory service works now
+* Don't use external pwd command anymore
 
 
 ### Features implemented / improvements in 3.0
