@@ -9,7 +9,7 @@ Full contribution, see git log.
 * David Cooper (main contributor)
   - Major extensions to socket support for all protocols
   - extended parsing of TLS ServerHello messages
-  - TLS 1.3 support (final and pre-final) with needed encrption/decryptions
+  - TLS 1.3 support (final and pre-final) with needed en/decryption
   - add several TLS extensions
   - Detection + output of multiple certificates
   - several cleanups of server certificate related stuff
@@ -94,7 +94,7 @@ Full contribution, see git log.
   - helped with avoiding accidental TCP fragmentation
 
 * Brennan Kinney
-  - refactor dockerfile: Change base Alpine (3.17) => openSUSE Leap (15.4)
+  - refactored multistage Dockerfiles: performance gain+address bugs/inconsistencies
 
 * Magnus Larsen
   - SSL Labs Rating
@@ -184,6 +184,9 @@ Full contribution, see git log.
 
 * @nvsofts (NV)
   - LibreSSL patch for GOST
+
+* @w4ntun
+  - fixed DNS via proxy
 
 Probably more I forgot to mention which did give me feedback, bug reports and helped one way or another.
 

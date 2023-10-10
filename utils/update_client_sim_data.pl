@@ -295,6 +295,12 @@ foreach my $client ( @$ssllabs ) {
 				push @curves, "X25519"; }
 			elsif ( $curve == 30 ) {
 				push @curves, "X448"; }
+			elsif ( $curve == 31 ) {
+				push @curves, "brainpoolP256r1tls13"; }
+			elsif ( $curve == 32 ) {
+				push @curves, "brainpoolP384r1tls13"; }
+			elsif ( $curve == 33 ) {
+				push @curves, "brainpoolP512r1tls13"; }
 		}
 		$sim->{ellipticCurves} = "curves+=(\"" . (join ":", @curves) . "\")";
 	}

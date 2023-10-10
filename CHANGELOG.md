@@ -1,24 +1,27 @@
 
 ## Change Log
 
-### Features implemented / improvements in 3.2rcX
+### Features implemented / improvements in 3.2
 
 * Rating (SSL Labs, not complete)
 * Extend Server (cipher) preference: always now in wide mode instead of running all ciphers in the end (per default)
+* Remove "negotiated cipher / protocol"
+* Provide a better verdict wrt to server order: Now per protocol and ciphers are weighted for each protocol
+* Switched to multi-stage docker image with opensuse base to avoid musl libc issues, performance gain also
 * Improved compatibility with OpenSSL 3.0
-* Improved compatibility with Open/LibreSSL versions not suppoting TLS 1.0-1.1 anymore
+* Improved compatibility with Open/LibreSSL versions not supporting TLS 1.0-1.1 anymore
 * Renamed PFS/perfect forward secrecy --> FS/forward secrecy
 * Cipher list straightening
 * Improved mass testing
-* switched to multi-stage image with opensuse base to avoid musl libc issues
-* Btter align colors of ciphers with standard cipherlists
+* Better align colors of ciphers with standard cipherlists
+* Save a few cycles for ROBOT
 * Several ciphers more colorized
 * Percent output char problem fixed
 * Several display/output fixes
 * BREACH check: list all compression methods and add brotli
 * Test for old winshock vulnerability
 * Test for STARTTLS injection vulnerabilities (SMTP, POP3, IMAP)
-* STARTTLS: XMPP server support
+* STARTTLS: XMPP server support, plus new set of OpenSSL-bad binaries
 * Several code improvements to STARTTLS, also better detection when no STARTTLS is offered
 * STARTTLS on active directory service support
 * Security fixes: DNS and other input from servers
@@ -39,14 +42,10 @@
 * Client simulation runs in wide mode which is even better readable
 * Added --reqheader to support custom headers in HTTP requests
 * Test for support for RFC 8879 certificate compression
-* New set of OpenSSL-bad binaries with STARTTLS xmpp-server
-* Save a few cycles for ROBOT
-* Provide a better verdict wrt to server order: Now per protocol and ciphers are
-  weighted for each protocol
-* Remove "negotiated cipher / protocol"
 * Deprecating --fast and --ssl-native (warning but still av)
 * Compatible to GNU grep 3.8
 * Don't use external pwd command anymore
+* Doesn't hang anymore when there's no local resolver
 
 
 ### Features implemented / improvements in 3.0

@@ -5,7 +5,7 @@
 [![Build Status](https://github.com/drwetter/testssl.sh/actions/workflows/test.yml/badge.svg)](https://github.com/drwetter/testssl.sh/actions/workflows/test.yml)
 [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/drwetter/testssl.sh?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 [![License](https://img.shields.io/github/license/drwetter/testssl.sh)](https://github.com/drwetter/testssl.sh/LICENSE)
-[![Docker](https://img.shields.io/docker/pulls/drwetter/testssl.sh)](https://github.com/drwetter/testssl.sh/blob/3.1dev/Dockerfile.md)
+[![Docker](https://img.shields.io/docker/pulls/drwetter/testssl.sh)](https://github.com/drwetter/testssl.sh/blob/3.2/Dockerfile.md)
 
 `testssl.sh` is a free command line tool which checks a server's service on
 any port for the support of TLS/SSL ciphers, protocols as well as some
@@ -49,11 +49,12 @@ Update notification here or @ [mastodon](https://infosec.exchange/@testssl) (old
 
 ### Installation
 
-You can download testssl.sh branch 3.1dev just by cloning this git repository:
+You can download testssl.sh branch 3.2 just by cloning this git repository:
 
     git clone --depth 1 https://github.com/drwetter/testssl.sh.git
 
-Think of 3.1dev like a rolling release, see below. For the stable version help yourself by downloading the [ZIP](https://codeload.github.com/drwetter/testssl.sh/zip/3.0.4) or [tar.gz](https://codeload.github.com/drwetter/testssl.sh/tar.gz/3.0.4) archive. Just ``cd`` to the directory created (=INSTALLDIR) and run it off there.
+3.2 is now the latest branch which evolved from 3.1dev. It's in the release candidate phase.
+For the former stable version help yourself by downloading the [ZIP](https://codeload.github.com/drwetter/testssl.sh/zip/v3.0.8) or [tar.gz](https://codeload.github.com/drwetter/testssl.sh/tar.gz/v3.0.8) archive. Just ``cd`` to the directory created (=INSTALLDIR) and run it off there.
 
 #### Docker
 
@@ -68,12 +69,12 @@ Or if you have cloned this repo you also can just ``cd`` to the INSTALLDIR and r
 docker build . -t imagefoo && docker run --rm -t imagefoo example.com
 ```
 
-For more please consult [Dockerfile.md](https://github.com/drwetter/testssl.sh/blob/3.1dev/Dockerfile.md).
+For more please consult [Dockerfile.md](https://github.com/drwetter/testssl.sh/blob/3.2/Dockerfile.md).
 
 
 ### Status
 
-We're currently in the development phase, version 3.1dev. 3.1dev will eventually become 3.2. Bigger features are developed in a separate branch before merged into 3.1dev to avoid hiccups or inconsistencies. Albeit we try to keep 3.1dev as solid as possible things will certainly change in 3.1dev. Think of the 3.1dev branch like a rolling release. So if you need stability the 3.0 branch is better for you.
+We're currently in the release candidate phase for version 3.2. Bigger features will be developed in a separate branch before merged into a 3.3dev to avoid hiccups or inconsistencies.
 
 Version 3.0.X receives bugfixes, labeled as 3.0.1, 3.0.2 and so on. This will happen until 3.2 is released.
 
@@ -87,7 +88,7 @@ Support for 2.9.5 has been dropped. Supported is >= 3.0.x only.
 
 ### Contributing
 
-Contributions are welcome! See [CONTRIBUTING.md](https://github.com/drwetter/testssl.sh/blob/3.1dev/CONTRIBUTING.md) for details. Please also have a look at the [Coding Convention](https://github.com/drwetter/testssl.sh/blob/3.1dev/Coding_Convention.md).
+Contributions are welcome! See [CONTRIBUTING.md](https://github.com/drwetter/testssl.sh/blob/3.2/CONTRIBUTING.md) for details. Please also have a look at the [Coding Convention](https://github.com/drwetter/testssl.sh/blob/3.2/Coding_Convention.md).
 
 ### Bug reports
 
@@ -113,9 +114,6 @@ Please address questions not specifically to the code of testssl.sh to the respe
 
 #### Mass scanner w parallel scans and elastic searching the results
 * https://github.com/TKCERT/testssl.sh-masscan
-
-#### Another ready-to-go docker image is at:
-* https://quay.io/repository/jumanjiman/testssl
 
 #### Privacy checker using testssl.sh
 * https://privacyscore.org

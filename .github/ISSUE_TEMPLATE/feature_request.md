@@ -11,7 +11,7 @@ Feel free to remove this line but please stick to the template. Not filling out 
 -->
 
 **Which version are you referring to**
-3.0.x or 3.1dev? We might close this right away otherwise.
+3.0.x or 3.2?
 
 
 **Please check this repo whether this is a known feature request**
