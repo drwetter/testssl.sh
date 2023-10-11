@@ -21095,7 +21095,7 @@ get_a_record() {
           else
                fatal "Local hostname given but neither 'avahi-resolve', 'dig' nor 'drill' is available." $ERR_DNSBIN
           fi
-          [[ -z "$ip4" ]] && debugme echo ".local IP address requested but mDNS resolution failed"
+          [[ -z "$ip4" ]] && debugme echo ".local IP address requested but mDNS resolution (IPv4) failed"
      fi
      if [[ -z "$ip4" ]] && "$HAS_DIG"; then
           ip4=$(filter_ip4_address $(dig +search $DIG_R +short +timeout=2 +tries=2 $noidnout -t a "$1" 2>/dev/null | awk '/^[0-9]/ { print $1 }'))
@@ -21142,7 +21142,7 @@ get_aaaa_record() {
                else
                     fatal "Local hostname given but neither 'avahi-resolve', 'dig' nor 'drill' is available." $ERR_DNSBIN
                fi
-               [[ -z "$ip6" ]] && debugme echo ".local IP address requested but mDNS resolution failed"
+               [[ -z "$ip6" ]] && debugme echo ".local IP address requested but mDNS resolution (IPv6) failed"
           fi
      fi
      if [[ -z "$ip6" ]]; then
