@@ -11,7 +11,7 @@ ARG INSTALL_ROOT
 # /etc/os-release provides $VERSION_ID below.
 # We don't need the openh264.repo and the non-oss repos, just costs build time (repo caches).
 # Also we need to remove the util_linux RPM to /really/ make sure busybox-util-linux gets installed.
-# And we need to update, see PR #2424
+# And we need to run zypper update, see all PR #2424.
 RUN source /etc/os-release \
   && rm -f /etc/zypp/repos.d/repo-openh264.repo /etc/zypp/repos.d/repo-non-oss.repo \
   && export ZYPPER_OPTIONS=( --releasever "${VERSION_ID}" --installroot "${INSTALL_ROOT}" --cache-dir "${CACHE_ZYPPER}" ) \
