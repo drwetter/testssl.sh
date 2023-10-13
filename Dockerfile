@@ -6,12 +6,20 @@ ARG INSTALL_ROOT=/rootfs
 FROM opensuse/leap:${LEAP_VERSION} as builder
 ARG CACHE_ZYPPER=/tmp/cache/zypper
 ARG INSTALL_ROOT
-# /etc/os-release provides $VERSION_ID
+
+
+# /etc/os-release provides $VERSION_ID below.
+# We don't need the openh264.repo and the non-oss repos, just costs build time (repo caches).
+# Also we need to remove the util_linux RPM to /really/ make sure busybox-util-linux gets installed.
+# And we need to update, see PR #2424
 RUN source /etc/os-release \
+  && rm -f /etc/zypp/repos.d/repo-openh264.repo /etc/zypp/repos.d/repo-non-oss.repo \
   && export ZYPPER_OPTIONS=( --releasever "${VERSION_ID}" --installroot "${INSTALL_ROOT}" --cache-dir "${CACHE_ZYPPER}" ) \
   && zypper "${ZYPPER_OPTIONS[@]}" --gpg-auto-import-keys refresh \
+  && rpm -e util-linux --nodeps \
   && zypper "${ZYPPER_OPTIONS[@]}" --non-interactive install --download-in-advance --no-recommends \
        bash procps grep gawk sed coreutils busybox-util-linux busybox-vi ldns libidn2-0 socat openssl curl \
+  && zypper up -y \
   && zypper "${ZYPPER_OPTIONS[@]}" clean --all
 ## Cleanup (reclaim approx 13 MiB):
 # None of this content should be relevant to the container:
