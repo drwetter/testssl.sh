@@ -23,7 +23,7 @@ Only you see the result. You also can use it internally on your LAN. Except DNS 
 
 Testssl.sh is out of the box portable: it runs under any Unix-like stack: Linux, \*BSD, MacOS X, WSL=Windows Subsystem for Linux, Cygwin and MSYS2.
 
-`bash` is a prerequisite, also version 3 is still supported. Standard utilities like `awk`, `sed`, `tr`, `head`, `tail`, `dirname`, `dd`, `cat`, `grep`, `wc`, `date`, `ps`, and `kill` are also needed. This can be of a BSD, System 5 or GNU flavor whereas `grep` from System V is not yet supported. Additionally, one of `dig`, `host`, `drill` or `nslookup` is also required.
+`bash` is a prerequisite, also version 3.2 is still supported. Standard utilities like `awk`, `sed`, `tr`, `head`, `tail`, `dirname`, `dd`, `cat`, `grep`, `wc`, `date`, `ps`, and `kill` are also needed. This can be of a BSD, System 5 or GNU flavor whereas `grep` from System V is not yet supported. Additionally, one of `dig`, `host`, `drill` or `nslookup` is also required.
 
 Any OpenSSL or LibreSSL version is needed as a helper. Unlike previous versions of testssl.sh almost every check is done via (TCP) sockets. In addition statically linked OpenSSL binaries for major operating systems are supplied in `./bin/`.
 
