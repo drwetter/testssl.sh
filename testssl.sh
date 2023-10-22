@@ -7612,6 +7612,8 @@ determine_trust() {
      esac
      debugme tmln_out
 
+     # Enable nullglob to prevent *.pem globs from breaking when there are no CA bundle files.
+     shopt -s nullglob
      # if you run testssl.sh from a different path /you can set either TESTSSL_INSTALL_DIR or CA_BUNDLES_PATH to find the CA BUNDLES
      if [[ -z "$CA_BUNDLES_PATH" ]]; then
           ca_bundles="$TESTSSL_INSTALL_DIR/etc/*.pem"
@@ -7649,6 +7651,8 @@ determine_trust() {
           fi
           ((i++))
      done
+     # Disable nullglob to avoid affecting the rest of the script.
+     shopt -u nullglob
      num_ca_bundles=$((i - 1))
      debugme tm_out " "
      if "$all_ok"; then
