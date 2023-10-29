@@ -71,8 +71,8 @@ Compilation instructions
 If you want to compile OpenSSL yourself, here are the instructions:
 
 1.)
-    git git clone https://github.com/drwetter/openssl-1.0.2-bad
-    cd openssl
+    git clone https://github.com/drwetter/openssl-1.0.2.bad
+    cd openssl-1.0.2.bad
 
 
 2.) configure the damned thing. Options I used (see https://github.com/drwetter/testssl.sh/blob/master/utils/make-openssl.sh)
