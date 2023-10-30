@@ -7094,7 +7094,7 @@ determine_trust() {
           ca_bundles="$CA_BUNDLES_PATH/*.pem"
      fi
      for bundle_fname in $ca_bundles; do
-          certificate_file[i]=$(basename ${bundle_fname//.pem})
+          certificate_file[i]=$(basename ${bundle_fname//.pem 2>/dev/null})
           if [[ ! -r $bundle_fname ]]; then
                prln_warning "\"$bundle_fname\" cannot be found / not readable"
                return 1
