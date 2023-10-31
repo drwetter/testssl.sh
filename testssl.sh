@@ -17325,19 +17325,19 @@ run_breach() {
 
                # Final verdict (if not happened preemptively before). We reuse $detected_compression here
                detected_compression=""
-               if [[ ${has_compression[@]} =~ warn ]]; then
+               if [[ ${has_compression[*]} =~ warn ]]; then
                     # warn_empty / warn_stalled
-                    if [[ ${has_compression[@]} =~ warn_empty ]]; then
-                         pr_warning "At least 1/4 checks failed (HTTP header request was empty, debug: ${has_compression[@]}"
-                         out ", debug: ${has_compression[@]})"
-                         fileout "$jsonID" "WARN" "Test failed as HTTP response was empty, debug: ${has_compression[@]}" "$cve" "$cwe"
+                    if [[ ${has_compression[*]} =~ warn_empty ]]; then
+                         pr_warning "At least 1/4 checks failed (HTTP header request was empty, debug: ${has_compression[*]}"
+                         out ", debug: ${has_compression[*]})"
+                         fileout "$jsonID" "WARN" "Test failed as HTTP response was empty, debug: ${has_compression[*]}" "$cve" "$cwe"
                     else # warn_stalled
                          pr_warning "At least 1/4 checks failed (HTTP header request stalled and was terminated"
-                         out ", debug: ${has_compression[@]})"
+                         out ", debug: ${has_compression[*]})"
                          fileout "$jsonID" "WARN" "Test failed as HTTP request stalled and was terminated" "$cve" "$cwe"
                     fi
                else
-                    for c in ${has_compression[@]}; do
+                    for c in "${has_compression[@]}"; do
                          if [[ $c =~ yes ]]; then
                               detected_compression+="${c%:*} "
                          fi
@@ -17348,7 +17348,7 @@ run_breach() {
                     outln "${spaces}${when_makesense}"
                     fileout "$jsonID" "MEDIUM" "potentially VULNERABLE, $detected_compression HTTP compression detected $disclaimer" "$cve" "$cwe" "$hint"
                fi
-               debugme outln "${spaces}has_compression: ${has_compression[@]}"
+               debugme outln "${spaces}has_compression: ${has_compression[*]}"
                ;;
      esac
 
@@ -18743,7 +18743,7 @@ run_winshock() {
           # Check whether there are any TLS extension which should not be available under <= Windows 2012 R2
           for tls_ext in $TLS_EXTENSIONS; do
                # We use the whole array, got to be careful when the array becomes bigger (unintended match)
-               if [[ ${forbidden_tls_ext[@]} =~ $tls_ext ]]; then
+               if [[ ${forbidden_tls_ext[*]} =~ $tls_ext ]]; then
                     pr_svrty_best "not vulnerable (OK)"; outln " - TLS extension $tls_ext detected"
                     fileout "$jsonID" "OK" "not vulnerable  - TLS extension $tls_ext detected" "$cve" "$cwe"
                     return 0
@@ -23134,7 +23134,7 @@ debug_globals() {
 set_skip_tests() {
      local t
 
-     for t in ${SKIP_TESTS[@]} ; do
+     for t in "${SKIP_TESTS[@]}" ; do
           t="do_${t}"
           # declare won't do it here --> local scope
           eval "$t"=false
@@ -23318,7 +23318,7 @@ parse_cmd_line() {
                     # then we need to make sure we catch --ids-friendly. Normally we do not,
                     # see #1717.  The following statement makes sure. In the do-while + case-esac
                     # loop it will be execute again, but it does not hurt
-                    if [[ "${CMDLINE_ARRAY[@]}" =~ --ids-friendly ]]; then
+                    if [[ "${CMDLINE_ARRAY[*]}" =~ --ids-friendly ]]; then
                          OFFENSIVE=false
                     fi
                     do_vulnerabilities=true
