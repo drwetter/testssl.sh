@@ -22182,7 +22182,7 @@ datebanner() {
      local scan_time_f=""
      local node_banner=""
 
-     if [[ -n "PROXY" ]] && $DNS_VIA_PROXY;then
+     if [[ -n "$PROXY" ]] && "$DNS_VIA_PROXY"; then
             node_banner="$NODE:$PORT"
      else
             node_banner="$NODEIP:$PORT ($NODE)"
