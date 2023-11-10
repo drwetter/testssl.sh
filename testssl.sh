@@ -9491,6 +9491,14 @@ certificate_info() {
 
      fileout "cert_trust${json_postfix}" "$trust_sni_finding" "${trustfinding}${trustfinding_nosni}"
 
+     if [[ "$trust_sni" =~ ^(2|6|8|9|10)$ ]] || [[ "$trust_nosni" =~ ^(2|6|8|9|10)$ ]]; then
+          out "${spaces}"
+          pr_svrty_low "wildcard certificate" ; outln " could be problematic, see other hosts at"
+          outln "${spaces}https://search.censys.io/search?resource=hosts&virtual_hosts=INCLUDE&q=$cert_fingerprint_sha2"
+          fileout "cert_trust${json_postfix}_wildcard" "LOW" "trust is via wildcard"
+     fi
+
+
      out "$indent"; pr_bold " Chain of trust"; out "               "
      jsonID="cert_chain_of_trust"
      # Looks for CA's that have their trust removed by the first part of their Organization Name, add multiple with ^(TrustCor Systems|WoSign) etc.
