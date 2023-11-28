@@ -17068,11 +17068,21 @@ run_renego() {
                          else
                               (for ((i=0; i < ssl_reneg_attempts; i++ )); do echo R; sleep 1; done) | \
                                    $OPENSSL s_client $(s_client_options "$proto $legacycmd $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>>$ERRFILE
-                              case $? in
+			      tmp_result=$?
+			      # If we are here, we have done two successfull renegotiation (-2) and do the loop
+			      loop_reneg=$(($(grep -a '^RENEGOTIATING' $ERRFILE | wc -l)-2))
+			      # If we got less than 2/3 successfull attemps during the loop with 1s pause, we are in precence of exponential backoff.
+			      if [[ $loop_reneg -le $(($ssl_reneg_attempts*2/3)) ]]; then
+				   tmp_result=2
+                              fi
+                              case $tmp_result in
                                    0) pr_svrty_high "VULNERABLE (NOT ok)"; outln ", DoS threat ($ssl_reneg_attempts attempts)"
                                       fileout "$jsonID" "HIGH" "VULNERABLE, DoS threat" "$cve" "$cwe" "$hint"
                                       ;;
                                    1) pr_svrty_good "not vulnerable (OK)"; outln " -- mitigated (disconnect within $ssl_reneg_attempts)"
+                                      fileout "$jsonID" "OK" "not vulnerable, mitigated" "$cve" "$cwe"
+                                      ;;
+                                   2) pr_svrty_good "not vulnerable (OK)"; outln " -- mitigated ($loop_reneg successful reneg within ${ssl_reneg_attempts} in ${ssl_reneg_attempts}s)"
                                       fileout "$jsonID" "OK" "not vulnerable, mitigated" "$cve" "$cwe"
                                       ;;
                                    *) prln_warning "FIXME (bug): $sec_client_renego ($ssl_reneg_attempts tries)"
