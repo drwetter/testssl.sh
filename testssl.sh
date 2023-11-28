@@ -17069,9 +17069,9 @@ run_renego() {
                               (for ((i=0; i < ssl_reneg_attempts; i++ )); do echo R; sleep 1; done) | \
                                    $OPENSSL s_client $(s_client_options "$proto $legacycmd $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>>$ERRFILE
 			      tmp_result=$?
-			      # If we are here, we have done two successfull renegotiation (-2) and do the loop
+			      # If we are here, we have done two successful renegotiation (-2) and do the loop
 			      loop_reneg=$(($(grep -a '^RENEGOTIATING' $ERRFILE | wc -l)-2))
-			      # If we got less than 2/3 successfull attemps during the loop with 1s pause, we are in precence of exponential backoff.
+			      # If we got less than 2/3 successful attempts during the loop with 1s pause, we are in presence of exponential backoff.
 			      if [[ $loop_reneg -le $(($ssl_reneg_attempts*2/3)) ]]; then
 				   tmp_result=2
                               fi
