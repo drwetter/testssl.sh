@@ -20941,6 +20941,11 @@ parse_hn_port() {
           grep -q ':' <<< "$NODE" && \
                PORT=$(sed 's/^.*\://' <<< "$NODE") && NODE=$(sed 's/\:.*$//' <<< "$NODE")
      fi
+     # Check if $PORT is a service name (and not a number). If so, convert to number via getent
+     if ! [[ $PORT =~ ^[0-9]+$ ]]; then
+          # not a number, so convert to number: get the port number in getent
+          PORT=$(getent services $PORT | sed -E 's/.*[[:space:]]+([[:digit:]]+)\/.*$/\1/')
+     fi
 
      # We check for non-ASCII chars now. If there are some we'll try to convert it if IDN/IDN2 is installed
      # If not, we'll continue. Hoping later that dig can use it. If not the error handler will tell
