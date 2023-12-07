@@ -17036,6 +17036,13 @@ run_renego() {
           fileout "$jsonID" "WARN" "client x509-based authentication prevents this from being tested"
           sec_client_renego=1
      else
+	  # We will need $ERRFILE for mitigation detection
+	  if [[ $ERRFILE =~ dev.null ]]; then
+	       ERRFILE=$TEMPDIR/errorfile.txt || exit $ERR_FCREATE
+	       restore_errfile=1
+	  else
+	       restore_errfile=0
+	  fi
           # We need up to two tries here, as some LiteSpeed servers don't answer on "R" and block. Thus first try in the background
           # msg enables us to look deeper into it while debugging
           echo R | $OPENSSL s_client $(s_client_options "$proto $BUGS $legacycmd $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>>$ERRFILE &
@@ -17110,7 +17117,9 @@ run_renego() {
      #
      # https://www.openssl.org/news/vulnerabilities.html#y2009. It can only be tested with OpenSSL <=0.9.8k
      # Insecure Client-Initiated Renegotiation is missing ==> sockets. When we complete the handshake ;-)
-
+     if [[ $restore_errfile -eq 1 ]]; then
+	  ERRFILE="/dev/null"
+     fi
      tmpfile_handle ${FUNCNAME[0]}.txt
      return $ret
 }
