@@ -20520,7 +20520,7 @@ maketempf() {
      fi
      ls "$TEMPDIR/" 2>/dev/null || fatal "temporary directory needed not readable" $ERR_FCREATE
      TMPFILE=$TEMPDIR/tempfile.txt
-     touch $TEMPFILE 2>/dev/null || fatal "temporary directory needed not writeable" $ERR_FCREATE
+     touch $TMPFILE 2>/dev/null || fatal "temporary directory needed not writeable" $ERR_FCREATE
      if [[ "$DEBUG" -eq 0 ]]; then
           ERRFILE="/dev/null"
      else
