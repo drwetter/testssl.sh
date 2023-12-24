@@ -31,8 +31,8 @@ If you want to check trust against e.g. a company internal CA you need to use ``
 
 * ``curves-mapping.txt`` contains information about all of the elliptic curves defined by IANA
 
-* ``ca_hashes.txt`` is used for HPKP test in order to have a fast comparison with known CAs. Use
-   ``~/utils/create_ca_hashes.sh`` for an update
+* ``ca_hashes.txt`` is used for HPKP test in order to have a fast comparison with known CAs. You must
+   use ``~/utils/create_ca_hashes.sh`` for every update
 
 * ``common-primes.txt`` is used for LOGJAM and the PFS section
 
