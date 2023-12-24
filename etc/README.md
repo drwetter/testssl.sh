@@ -36,8 +36,8 @@ Please note that the licenses of the certificate stores might not be GPLv2 in al
 
 * ``curves-mapping.txt`` contains information about all of the elliptic curves defined by IANA
 
-* ``ca_hashes.txt`` is used for HPKP test in order to have a fast comparison with known CAs. Use
-   ``~/utils/create_ca_hashes.sh`` for an update
+* ``ca_hashes.txt`` is used for HPKP test in order to have a fast comparison with known CAs. You MUST
+   use ``~/utils/create_ca_hashes.sh`` for every update
 
 * ``common-primes.txt`` is used for LOGJAM and the PFS section
 
