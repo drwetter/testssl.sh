@@ -17555,7 +17555,9 @@ maketempf() {
           fi
           TEMPDIR=$(mktemp -d "$PWD/testssl.XXXXXX") || exit $ERR_FCREATE
      fi
-     TMPFILE=$TEMPDIR/tempfile.txt || exit $ERR_FCREATE
+     ls "$TEMPDIR/" 2>/dev/null || fatal "temporary directory needed not readable" $ERR_FCREATE
+     TMPFILE=$TEMPDIR/tempfile.txt
+     touch $TMPFILE 2>/dev/null || fatal "temporary directory needed not writeable" $ERR_FCREATE
      if [[ "$DEBUG" -eq 0 ]]; then
           ERRFILE="/dev/null"
      else
