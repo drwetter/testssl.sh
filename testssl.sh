@@ -9110,7 +9110,7 @@ certificate_info() {
                     json_rating="OK"; json_msg="$short_keyAlgo $cert_keysize bits"
                else
                     out "keysize: $cert_keysize (not expected, FIXME)"
-                    json_rating="DEBUG"; json_msg=" $cert_keysize bits (not expected)"
+                    json_rating="DEBUG"; json_msg=" $short_keyAlgo $cert_keysize bits (not expected)"
                     ((ret++))
                fi
                out " bits"
@@ -9139,7 +9139,7 @@ certificate_info() {
                     out " bits"
                else
                     pr_warning "weird key size: $cert_keysize bits"; out " (could cause compatibility problems)"
-                    json_rating="WARN"; json_msg="$cert_keysize bits (Odd)"
+                    json_rating="WARN"; json_msg="$short_keyAlgo $cert_keysize bits (Odd)"
                     ((ret++))
                fi
 
