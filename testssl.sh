@@ -9882,7 +9882,7 @@ certificate_info() {
           fileout "intermediate_cert <#${i}>${json_postfix}" "INFO" "$(pem_to_one_line "$cert")"
           fileout "intermediate_cert_fingerprintSHA256 <#${i}>${json_postfix}" "INFO" "$(determine_cert_fingerprint_serial "$cert" "-fingerprint -sha256")"
 
-          intermediate_certs_txt[i]="$($OPENSSL x509 -text -noout 2>/dev/null <<< "$cert")"
+          intermediate_certs_txt[i]="$($OPENSSL x509 -text -nameopt utf8 -noout 2>/dev/null <<< "$cert")"
 
           # We don't need every value here. For the sake of being consistent here we add the rest
           IFS=',' read -r startdate enddate diffseconds days2expire yearstart < <(determine_dates_certificate "${intermediate_certs_txt[i]}")
