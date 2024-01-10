@@ -71,6 +71,11 @@ docker build . -t imagefoo && docker run --rm -t imagefoo example.com
 
 For more please consult [Dockerfile.md](https://github.com/drwetter/testssl.sh/blob/3.2/Dockerfile.md).
 
+### No Warranty
+
+Usage of the program is without any warranty. Use it at yor own risk. 
+
+Testssl.sh is intended to be used as a standalone CLI tool. While we tried to apply best practise security measures, we can't guarantee that the program is without any vulnerabilities. Running as a service may pose security risks and you're recommended to apply additional security measures.
 
 ### Status
 
