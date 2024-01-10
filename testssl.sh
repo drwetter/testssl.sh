@@ -17036,13 +17036,13 @@ run_renego() {
           fileout "$jsonID" "WARN" "client x509-based authentication prevents this from being tested"
           sec_client_renego=1
      else
-	  # We will need $ERRFILE for mitigation detection
-	  if [[ $ERRFILE =~ dev.null ]]; then
-	       ERRFILE=$TEMPDIR/errorfile.txt || exit $ERR_FCREATE
-	       restore_errfile=1
-	  else
-	       restore_errfile=0
-	  fi
+          # We will need $ERRFILE for mitigation detection
+          if [[ $ERRFILE =~ dev.null ]]; then
+               ERRFILE=$TEMPDIR/errorfile.txt || exit $ERR_FCREATE
+               restore_errfile=1
+          else
+               restore_errfile=0
+          fi
           # We need up to two tries here, as some LiteSpeed servers don't answer on "R" and block. Thus first try in the background
           # msg enables us to look deeper into it while debugging
           echo R | $OPENSSL s_client $(s_client_options "$proto $BUGS $legacycmd $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>>$ERRFILE &
@@ -17075,12 +17075,12 @@ run_renego() {
                          else
                               (for ((i=0; i < ssl_reneg_attempts; i++ )); do echo R; sleep 1; done) | \
                                    $OPENSSL s_client $(s_client_options "$proto $legacycmd $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>>$ERRFILE
-			      tmp_result=$?
-			      # If we are here, we have done two successful renegotiation (-2) and do the loop
-			      loop_reneg=$(($(grep -a '^RENEGOTIATING' $ERRFILE | wc -l)-2))
-			      # If we got less than 2/3 successful attempts during the loop with 1s pause, we are in presence of exponential backoff.
-			      if [[ $loop_reneg -le $(($ssl_reneg_attempts*2/3)) ]]; then
-				   tmp_result=2
+                              tmp_result=$?
+                              # If we are here, we have done two successful renegotiation (-2) and do the loop
+                              loop_reneg=$(($(grep -ac '^RENEGOTIATING' $ERRFILE )-2))
+                              # If we got less than 2/3 successful attempts during the loop with 1s pause, we are in presence of exponential backoff.
+                              if [[ $loop_reneg -le $(($ssl_reneg_attempts*2/3)) ]]; then
+                                   tmp_result=2
                               fi
                               case $tmp_result in
                                    0) pr_svrty_high "VULNERABLE (NOT ok)"; outln ", DoS threat ($ssl_reneg_attempts attempts)"
@@ -17118,7 +17118,7 @@ run_renego() {
      # https://www.openssl.org/news/vulnerabilities.html#y2009. It can only be tested with OpenSSL <=0.9.8k
      # Insecure Client-Initiated Renegotiation is missing ==> sockets. When we complete the handshake ;-)
      if [[ $restore_errfile -eq 1 ]]; then
-	  ERRFILE="/dev/null"
+          ERRFILE="/dev/null"
      fi
      tmpfile_handle ${FUNCNAME[0]}.txt
      return $ret
