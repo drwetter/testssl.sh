@@ -17074,13 +17074,23 @@ run_renego() {
                               fileout "$jsonID" "MEDIUM" "VULNERABLE, potential DoS threat" "$cve" "$cwe" "$hint"
                          else
                               (for ((i=0; i < ssl_reneg_attempts; i++ )); do echo R; sleep 1; done) | \
-                                   $OPENSSL s_client $(s_client_options "$proto $legacycmd $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>>$ERRFILE
+                                   $OPENSSL s_client $(s_client_options "$proto $legacycmd $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>>$ERRFILE &
+                              pid=$!
+                              ( sleep $(($ssl_reneg_attempts*3)) && kill $pid && touch $TEMPDIR/was_killed ) >&2 2>/dev/null &
+                              watcher=$!
+                              # Trick to get the return value of the openssl command, output redirection and a timeout. Yes, somme target hang/block after some tries.  
+                              wait $pid && pkill -HUP -P $watcher 
                               tmp_result=$?
                               # If we are here, we have done two successful renegotiation (-2) and do the loop
                               loop_reneg=$(($(grep -ac '^RENEGOTIATING' $ERRFILE )-2))
-                              # If we got less than 2/3 successful attempts during the loop with 1s pause, we are in presence of exponential backoff.
-                              if [[ $loop_reneg -le $(($ssl_reneg_attempts*2/3)) ]]; then
-                                   tmp_result=2
+                              if [[ -f $TEMPDIR/was_killed ]]; then
+                                   tmp_result=3
+                                   rm -f $TEMPDIR/was_killed
+                              else
+                                   # If we got less than 2/3 successful attempts during the loop with 1s pause, we are in presence of exponential backoff.
+                                   if [[ $loop_reneg -le $(($ssl_reneg_attempts*2/3)) ]]; then
+                                        tmp_result=2
+                                   fi
                               fi
                               case $tmp_result in
                                    0) pr_svrty_high "VULNERABLE (NOT ok)"; outln ", DoS threat ($ssl_reneg_attempts attempts)"
@@ -17090,6 +17100,9 @@ run_renego() {
                                       fileout "$jsonID" "OK" "not vulnerable, mitigated" "$cve" "$cwe"
                                       ;;
                                    2) pr_svrty_good "not vulnerable (OK)"; outln " -- mitigated ($loop_reneg successful reneg within ${ssl_reneg_attempts} in ${ssl_reneg_attempts}s)"
+                                      fileout "$jsonID" "OK" "not vulnerable, mitigated" "$cve" "$cwe"
+                                      ;;
+                                   3) pr_svrty_good "not vulnerable (OK)"; outln " -- mitigated ($loop_reneg successful reneg within ${ssl_reneg_attempts} in $((${ssl_reneg_attempts}*3))s(timeout))"
                                       fileout "$jsonID" "OK" "not vulnerable, mitigated" "$cve" "$cwe"
                                       ;;
                                    *) prln_warning "FIXME (bug): $sec_client_renego ($ssl_reneg_attempts tries)"
