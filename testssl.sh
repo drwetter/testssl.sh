@@ -232,7 +232,7 @@ fi
 DISPLAY_CIPHERNAMES="openssl"           # display OpenSSL ciphername (but both OpenSSL and RFC ciphernames in wide mode)
 declare UA_STD="TLS tester from $SWURL"
 declare -r UA_SNEAKY="Mozilla/5.0 (X11; Linux x86_64; rv:94.0) Gecko/20100101 Firefox/94.0"
-SSL_RENEG_ATTEMPTS=${SSL_RENEG_ATTEMPTS:-6}       # number of times to check SSL Renegotiation
+SSL_RENEG_ATTEMPTS=${SSL_RENEG_ATTEMPTS:-10}       # number of times to check SSL Renegotiation
 
 ########### Initialization part, further global vars just being declared here
 #
@@ -17067,6 +17067,7 @@ run_renego() {
                          # Mitigations (default values) for:
                          # - node.js allows 3x R and then blocks. So then 4x should be tested.
                          # - F5 BIG-IP ADS allows 5x R and then blocks. So then 6x should be tested.
+                         # - Stormshield allows 9x and then blocks. So then 10x should be tested.
                          # This way we save a couple seconds as we weeded out the ones which are more robust
                          # Amount of times tested before breaking is set in SSL_RENEG_ATTEMPTS.
                          if [[ $SERVICE != HTTP ]]; then
