@@ -233,6 +233,7 @@ DISPLAY_CIPHERNAMES="openssl"           # display OpenSSL ciphername (but both O
 declare UA_STD="TLS tester from $SWURL"
 declare -r UA_SNEAKY="Mozilla/5.0 (X11; Linux x86_64; rv:94.0) Gecko/20100101 Firefox/94.0"
 SSL_RENEG_ATTEMPTS=${SSL_RENEG_ATTEMPTS:-10}       # number of times to check SSL Renegotiation
+SSL_RENEG_WAIT=${SSL_RENEG_WAIT:-0.25}   # time between SSL Renegotiation checks
 
 ########### Initialization part, further global vars just being declared here
 #
@@ -16952,6 +16953,7 @@ run_renego() {
      local hint=""
      local jsonID=""
      local ssl_reneg_attempts=$SSL_RENEG_ATTEMPTS
+     local ssl_reneg_wait=$SSL_RENEG_WAIT
      # In cases where there's no default host configured we need SNI here as openssl then would return otherwise an error and the test will fail
 
      "$HAS_TLS13" && [[ -z "$proto" ]] && proto="-no_tls1_3"
@@ -17074,7 +17076,7 @@ run_renego() {
                               pr_svrty_medium "VULNERABLE (NOT ok)"; outln ", potential DoS threat"
                               fileout "$jsonID" "MEDIUM" "VULNERABLE, potential DoS threat" "$cve" "$cwe" "$hint"
                          else
-                              (for ((i=0; i < ssl_reneg_attempts; i++ )); do echo R; sleep 1; done) | \
+                              (for ((i=0; i < ssl_reneg_attempts; i++ )); do echo R; sleep $ssl_reneg_wait; done) | \
                                    $OPENSSL s_client $(s_client_options "$proto $legacycmd $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>>$ERRFILE &
                               pid=$!
                               ( sleep $(($ssl_reneg_attempts*3)) && kill $pid && touch $TEMPDIR/was_killed ) >&2 2>/dev/null &
@@ -17100,10 +17102,12 @@ run_renego() {
                                    1) pr_svrty_good "not vulnerable (OK)"; outln " -- mitigated (disconnect within $ssl_reneg_attempts)"
                                       fileout "$jsonID" "OK" "not vulnerable, mitigated" "$cve" "$cwe"
                                       ;;
-                                   2) pr_svrty_good "not vulnerable (OK)"; outln " -- mitigated ($loop_reneg successful reneg within ${ssl_reneg_attempts} in ${ssl_reneg_attempts}s)"
+                                   2) pr_svrty_good "not vulnerable (OK)"; \
+                                           outln " -- mitigated ($loop_reneg successful reneg within ${ssl_reneg_attempts} in ${ssl_reneg_attempts}x${ssl_reneg_wait}s)"
                                       fileout "$jsonID" "OK" "not vulnerable, mitigated" "$cve" "$cwe"
                                       ;;
-                                   3) pr_svrty_good "not vulnerable (OK)"; outln " -- mitigated ($loop_reneg successful reneg within ${ssl_reneg_attempts} in $((${ssl_reneg_attempts}*3))s(timeout))"
+                                   3) pr_svrty_good "not vulnerable (OK)"; \
+                                           outln " -- mitigated ($loop_reneg successful reneg within ${ssl_reneg_attempts} in $((${ssl_reneg_attempts}*3))s(timeout))"
                                       fileout "$jsonID" "OK" "not vulnerable, mitigated" "$cve" "$cwe"
                                       ;;
                                    *) prln_warning "FIXME (bug): $sec_client_renego ($ssl_reneg_attempts tries)"
