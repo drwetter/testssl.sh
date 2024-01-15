@@ -17081,7 +17081,7 @@ run_renego() {
                               pid=$!
                               ( sleep $(($ssl_reneg_attempts*3)) && kill $pid && touch $TEMPDIR/was_killed ) >&2 2>/dev/null &
                               watcher=$!
-                              # Trick to get the return value of the openssl command, output redirection and a timeout. Yes, somme target hang/block after some tries.  
+                              # Trick to get the return value of the openssl command, output redirection and a timeout. Yes, some target hang/block after some tries.  
                               wait $pid && pkill -HUP -P $watcher 
                               tmp_result=$?
                               # If we are here, we have done two successful renegotiation (-2) and do the loop
