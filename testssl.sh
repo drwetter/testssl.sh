@@ -232,7 +232,8 @@ fi
 DISPLAY_CIPHERNAMES="openssl"           # display OpenSSL ciphername (but both OpenSSL and RFC ciphernames in wide mode)
 declare UA_STD="TLS tester from $SWURL"
 declare -r UA_SNEAKY="Mozilla/5.0 (X11; Linux x86_64; rv:94.0) Gecko/20100101 Firefox/94.0"
-SSL_RENEG_ATTEMPTS=${SSL_RENEG_ATTEMPTS:-6}       # number of times to check SSL Renegotiation
+SSL_RENEG_ATTEMPTS=${SSL_RENEG_ATTEMPTS:-10}       # number of times to check SSL Renegotiation
+SSL_RENEG_WAIT=${SSL_RENEG_WAIT:-0.25}   # time between SSL Renegotiation checks
 
 ########### Initialization part, further global vars just being declared here
 #
@@ -16956,6 +16957,7 @@ run_renego() {
      local hint=""
      local jsonID=""
      local ssl_reneg_attempts=$SSL_RENEG_ATTEMPTS
+     local ssl_reneg_wait=$SSL_RENEG_WAIT
      # In cases where there's no default host configured we need SNI here as openssl then would return otherwise an error and the test will fail
 
      "$HAS_TLS13" && [[ -z "$proto" ]] && proto="-no_tls1_3"
@@ -17040,6 +17042,13 @@ run_renego() {
           fileout "$jsonID" "WARN" "client x509-based authentication prevents this from being tested"
           sec_client_renego=1
      else
+          # We will need $ERRFILE for mitigation detection
+          if [[ $ERRFILE =~ dev.null ]]; then
+               ERRFILE=$TEMPDIR/errorfile.txt || exit $ERR_FCREATE
+               restore_errfile=1
+          else
+               restore_errfile=0
+          fi
           # We need up to two tries here, as some LiteSpeed servers don't answer on "R" and block. Thus first try in the background
           # msg enables us to look deeper into it while debugging
           echo R | $OPENSSL s_client $(s_client_options "$proto $BUGS $legacycmd $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>>$ERRFILE &
@@ -17064,19 +17073,45 @@ run_renego() {
                          # Mitigations (default values) for:
                          # - node.js allows 3x R and then blocks. So then 4x should be tested.
                          # - F5 BIG-IP ADS allows 5x R and then blocks. So then 6x should be tested.
+                         # - Stormshield allows 9x and then blocks. So then 10x should be tested.
                          # This way we save a couple seconds as we weeded out the ones which are more robust
                          # Amount of times tested before breaking is set in SSL_RENEG_ATTEMPTS.
                          if [[ $SERVICE != HTTP ]]; then
                               pr_svrty_medium "VULNERABLE (NOT ok)"; outln ", potential DoS threat"
                               fileout "$jsonID" "MEDIUM" "VULNERABLE, potential DoS threat" "$cve" "$cwe" "$hint"
                          else
-                              (for ((i=0; i < ssl_reneg_attempts; i++ )); do echo R; sleep 1; done) | \
-                                   $OPENSSL s_client $(s_client_options "$proto $legacycmd $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>>$ERRFILE
-                              case $? in
+                              (for ((i=0; i < ssl_reneg_attempts; i++ )); do echo R; sleep $ssl_reneg_wait; done) | \
+                                   $OPENSSL s_client $(s_client_options "$proto $legacycmd $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>>$ERRFILE &
+                              pid=$!
+                              ( sleep $(($ssl_reneg_attempts*3)) && kill $pid && touch $TEMPDIR/was_killed ) >&2 2>/dev/null &
+                              watcher=$!
+                              # Trick to get the return value of the openssl command, output redirection and a timeout. Yes, some target hang/block after some tries.  
+                              wait $pid && pkill -HUP -P $watcher 
+                              tmp_result=$?
+                              # If we are here, we have done two successful renegotiation (-2) and do the loop
+                              loop_reneg=$(($(grep -ac '^RENEGOTIATING' $ERRFILE )-2))
+                              if [[ -f $TEMPDIR/was_killed ]]; then
+                                   tmp_result=3
+                                   rm -f $TEMPDIR/was_killed
+                              else
+                                   # If we got less than 2/3 successful attempts during the loop with 1s pause, we are in presence of exponential backoff.
+                                   if [[ $loop_reneg -le $(($ssl_reneg_attempts*2/3)) ]]; then
+                                        tmp_result=2
+                                   fi
+                              fi
+                              case $tmp_result in
                                    0) pr_svrty_high "VULNERABLE (NOT ok)"; outln ", DoS threat ($ssl_reneg_attempts attempts)"
                                       fileout "$jsonID" "HIGH" "VULNERABLE, DoS threat" "$cve" "$cwe" "$hint"
                                       ;;
                                    1) pr_svrty_good "not vulnerable (OK)"; outln " -- mitigated (disconnect within $ssl_reneg_attempts)"
+                                      fileout "$jsonID" "OK" "not vulnerable, mitigated" "$cve" "$cwe"
+                                      ;;
+                                   2) pr_svrty_good "not vulnerable (OK)"; \
+                                           outln " -- mitigated ($loop_reneg successful reneg within ${ssl_reneg_attempts} in ${ssl_reneg_attempts}x${ssl_reneg_wait}s)"
+                                      fileout "$jsonID" "OK" "not vulnerable, mitigated" "$cve" "$cwe"
+                                      ;;
+                                   3) pr_svrty_good "not vulnerable (OK)"; \
+                                           outln " -- mitigated ($loop_reneg successful reneg within ${ssl_reneg_attempts} in $((${ssl_reneg_attempts}*3))s(timeout))"
                                       fileout "$jsonID" "OK" "not vulnerable, mitigated" "$cve" "$cwe"
                                       ;;
                                    *) prln_warning "FIXME (bug): $sec_client_renego ($ssl_reneg_attempts tries)"
@@ -17104,7 +17139,9 @@ run_renego() {
      #
      # https://www.openssl.org/news/vulnerabilities.html#y2009. It can only be tested with OpenSSL <=0.9.8k
      # Insecure Client-Initiated Renegotiation is missing ==> sockets. When we complete the handshake ;-)
-
+     if [[ $restore_errfile -eq 1 ]]; then
+          ERRFILE="/dev/null"
+     fi
      tmpfile_handle ${FUNCNAME[0]}.txt
      return $ret
 }
