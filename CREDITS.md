@@ -164,6 +164,9 @@ Full contribution, see git log.
 * Jonas Schäfer
   - XMPP server patch
 
+* Maurizio Siddu
+  - added --mTLS feature
+
 * Marcin Szychowski
   - Quick'n'dirty client certificate support
 
