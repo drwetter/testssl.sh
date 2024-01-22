@@ -17095,7 +17095,7 @@ run_renego() {
                                    rm -f $TEMPDIR/was_killed
                               else
                                    # If we got less than 2/3 successful attempts during the loop with 1s pause, we are in presence of exponential backoff.
-                                   if [[ $loop_reneg -le $(($ssl_reneg_attempts*2/3)) ]]; then
+                                   if [[ $tmp_result -eq 0 ]] && [[ $loop_reneg -le $(($ssl_reneg_attempts*2/3)) ]]; then
                                         tmp_result=2
                                    fi
                               fi
@@ -17103,7 +17103,7 @@ run_renego() {
                                    0) pr_svrty_high "VULNERABLE (NOT ok)"; outln ", DoS threat ($ssl_reneg_attempts attempts)"
                                       fileout "$jsonID" "HIGH" "VULNERABLE, DoS threat" "$cve" "$cwe" "$hint"
                                       ;;
-                                   1) pr_svrty_good "not vulnerable (OK)"; outln " -- mitigated (disconnect within $ssl_reneg_attempts)"
+                                   1) pr_svrty_good "not vulnerable (OK)"; outln " -- mitigated (disconnect after $loop_reneg/$ssl_reneg_attempts attempts)"
                                       fileout "$jsonID" "OK" "not vulnerable, mitigated" "$cve" "$cwe"
                                       ;;
                                    2) pr_svrty_good "not vulnerable (OK)"; \
