@@ -16675,7 +16675,7 @@ sub_session_ticket_tls() {
      #ATTENTION: we DO NOT use SNI here as we assume ticketbleed is a vulnerability of the TLS stack. If we'd do SNI here, we'd also need
      #           it in the ClientHello of run_ticketbleed() otherwise the ticket will be different and the whole thing won't work!
      #
-     sessticket_tls="$($OPENSSL s_client $(s_client_options "$BUGS $tls_proto $PROXY -connect $NODEIP:$PORT") </dev/null 2>$ERRFILE | awk '/TLS session ticket:/,/^$/' | awk '!/TLS session ticket/')"
+     sessticket_tls="$($OPENSSL s_client $(s_client_options "$BUGS $tls_proto $PROXY $SNI -connect $NODEIP:$PORT") </dev/null 2>$ERRFILE | awk '/TLS session ticket:/,/^$/' | awk '!/TLS session ticket/')"
      sessticket_tls="$(sed -e 's/^.* - /x/g' -e 's/  .*$//g' <<< "$sessticket_tls" | tr '\n' ',')"
      sed -e 's/ /,x/g' -e 's/-/,x/g' <<< "$sessticket_tls"
 
