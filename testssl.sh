@@ -2360,7 +2360,7 @@ service_detection() {
           [[ -z "$SERVICE" ]] && head $TMPFILE | grep -Eaqi "jabber|xmpp" && SERVICE=XMPP
           [[ -z "$SERVICE" ]] && head $TMPFILE | grep -Eaqw "Jive News|InterNetNews|NNRP|INN|Kerio Connect|NNTP Service|Kerio MailServer|NNTP server" && SERVICE=NNTP
           # MongoDB port 27017 will respond to a GET request with a mocked HTTP response
-          [[ "$SERVICE" == HTTP ]] && head $TMPFILE | grep -Eaqw "MongoDB" && SERVICE=MongoDB
+          [[ "$SERVICE" == HTTP ]] && head $TMPFILE | grep -Eaqw "you are trying to access MongoDB over HTTP" && SERVICE=MongoDB
           debugme head -50 $TMPFILE | sed -e '/<HTML>/,$d' -e '/<html>/,$d' -e '/<XML/,$d' -e '/<xml/,$d' -e '/<\?XML/,$d' -e '/<\?xml/,$d' -e '/<\!DOCTYPE/,$d' -e '/<\!doctype/,$d'
      fi
 
