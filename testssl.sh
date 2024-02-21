@@ -17080,7 +17080,13 @@ run_renego() {
                               pr_svrty_medium "VULNERABLE (NOT ok)"; outln ", potential DoS threat"
                               fileout "$jsonID" "MEDIUM" "VULNERABLE, potential DoS threat" "$cve" "$cwe" "$hint"
                          else
-                              (for ((i=0; i < ssl_reneg_attempts; i++ )); do echo R; sleep $ssl_reneg_wait; done) | \
+                              # Clear the log to not get the content of previous run before the execution of the new one.
+                              echo -n > $TMPFILE
+                              # If we dont wait for the session to be established on slow server, we will try to re-negotiate
+                              # too early losing all the attempts before the session establishment as OpenSSL will not buffer them
+                              # (only the first will be till the establishement of the session).
+                              (while [[ $(grep -ac '^SSL-Session:' $TMPFILE) -ne 1 ]]; do sleep 1; done; \
+                                   for ((i=0; i < ssl_reneg_attempts; i++ )); do echo R; sleep $ssl_reneg_wait; done) | \
                                    $OPENSSL s_client $(s_client_options "$proto $legacycmd $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>>$ERRFILE &
                               pid=$!
                               ( sleep $(($ssl_reneg_attempts*3)) && pkill -HUP -P $pid && wait $pid && touch $TEMPDIR/was_killed ) >&2 2>/dev/null &
