@@ -389,6 +389,7 @@ XMPP_HOST=""
 PROXYIP=""                              # $PROXYIP:$PROXPORT is your proxy if --proxy is defined ...
 PROXYPORT=""                            # ... and openssl has proxy support
 PROXY=""                                # Once check_proxy() executed it contains $PROXYIP:$PROXPORT
+MTLS=""                                 # mTLS authentication with client certificate and private key
 VULN_COUNT=0
 SERVICE=""                              # Is the server running an HTTP server, SMTP, POP or IMAP?
 URI=""
@@ -2316,6 +2317,12 @@ s_client_options() {
      fi
      # $keyopts may be set as an environment variable to enable client authentication (see PR #1383)
      tm_out "$options $keyopts"
+
+     # In case of mutual TLS authentication is required by the server
+     # Note: the PEM certificate file must contain: client certificate and certificate key (not encrypted)
+     if [[ -n "$MTLS" ]]; then
+          options+=" -cert $MTLS"
+     fi
 }
 
 ###### check code starts here ######
@@ -2375,10 +2382,14 @@ service_detection() {
                out " $SERVICE, thus skipping HTTP specific checks"
                fileout "${jsonID}" "INFO" "$SERVICE, thus skipping HTTP specific checks"
                ;;
-          *)   if [[ "$CLIENT_AUTH" == required ]]; then
-                    out " certificate-based authentication => skipping all HTTP checks"
-                    echo "certificate-based authentication => skipping all HTTP checks" >$TMPFILE
-                    fileout "${jsonID}" "INFO" "certificate-based authentication => skipping all HTTP checks"
+          *)   if [[ ! -z $MTLS ]]; then
+                    out " not identified, but mTLS authentication is set ==> trying HTTP checks"
+                    SERVICE=HTTP
+                    fileout "${jsonID}" "DEBUG" "Couldn't determine service -- ASSUME_HTTP set"
+               elif [[ "$CLIENT_AUTH" == required ]] && [[ -z $MTLS ]]; then
+                    out " certificate-based authentication without providing client certificate and private key => skipping all HTTP checks"
+                    echo "certificate-based authentication without providing client certificate and private key  => skipping all HTTP checks" >$TMPFILE
+                    fileout "${jsonID}" "INFO" "certificate-based authentication without providing client certificate and private key  => skipping all HTTP checks"
                else
                     out " Couldn't determine what's running on port $PORT"
                     if "$ASSUME_HTTP"; then
@@ -2430,6 +2441,7 @@ run_http_header() {
      local url redirect
      local jsonID="HTTP_status_code"
      local spaces="                            "
+     local cert_option=""
 
      HEADERFILE=$TEMPDIR/$NODEIP.http_header.txt
      if [[ $NR_HEADER_FAIL -eq 0 ]]; then
@@ -2444,12 +2456,17 @@ run_http_header() {
 
      pr_bold " HTTP Status Code           "
      [[ -z "$1" ]] && url="/" || url="$1"
-     tm_out "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") >$HEADERFILE 2>$ERRFILE &
+
+     # Set -cert option value if mTLS authentication is selected
+     if [[ ! -z "$MTLS" ]]; then
+         cert_option="-cert $MTLS"
+     fi
+     tm_out "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS $cert_option -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") >$HEADERFILE 2>$ERRFILE &
      wait_kill $! $HEADER_MAXSLEEP
      if [[ $? -eq 0 ]]; then
           # Issue HTTP GET again as it properly finished within $HEADER_MAXSLEEP and didn't hang.
           # Doing it again in the foreground to get an accurate header time
-          tm_out "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") >$HEADERFILE 2>$ERRFILE
+          tm_out "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS $cert_option -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") >$HEADERFILE 2>$ERRFILE
           NOW_TIME=$(date "+%s")
           HTTP_TIME=$(awk -F': ' '/^date:/ { print $2 }  /^Date:/ { print $2 }' $HEADERFILE)
           HTTP_AGE=$(awk -F': ' '/^[aA][gG][eE]: / { print $2 }' $HEADERFILE)
@@ -2601,7 +2618,7 @@ run_http_date() {
      local spaces="                              "
      jsonID="HTTP_clock_skew"
 
-     if [[ $SERVICE != HTTP ]] || [[ "$CLIENT_AUTH" == required ]]; then
+     if [[ $SERVICE != HTTP ]] || { [[ "$CLIENT_AUTH" == required ]] && [[ -z "$MTLS" ]]; }; then
           return 0
      fi
      if [[ ! -s $HEADERFILE ]]; then
@@ -6710,6 +6727,12 @@ sub_session_resumption() {
      local sess_data=$(mktemp $TEMPDIR/sub_session_data_resumption.$NODEIP.XXXXXX)
      local -a rw_line
      local protocol="$1"
+     local cert_option=""
+
+     # Set -cert option value if mTLS authentication is selected
+     if [[ ! -z "$MTLS" ]]; then
+         cert_option="-cert $MTLS"
+     fi
 
      if [[ "$2" == ID ]]; then
           local byID=true
@@ -6721,7 +6744,8 @@ sub_session_resumption() {
                return 1
           fi
      fi
-     [[ "$CLIENT_AUTH" == required ]] && return 6
+     # Return 6 if client authentication is required and none PEM file (containing client certificate+private key) is provided
+     [[ "$CLIENT_AUTH" == required ]] && [[ -z "$MTLS" ]] && return 6
      if ! "$HAS_TLS13" && "$HAS_NO_SSL2"; then
           addcmd+=" -no_ssl2"
      else
@@ -6738,7 +6762,7 @@ sub_session_resumption() {
           addcmd+=" $protocol"
      fi
 
-     $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI $addcmd -sess_out $sess_data") </dev/null &>$tmpfile
+     $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI $cert_option $addcmd -sess_out $sess_data") </dev/null &>$tmpfile
      ret1=$?
      if [[ $ret1 -ne 0 ]]; then
           # MacOS and LibreSSL return 1 here, that's why we need to check whether the handshake contains e.g. a certificate
@@ -6756,7 +6780,7 @@ sub_session_resumption() {
           # [[ ! $(<$sess_data) =~ -----.*\ SSL\ SESSION\ PARAMETERS----- ]]
           ret=2
      else
-          $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI $addcmd -sess_in $sess_data") </dev/null >$tmpfile 2>$ERRFILE
+          $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI $cert_option $addcmd -sess_in $sess_data") </dev/null >$tmpfile 2>$ERRFILE
           ret2=$?
           if [[ $DEBUG -ge 2 ]]; then
                echo -n "$ret1, $ret2, "
@@ -17037,9 +17061,9 @@ run_renego() {
           [[ $DEBUG -ge 1 ]] && out ", no renegotiation support in TLS 1.3 only servers"
           outln
           fileout "$jsonID" "OK" "not vulnerable, TLS 1.3 only" "$cve" "$cwe"
-     elif [[ "$CLIENT_AUTH" == required ]]; then
-          prln_warning "client x509-based authentication prevents this from being tested"
-          fileout "$jsonID" "WARN" "client x509-based authentication prevents this from being tested"
+     elif [[ "$CLIENT_AUTH" == required ]] && [[ -z "$MTLS" ]]; then
+          prln_warning "not having provided client certificate and private key file, the client x509-based authentication prevents this from being tested"
+          fileout "$jsonID" "WARN" "not having provided client certificate and private key file, the client x509-based authentication prevents this from being tested"
           sec_client_renego=1
      else
           # We will need $ERRFILE for mitigation detection
@@ -17210,7 +17234,7 @@ run_crime() {
                fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
           fi
      else
-          if [[ $SERVICE == HTTP ]] || [[ "$CLIENT_AUTH" == required ]]; then
+          if [[ $SERVICE == HTTP ]] || [[ "$CLIENT_AUTH" == required ]] || [[ ! -z "$MTLS" ]]; then
                pr_svrty_high "VULNERABLE (NOT ok)"
                fileout "$jsonID" "HIGH" "VULNERABLE" "$cve" "$cwe" "$hint"
           else
@@ -17269,8 +17293,13 @@ sub_breach_helper() {
      local get_command="$1"
      local detected_compression=""
      local -i was_killed=0
+     local cert_option=""
 
-     safe_echo "$get_command" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") 1>$TMPFILE 2>$ERRFILE &
+     # Set -cert option value if mTLS authentication is selected
+     if [[ ! -z "$MTLS" ]]; then
+         cert_option="-cert $MTLS"
+     fi
+     safe_echo "$get_command" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS $cert_option -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") 1>$TMPFILE 2>$ERRFILE &
      wait_kill $! $HEADER_MAXSLEEP
      was_killed=$?                 # !=0 when it was killed
      detected_compression=$(grep -ia ^Content-Encoding: $TMPFILE)
@@ -17320,9 +17349,9 @@ run_breach() {
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for BREACH (HTTP compression) vulnerability " && outln
      pr_bold " BREACH"; out " ($cve)                    "
-     if [[ "$CLIENT_AUTH" == required ]]; then
-          prln_warning "client x509-based authentication prevents this from being tested"
-          fileout "$jsonID" "WARN" "client x509-based authentication prevents this from being tested" "$cve" "$cwe"
+     if [[ "$CLIENT_AUTH" == required ]] && [[ -z "$MTLS" ]]; then
+          prln_warning "not having provided client certificate and private key file, the client x509-based authentication prevents this from being tested"
+          fileout "$jsonID" "WARN" "not having provided client certificate and private key file, the client x509-based authentication prevents this from being tested" "$cve" "$cwe"
           return 7
      fi
 
@@ -20507,6 +20536,7 @@ tuning / connect options (most also can be preset via environment variables):
      --ids-friendly                skips a few vulnerability checks which may cause IDSs to block the scanning IP
      --phone-out                   allow to contact external servers for CRL download and querying OCSP responder
      --add-ca <CA files|CA dir>    path to <CAdir> with *.pem or a comma separated list of CA files to include in trust check
+     --mtls <CLIENT CERT file>     path to <CLIENT CERT> file, it must be in PEM format and contain client certificate with certificate key (not encrypted)
      --basicauth <user:pass>       provide HTTP basic auth information.
      --reqheader <header>          add custom http request headers
 
@@ -23814,6 +23844,10 @@ parse_cmd_line() {
                     OPENSSL_TIMEOUT="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     ;;
+               --mtls|--mtls=*)
+                    MTLS="$(parse_opt_equal_sign "$1" "$2")"
+                    [[ $? -eq 0 ]] && shift
+                    ;;  
                --connect-timeout|--connect-timeout=*)
                     CONNECT_TIMEOUT="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
@@ -23891,6 +23925,17 @@ parse_cmd_line() {
           [[ -s "$fname" ]] || fatal_cmd_line "CA file \"$fname\" does not exist" $ERR_RESOURCE
           grep -q 'BEGIN CERTIFICATE' "$fname" || fatal_cmd_line "\"$fname\" is not CA file in PEM format" $ERR_RESOURCE
      done
+
+     # Check if mTLS has been selected, and if the correct client auth PEM file has been provided by user
+     if [[ ! -z "$MTLS" ]]; then
+          if [[ -f $MTLS ]]; then
+               grep -q 'BEGIN CERTIFICATE' "$MTLS" || fatal_cmd_line "\"$MTLS\" is not a client certificate file in PEM format" $ERR_RESOURCE
+               grep -q 'BEGIN PRIVATE KEY\|BEGIN RSA PRIVATE KEY' "$MTLS" || fatal_cmd_line "\"$MTLS\" the not encrypted private key is missing in the specified PEM file" $ERR_RESOURCE
+               MTLS=$MTLS
+          else
+               [[ -s "$MTLS" ]] || fatal_cmd_line "the specified client certificate file \"$MTLS\" does not exist" $ERR_RESOURCE
+          fi
+     fi
 
      "$FAST" && pr_warning "\n'--fast' can have some undesired side effects thus it is not recommended to use anymore\n"
      "$SSL_NATIVE" && pr_warning "\nusage of '--ssl-native' is not recommended as it will return incomplete and may even return incorrect results\n"

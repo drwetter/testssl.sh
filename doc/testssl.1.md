@@ -113,6 +113,8 @@ The same can be achieved by setting the environment variable `WARNINGS`.
 
 `--reqheader <header>` This can be used to add additional HTTP request headers in the correct format `Headername: headercontent`. This parameter can be called multiple times if required. For example: `--reqheader 'Proxy-Authorization: Basic dGVzdHNzbDpydWxlcw==' --reqheader 'ClientID: 0xDEADBEAF'`. REQHEADER is the corresponding environment variable.
 
+`--mtls <path_to_client_cert>`  This can be set to provide a file containing a client certificatete and a private key (not encrypted) in PEM format, which is used when a mutual TLS authentication is required by the remote server. MTLS is the equivalent environment variable.
+
 
 ### SPECIAL INVOCATIONS
 

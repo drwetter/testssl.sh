@@ -192,6 +192,8 @@ The same can be achieved by setting the environment variable <code>WARNINGS</cod
 
 <p><code>--reqheader &lt;header&gt;</code> This can be used to add additional HTTP request headers in the correct format <code>Headername: headercontent</code>. This parameter can be called multiple times if required. For example: <code>--reqheader 'Proxy-Authorization: Basic dGVzdHNzbDpydWxlcw==' --reqheader 'ClientID: 0xDEADBEAF'</code>. REQHEADER is the corresponding environment variable.</p>
 
+<p><code>--mtls &lt;path_to_client_cert&gt;</code> This can be set to provide a file containing a client certificatete and a private key (not encrypted) in PEM format, which is used when a mutual TLS authentication is required by the remote server. MTLS is the is the equivalent environment variable.</p>
+    
 <h3 id="SPECIAL-INVOCATIONS">SPECIAL INVOCATIONS</h3>
 
 <p><code>-t &lt;protocol&gt;, --starttls &lt;protocol&gt;</code>    does a default run against a STARTTLS enabled <code>protocol</code>. <code>protocol</code> must be one of <code>ftp</code>, <code>smtp</code>,  <code>pop3</code>, <code>imap</code>, <code>xmpp</code>, <code>sieve</code>, <code>xmpp-server</code>, <code>telnet</code>, <code>ldap</code>, <code>irc</code>, <code>lmtp</code>, <code>nntp</code>, <code>postgres</code>, <code>mysql</code>. For the latter four you need e.g. the supplied OpenSSL or OpenSSL version 1.1.1. Please note: MongoDB doesn't offer a STARTTLS connection, IRC currently only works with <code>--ssl-native</code>. <code>irc</code> is WIP.</p>
