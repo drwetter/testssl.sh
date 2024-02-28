@@ -2315,8 +2315,7 @@ s_client_options() {
           [[ "$1" =~ secp192r1 ]] && options="${options//secp192r1/prime192v1}"
           [[ "$1" =~ secp256r1 ]] && options="${options//secp256r1/prime256v1}"
      fi
-     # $keyopts may be set as an environment variable to enable client authentication (see PR #1383)
-     tm_out "$options $keyopts"
+     tm_out "$options"
 
      # In case of mutual TLS authentication is required by the server
      # Note: the PEM certificate file must contain: client certificate and certificate key (not encrypted)
@@ -20536,8 +20535,8 @@ tuning / connect options (most also can be preset via environment variables):
      --ids-friendly                skips a few vulnerability checks which may cause IDSs to block the scanning IP
      --phone-out                   allow to contact external servers for CRL download and querying OCSP responder
      --add-ca <CA files|CA dir>    path to <CAdir> with *.pem or a comma separated list of CA files to include in trust check
-     --mtls <CLIENT CERT file>     path to <CLIENT CERT> file, it must be in PEM format and contain client certificate with certificate key (not encrypted)
-     --basicauth <user:pass>       provide HTTP basic auth information.
+     --mtls <CLIENT CERT file>     path to <CLIENT CERT> file in PEM format containing unencrypted certificate key (beta)
+     --basicauth <user:pass>       provide HTTP basic auth information
      --reqheader <header>          add custom http request headers
 
 output options (can also be preset via environment variables):
