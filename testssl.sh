@@ -17112,7 +17112,7 @@ run_renego() {
                                    for ((i=0; i < ssl_reneg_attempts; i++ )); do echo R; sleep $ssl_reneg_wait; done) | \
                                    $OPENSSL s_client $(s_client_options "$proto $legacycmd $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>>$ERRFILE &
                               pid=$!
-                              ( sleep $(($ssl_reneg_attempts*3)) && pkill -HUP -P $pid && wait $pid && touch $TEMPDIR/was_killed ) >&2 2>/dev/null &
+                              ( sleep $(($ssl_reneg_attempts*3)) && kill $pid && touch $TEMPDIR/was_killed ) >&2 2>/dev/null &
                               watcher=$!
                               # Trick to get the return value of the openssl command, output redirection and a timeout. Yes, some target hang/block after some tries.  
                               wait $pid && pkill -HUP -P $watcher
