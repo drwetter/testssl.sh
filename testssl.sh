@@ -17107,13 +17107,14 @@ run_renego() {
                          else
                               # Clear the log to not get the content of previous run before the execution of the new one.
                               echo -n > $TMPFILE
+                              touch $TEMPDIR/not_killed
                               # If we dont wait for the session to be established on slow server, we will try to re-negotiate
                               # too early losing all the attempts before the session establishment as OpenSSL will not buffer them
                               # (only the first will be till the establishement of the session).
-                              (while [[ $(grep -ac '^SSL-Session:' $TMPFILE) -ne 1 ]]; do sleep $ssl_reneg_wait; done; \
-                                   for ((i=0; i < ssl_reneg_attempts; i++ )); do echo R; sleep $ssl_reneg_wait; \
-                                       while [[ $(grep -ac '^RENEGOTIATING' $ERRFILE) -ne $(($i+3)) ]] && [[ ! -f $TEMPDIR/was_killed ]]; \
-                                       do sleep $ssl_reneg_wait; done; \
+                              (j=0; while [[ $(grep -ac '^SSL-Session:' $TMPFILE) -ne 1 ]] && [[ $j -lt 30 ]]; do sleep $ssl_reneg_wait; j=$(($j+1)); done; \
+                                   for ((i=0; i < $ssl_reneg_attempts; i++ )); do echo R; sleep $ssl_reneg_wait; j=0; \
+                                       while [[ $(grep -ac '^RENEGOTIATING' $ERRFILE) -ne $(($i+3)) ]] && [[ -f $TEMPDIR/not_killed ]] && [[ $k -lt 180 ]]; \
+                                       do sleep $ssl_reneg_wait; k=$(($k+1)); done; \
                                    done) | \
                                    $OPENSSL s_client $(s_client_options "$proto $legacycmd $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>>$ERRFILE &
                               pid=$!
@@ -17128,10 +17129,7 @@ run_renego() {
                               loop_reneg=$(($(grep -ac '^RENEGOTIATING' $ERRFILE )-2))
                               if [[ -f $TEMPDIR/was_killed ]]; then
                                    tmp_result=2
-                                   sleep $ssl_reneg_wait # let the while loop see the watchdog file
-                                   sleep $ssl_reneg_wait # and 
-                                   sleep $ssl_reneg_wait # avoid float arithmetic
-                                   rm -f $TEMPDIR/was_killed
+                                   rm -f $TEMPDIR/not_killed
                               fi
                               case $tmp_result in
                                    0) pr_svrty_high "VULNERABLE (NOT ok)"; outln ", DoS threat ($ssl_reneg_attempts attempts)"
