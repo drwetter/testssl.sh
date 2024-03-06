@@ -17112,15 +17112,15 @@ run_renego() {
                               # If we dont wait for the session to be established on slow server, we will try to re-negotiate
                               # too early losing all the attempts before the session establishment as OpenSSL will not buffer them
                               # (only the first will be till the establishement of the session).
-                              (j=0; while [[ $(grep -ac '^SSL-Session:' $TMPFILE) -ne 1 ]] && [[ $j -lt 30 ]]; do sleep $ssl_reneg_wait; j=$(($j+1)); done; \
+                              (j=0; while [[ $(grep -ac '^SSL-Session:' $TMPFILE) -ne 1 ]] && [[ $j -lt 30 ]]; do sleep $ssl_reneg_wait; j=$((j++)); done; \
                                    for ((i=0; i < ssl_reneg_attempts; i++ )); do sleep $ssl_reneg_wait; echo R; k=0; \
-                                       while [[ $(grep -ac '^RENEGOTIATING' $ERRFILE) -ne $(($i+3)) ]] && [[ -f $TEMPDIR/allowed_to_loop ]] \
+                                       while [[ $(grep -ac '^RENEGOTIATING' $ERRFILE) -ne $((i+3)) ]] && [[ -f $TEMPDIR/allowed_to_loop ]] \
 					       && [[ $(tail -n1 $ERRFILE |grep -acE '^(RENEGOTIATING|depth|verify)') -eq 1 ]] && [[ $k -lt 120 ]]; \
-                                       do sleep $ssl_reneg_wait; k=$(($k+1)); done; \
+                                       do sleep $ssl_reneg_wait; k=$((k++)); done; \
                                    done) | \
                                    $OPENSSL s_client $(s_client_options "$proto $legacycmd $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>>$ERRFILE &
                               pid=$!
-                              ( sleep $(($ssl_reneg_attempts*3)) && kill $pid && touch $TEMPDIR/was_killed ) >&2 2>/dev/null &
+                              ( sleep $((ssl_reneg_attempts*3)) && kill $pid && touch $TEMPDIR/was_killed ) >&2 2>/dev/null &
                               watcher=$!
                               # Trick to get the return value of the openssl command, output redirection and a timeout. Yes, some target hang/block after some tries.  
                               wait $pid
@@ -17129,7 +17129,7 @@ run_renego() {
                               wait $watcher
                               rm -f $TEMPDIR/allowed_to_loop
                               # If we are here, we have done two successful renegotiation (-2) and do the loop
-                              loop_reneg=$(($(grep -ac '^RENEGOTIATING' $ERRFILE )-2))
+                              loop_reneg=$(($(grep -ac '^RENEGOTIATING' $ERRFILE)-2))
                               if [[ -f $TEMPDIR/was_killed ]]; then
                                    tmp_result=2
                                    rm -f $TEMPDIR/was_killed
