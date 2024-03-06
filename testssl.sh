@@ -17112,11 +17112,11 @@ run_renego() {
                               # If we dont wait for the session to be established on slow server, we will try to re-negotiate
                               # too early losing all the attempts before the session establishment as OpenSSL will not buffer them
                               # (only the first will be till the establishement of the session).
-                              (j=0; while [[ $(grep -ac '^SSL-Session:' $TMPFILE) -ne 1 ]] && [[ $j -lt 30 ]]; do sleep $ssl_reneg_wait; j=$((j++)); done; \
+                              (j=0; while [[ $(grep -ac '^SSL-Session:' $TMPFILE) -ne 1 ]] && [[ $j -lt 30 ]]; do sleep $ssl_reneg_wait; ((j++)); done; \
                                    for ((i=0; i < ssl_reneg_attempts; i++ )); do sleep $ssl_reneg_wait; echo R; k=0; \
                                        while [[ $(grep -ac '^RENEGOTIATING' $ERRFILE) -ne $((i+3)) ]] && [[ -f $TEMPDIR/allowed_to_loop ]] \
 					       && [[ $(tail -n1 $ERRFILE |grep -acE '^(RENEGOTIATING|depth|verify)') -eq 1 ]] && [[ $k -lt 120 ]]; \
-                                       do sleep $ssl_reneg_wait; k=$((k++)); done; \
+                                       do sleep $ssl_reneg_wait; ((k++)); done; \
                                    done) | \
                                    $OPENSSL s_client $(s_client_options "$proto $legacycmd $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>>$ERRFILE &
                               pid=$!
