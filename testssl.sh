@@ -2306,6 +2306,12 @@ s_client_options() {
                fi
           fi
      fi
+     
+     # In case of mutual TLS authentication is required by the server
+     # Note: the PEM certificate file must contain: client certificate and key (not encrypted)
+     if [[ -n "$MTLS" ]]; then
+          options+=" -cert $MTLS"
+     fi
 
      # OpenSSL's name for secp256r1 is prime256v1. So whenever we encounter this
      # (e.g. client simulations) we replace it with the name which OpenSSL understands
@@ -2317,11 +2323,6 @@ s_client_options() {
      fi
      tm_out "$options"
 
-     # In case of mutual TLS authentication is required by the server
-     # Note: the PEM certificate file must contain: client certificate and certificate key (not encrypted)
-     if [[ -n "$MTLS" ]]; then
-          options+=" -cert $MTLS"
-     fi
 }
 
 ###### check code starts here ######
@@ -2440,7 +2441,6 @@ run_http_header() {
      local url redirect
      local jsonID="HTTP_status_code"
      local spaces="                            "
-     local cert_option=""
 
      HEADERFILE=$TEMPDIR/$NODEIP.http_header.txt
      if [[ $NR_HEADER_FAIL -eq 0 ]]; then
@@ -2456,16 +2456,12 @@ run_http_header() {
      pr_bold " HTTP Status Code           "
      [[ -z "$1" ]] && url="/" || url="$1"
 
-     # Set -cert option value if mTLS authentication is selected
-     if [[ ! -z "$MTLS" ]]; then
-         cert_option="-cert $MTLS"
-     fi
-     tm_out "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS $cert_option -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") >$HEADERFILE 2>$ERRFILE &
+     tm_out "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") >$HEADERFILE 2>$ERRFILE &
      wait_kill $! $HEADER_MAXSLEEP
      if [[ $? -eq 0 ]]; then
           # Issue HTTP GET again as it properly finished within $HEADER_MAXSLEEP and didn't hang.
           # Doing it again in the foreground to get an accurate header time
-          tm_out "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS $cert_option -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") >$HEADERFILE 2>$ERRFILE
+          tm_out "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") >$HEADERFILE 2>$ERRFILE
           NOW_TIME=$(date "+%s")
           HTTP_TIME=$(awk -F': ' '/^date:/ { print $2 }  /^Date:/ { print $2 }' $HEADERFILE)
           HTTP_AGE=$(awk -F': ' '/^[aA][gG][eE]: / { print $2 }' $HEADERFILE)
@@ -6726,12 +6722,6 @@ sub_session_resumption() {
      local sess_data=$(mktemp $TEMPDIR/sub_session_data_resumption.$NODEIP.XXXXXX)
      local -a rw_line
      local protocol="$1"
-     local cert_option=""
-
-     # Set -cert option value if mTLS authentication is selected
-     if [[ ! -z "$MTLS" ]]; then
-         cert_option="-cert $MTLS"
-     fi
 
      if [[ "$2" == ID ]]; then
           local byID=true
@@ -6761,7 +6751,7 @@ sub_session_resumption() {
           addcmd+=" $protocol"
      fi
 
-     $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI $cert_option $addcmd -sess_out $sess_data") </dev/null &>$tmpfile
+     $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI $addcmd -sess_out $sess_data") </dev/null &>$tmpfile
      ret1=$?
      if [[ $ret1 -ne 0 ]]; then
           # MacOS and LibreSSL return 1 here, that's why we need to check whether the handshake contains e.g. a certificate
@@ -6779,7 +6769,7 @@ sub_session_resumption() {
           # [[ ! $(<$sess_data) =~ -----.*\ SSL\ SESSION\ PARAMETERS----- ]]
           ret=2
      else
-          $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI $cert_option $addcmd -sess_in $sess_data") </dev/null >$tmpfile 2>$ERRFILE
+          $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI $addcmd -sess_in $sess_data") </dev/null >$tmpfile 2>$ERRFILE
           ret2=$?
           if [[ $DEBUG -ge 2 ]]; then
                echo -n "$ret1, $ret2, "
@@ -17292,13 +17282,8 @@ sub_breach_helper() {
      local get_command="$1"
      local detected_compression=""
      local -i was_killed=0
-     local cert_option=""
 
-     # Set -cert option value if mTLS authentication is selected
-     if [[ ! -z "$MTLS" ]]; then
-         cert_option="-cert $MTLS"
-     fi
-     safe_echo "$get_command" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS $cert_option -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") 1>$TMPFILE 2>$ERRFILE &
+     safe_echo "$get_command" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") 1>$TMPFILE 2>$ERRFILE &
      wait_kill $! $HEADER_MAXSLEEP
      was_killed=$?                 # !=0 when it was killed
      detected_compression=$(grep -ia ^Content-Encoding: $TMPFILE)
