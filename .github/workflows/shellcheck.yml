@@ -1,0 +1,20 @@
+---
+name: Shellcheck
+on: [push, pull_request]
+permissions:
+  contents: read
+
+jobs:
+  shellcheck:
+    name: Shellcheck
+    runs-on: ubuntu-latest
+    env:
+      LANG: C.UTF-8
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt update && sudo apt install -y shellcheck && shellcheck --version
+
+      - name: Check shell scripts
+        run: shellcheck -x -P "SCRIPTDIR"/utils --severity=error testssl.sh
