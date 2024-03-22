@@ -10356,6 +10356,12 @@ run_server_defaults() {
                     i+=1
                done <<< "$CLIENT_AUTH_CA_LIST"
                fi
+          pr_bold " Offered Signature Algorithms "
+          outln "$sigalgs_client"
+          fileout "offered_client_certificate_sigalgs" "INFO" "$sigalgs_client"
+          pr_bold " Shared Signature Algorithms  "
+          outln "$sigalgs_client_shared"
+          fileout "shared_client_certificate_sigalgs" "INFO" "$sigalgs_client_shared"
      fi
 
 
@@ -21663,6 +21669,27 @@ extract_calist() {
      return 0
 }
 
+# Given the OpenSSL output of a response from a TLS server (with the -msg option)
+# in which the response includes a CertificateRequest message, return the list of
+# signature algorithms supported by the server.
+extract_sigalgs_client() {
+     local response="$1"
+     local sigalgslist sigalgs="" sigalgs_shared=""
+     if [[ "$response" =~ Requested\ Signature\ Algorithms ]]; then
+          # The structure is:
+          # Requested Signature Algorithms: algs
+          # Shared Requested Signature Algorithms: algs
+          # Peer signing digest: digest
+          sigalgslist="${response#*Requested Signature Algorithms: }"
+          sigalgs="${sigalgslist%*Shared*}"
+          sigalgs_shared="${sigalgslist##*Requested Signature Algorithms: }"
+          sigalgs_shared="${sigalgs_shared%*Peer*}"
+     fi
+     # both are important since there is no guarantee that the client accepts all the signature algorithms
+     local result=("$sigalgs" "$sigalgs_shared")
+     echo ${result[@]};
+}
+
 # This is only being called from determine_optimal_proto() in order to check whether we have a server with
 # client authentication, a server with no SSL session ID switched off -- and as the name indicates a protocol.
 # ARG1 is the openssl s_client connect return value. (Darwin or LibreSSL may return 1 here)
@@ -21691,6 +21718,9 @@ sclient_auth() {
                CLIENT_AUTH="required"
                [[ $1 -eq 0 ]] && CLIENT_AUTH="optional"
                CLIENT_AUTH_CA_LIST="$(extract_calist "$server_hello")"
+               local sigalgs=($(extract_sigalgs_client "$server_hello"))
+               sigalgs_client=${sigalgs[0]}
+               sigalgs_client_shared=${sigalgs[1]}
                return 0
           fi
           [[ $1 -eq 0 ]] && return 0
