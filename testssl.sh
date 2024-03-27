@@ -9776,17 +9776,32 @@ certificate_info() {
      fi
      outln
 
+
+
+#FIXME: declare vars, put somewhere else
+     out "$indent"; pr_bold " DNS HTTPS RR"; out " (experimental)    "
+     jsonID="DNS_HTTPS_rrecord"
+     https_rr_node="$NODE"
+     https_rr=""
+     while [[ -z "$https_rr" ]] &&  [[ -n "$https_rr_node" ]]; do
+          https_rr="$(get_https_rrecord $https_rr_node)"
+          tmp=${PIPESTATUS[@]}
+          [[ $DEBUG -ge 4 ]] && echo "get_https_rrecord: $tmp"
+          [[ $https_rr_node =~ '.'$ ]] || https_rr_node+="."
+          https_rr_node=${https_rr_node#*.}
+     done
+
      out "$indent"; pr_bold " OCSP must staple extension   ";
      must_staple "$json_postfix" "$provides_stapling" "$cert_txt"
 
      out "$indent"; pr_bold " DNS CAA RR"; out " (experimental)    "
-     jsonID="DNS_CAArecord"
+     jsonID="DNS_CAA_rrecord"
      caa_node="$NODE"
      caa=""
      while [[ -z "$caa" ]] &&  [[ -n "$caa_node" ]]; do
-          caa="$(get_caa_rr_record $caa_node)"
+          caa="$(get_caa_rrecord $caa_node)"
           tmp=${PIPESTATUS[@]}
-          [[ $DEBUG -ge 4 ]] && echo "get_caa_rr_record: $tmp"
+          [[ $DEBUG -ge 4 ]] && echo "get_https_caa_rr_record: $tmp"
           [[ $caa_node =~ '.'$ ]] || caa_node+="."
           caa_node=${caa_node#*.}
      done
@@ -21257,7 +21272,8 @@ get_aaaa_record() {
 
 # RFC6844: DNS Certification Authority Authorization (CAA) Resource Record
 # arg1: domain to check for
-get_caa_rr_record() {
+#
+get_caa_rrecord() {
      local raw_caa=""
      local hash len line
      local -i len_caa_property
@@ -21337,6 +21353,97 @@ get_caa_rr_record() {
 #    4: check whether $1 is a CNAME and take this
      return 0
 }
+
+# See https://www.rfc-editor.org/rfc/rfc9460.html:
+# Service Binding and Parameter Specification via the DNS (SVCB and HTTPS Resource Records)
+# arg1: domain to check for
+#
+get_https_rrecord() {
+     local raw_https=""
+     local hash len line
+     local -i len_https_property
+     local https_property_name
+     local https_property_value
+     local saved_openssl_conf="$OPENSSL_CONF"
+     local all_https=""
+     local noidnout=""
+
+     "$HAS_DIG_NOIDNOUT" && noidnout="+noidnout"
+
+     [[ -n "$NODNS" ]] && return 2          # if minimum DNS lookup was instructed, leave here
+
+     # if there's a type65 record there are two output formats here, mostly depending on age of distribution
+     # roughly that's the difference between text and binary format
+
+     # 1) 'google.com has HTTPS record 1 . alpn="h2,h3" '
+     # 2) 'google.com has TYPE65 record  \# 13 0001000001000602683202683 '
+
+#FIXME \/
+     # for dig +short the output always starts with '0 issue [..]' or '\# 19 [..]' so we normalize thereto to keep https_flag, https_property
+     # https_property then has key/value pairs, see https://tools.ietf.org/html/rfc6844#section-3
+     OPENSSL_CONF=""
+     if "$HAS_DIG"; then
+          raw_https="$(dig $DIG_R +search +short +timeout=3 +tries=3 $noidnout type65 "$1" 2>/dev/null | awk '{ print $1" "$2" "$3 }')"
+          # empty if no CAA record
+     elif "$HAS_DRILL"; then
+          raw_https="$(drill $1 type65 | awk '/'"^${1}"'.*HTTPS/ { print $5,$6,$7 }')"
+     elif "$HAS_HOST"; then
+          raw_https="$(host -t type65 $1)"
+          if grep -Ewvq "has no HTTPS|has no TYPE65" <<< "$raw_https"; then
+               raw_https="$(sed -e 's/^.*has HTTPS record //' -e 's/^.*has TYPE65 record //' <<< "$raw_https")"
+          fi
+     elif "$HAS_NSLOOKUP"; then
+          raw_https="$(strip_lf "$(nslookup -type=type65 $1 | grep -w rdata_65)")"
+          if [[ -n "$raw_https" ]]; then
+               raw_https="$(sed 's/^.*rdata_65 = //' <<< "$raw_https")"
+          fi
+     else
+          return 1
+          # No dig, drill, host, or nslookup --> complaint was elsewhere already
+     fi
+     OPENSSL_CONF="$saved_openssl_conf"      # see https://github.com/drwetter/testssl.sh/issues/134
+     debugme echo $raw_https
+
+
+     if [[ "$raw_https" =~ \#\ [0-9][0-9] ]]; then
+
+#FIXME \/
+          # for posteo we get this binary format returned e.g. for old dig versions:
+          # \# 19 0005697373756567656F74727573742E636F6D
+          # \# 23 0009697373756577696C6467656F74727573742E636F6D
+          # \# 34 0005696F6465666D61696C746F3A686F73746D617374657240706F73 74656F2E6465
+          #  # len https <more_see_below>                       @ p o s  t e o . d e
+          while read hash len line ;do
+               if [[ "${line:0:2}" == "00" ]]; then                               # probably the https flag, always 00, so we don't keep this
+                    len_https_property=$(printf "%0d" "$((10#${line:2:2}))")      # get len and do type casting, for posteo we have 05 or 09 here as a string
+                    len_https_property=$((len_https_property*2))                  # =>word! Now get name from 4th and value from 4th+len position...
+                    line="${line/ /}"                                             # especially with iodefs there's a blank in the string which we just skip
+                    https_property_name="$(hex2ascii ${line:4:$len_https_property})"
+                    https_property_value="$(hex2ascii "${line:$((4+len_https_property)):100}")"
+                    # echo "${https}=${https}"
+                    all_https+="${https_property_name}=${https_property_value}\n"
+               else
+                    outln "please report unknown CAA RR $line with flag  @ $NODE"
+                    return 7
+               fi
+          done <<< "$raw_https"
+          sort <<< "$(safe_echo "$all_https")"
+          return 0
+     elif grep -q '"' <<< "$raw_https"; then
+          raw_https=${raw_https//\"/}                           # strip all ". Now we should have flag, name, value
+          #https_property_name="$(awk '{ print $2 }' <<< "$raw_https")"
+          #https_property_value="$(awk '{ print $3 }' <<< "$raw_https)"
+          safe_echo "$(sort <<< "$(awk '{ print $2"="$3 }' <<< "$raw_https")")"
+          return 0
+     else
+          # no https record
+          return 1
+
+# to do:
+#    4: check whether $1 is a CNAME and take this
+     return 0
+}
+
 
 # arg1: domain to check for. Returned will be the MX record as a string
 get_mx_record() {
