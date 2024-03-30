@@ -21381,10 +21381,10 @@ get_https_rrecord() {
      # Read either answer 1) or 2) into raw_https. Should be empty if no such record
      if "$HAS_DIG"; then
           raw_https="$(dig $DIG_R +short +search +timeout=3 +tries=3 $noidnout type65 "$1" 2>/dev/null)"
-          # emtpy if there's no such record
+          # empty if there's no such record
      elif "$HAS_DRILL"; then
           raw_https="$(drill $1 type65 | awk '/'"^${1}"'.*TYPE65/ { print substr($0,index($0,$5)) }' )" # from 5th field onwards
-          # emtpy if there's no such record
+          # empty if there's no such record
      elif "$HAS_HOST"; then
           raw_https="$(host -t type65 $1)"
           if grep -Ewq "has no HTTPS|has no TYPE65" <<< "$raw_https"; then
@@ -21394,7 +21394,7 @@ get_https_rrecord() {
           fi
      elif "$HAS_NSLOOKUP"; then
           raw_https="$(strip_lf "$(nslookup -type=type65 $1 | awk '/'"^${1}"'.*rdata_65/ { print substr($0,index($0,$4)) }' )")"
-          # emtpy if there's no such record
+          # empty if there's no such record
      else
           return 1
           # No dig, drill, host, or nslookup --> complaint was elsewhere already
