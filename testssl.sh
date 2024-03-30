@@ -9111,32 +9111,35 @@ certificate_info() {
      jsonID="DNS_CAArecord"
      caa_node="$NODE"
      caa=""
-     while ( [[ -z "$caa" ]] &&  [[ ! -z "$caa_node" ]] ); do
-          caa="$(get_caa_rr_record $caa_node)"
-          [[ $caa_node =~ '.'$ ]] || caa_node+="."
-          caa_node=${caa_node#*.}
-     done
-     if [[ -n "$caa" ]]; then
-          pr_svrty_good "available"; out " - please check for match with \"Issuer\" above"
-          if [[ $(count_lines "$caa") -eq 1 ]]; then
-               out ": "
-          else
-               outln; out "$spaces"
-          fi
-          while read caa; do
-               if [[ -n "$caa" ]]; then
-                    all_caa+="$caa, "
-               fi
-          done <<< "$caa"
-          all_caa=${all_caa%, }                 # strip trailing comma
-          pr_italic "$(out_row_aligned_max_width "$all_caa" "$indent                              " $TERM_WIDTH)"
-          fileout "${jsonID}${json_postfix}" "OK" "$all_caa"
-     elif [[ -n "$NODNS" ]]; then
+
+    if [[ -n "$NODNS" ]]; then
           out "(instructed to minimize DNS queries)"
           fileout "${jsonID}${json_postfix}" "INFO" "check skipped as instructed"
      else
-          pr_svrty_low "not offered"
-          fileout "${jsonID}${json_postfix}" "LOW" "--"
+          while ( [[ -z "$caa" ]] &&  [[ ! -z "$caa_node" ]] ); do
+               caa="$(get_caa_rr_record $caa_node)"
+               [[ $caa_node =~ '.'$ ]] || caa_node+="."
+               caa_node=${caa_node#*.}
+          done
+          if [[ -n "$caa" ]]; then
+               pr_svrty_good "available"; out " - please check for match with \"Issuer\" above"
+               if [[ $(count_lines "$caa") -eq 1 ]]; then
+                    out ": "
+               else
+                    outln; out "$spaces"
+               fi
+               while read caa; do
+                    if [[ -n "$caa" ]]; then
+                         all_caa+="$caa, "
+                    fi
+               done <<< "$caa"
+               all_caa=${all_caa%, }                 # strip trailing comma
+               pr_italic "$(out_row_aligned_max_width "$all_caa" "$indent                              " $TERM_WIDTH)"
+               fileout "${jsonID}${json_postfix}" "OK" "$all_caa"
+               else
+               pr_svrty_low "not offered"
+               fileout "${jsonID}${json_postfix}" "LOW" "--"
+          fi
      fi
      outln
 
