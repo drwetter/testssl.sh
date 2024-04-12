@@ -17066,6 +17066,8 @@ run_renego() {
           # We will need $ERRFILE for mitigation detection
           if [[ $ERRFILE =~ dev.null ]]; then
                ERRFILE=$TEMPDIR/errorfile.txt || exit $ERR_FCREATE
+               # cleanup previous run if any (multiple IP)
+               rm -f $ERRFILE
                restore_errfile=1
           else
                restore_errfile=0
@@ -17111,14 +17113,16 @@ run_renego() {
                               (j=0; while [[ $(grep -ac '^SSL-Session:' $TMPFILE) -ne 1 ]] && [[ $j -lt 30 ]]; do sleep $ssl_reneg_wait; ((j++)); done; \
                                    for ((i=0; i < ssl_reneg_attempts; i++ )); do sleep $ssl_reneg_wait; echo R; k=0; \
                                        while [[ $(grep -ac '^RENEGOTIATING' $ERRFILE) -ne $((i+3)) ]] && [[ -f $TEMPDIR/allowed_to_loop ]] \
-					       && [[ $(tail -n1 $ERRFILE |grep -acE '^(RENEGOTIATING|depth|verify)') -eq 1 ]] && [[ $k -lt 120 ]]; \
-                                       do sleep $ssl_reneg_wait; ((k++)); done; \
+                                             && [[ $(tail -n1 $ERRFILE |grep -acE '^(RENEGOTIATING|depth|verify|notAfter)') -eq 1 ]] \
+                                             && [[ $k -lt 120 ]]; \
+                                           do sleep $ssl_reneg_wait; ((k++)); if (tail -5 $TMPFILE| grep -qa '^closed'); then sleep 1; break; fi; done; \
                                    done) | \
                                    $OPENSSL s_client $(s_client_options "$proto $legacycmd $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>>$ERRFILE &
                               pid=$!
                               ( sleep $((ssl_reneg_attempts*3)) && kill $pid && touch $TEMPDIR/was_killed ) >&2 2>/dev/null &
                               watcher=$!
-                              # Trick to get the return value of the openssl command, output redirection and a timeout. Yes, some target hang/block after some tries.  
+                              # Trick to get the return value of the openssl command, output redirection and a timeout.
+                              # Yes, some target hang/block after some tries.
                               wait $pid
                               tmp_result=$?
                               pkill -HUP -P $watcher
@@ -17126,6 +17130,10 @@ run_renego() {
                               rm -f $TEMPDIR/allowed_to_loop
                               # If we are here, we have done two successful renegotiation (-2) and do the loop
                               loop_reneg=$(($(grep -ac '^RENEGOTIATING' $ERRFILE)-2))
+                              # As above, some servers close the connection and return value is zero
+                              if (tail -5 $TMPFILE| grep -qa '^closed'); then
+                                   tmp_result=1
+                              fi
                               if [[ -f $TEMPDIR/was_killed ]]; then
                                    tmp_result=2
                                    rm -f $TEMPDIR/was_killed
