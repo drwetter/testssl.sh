@@ -288,6 +288,8 @@ TMPFILE=""
 ERRFILE=""
 CLIENT_AUTH="none"
 CLIENT_AUTH_CA_LIST=""
+CLIENT_AUTH_SIGALGS_LIST=""
+CLIENT_AUTH_SIGALGS_CERT_LIST=""
 TLS_TICKETS=false
 NO_SSL_SESSIONID=true
 CERT_COMPRESSION=${CERT_COMPRESSION:-false}  # secret flag to set in addition to --devel for certificate compression
@@ -10356,12 +10358,16 @@ run_server_defaults() {
                     i+=1
                done <<< "$CLIENT_AUTH_CA_LIST"
                fi
+          jsonID="clientAuth_Signature_Algorithms"
           pr_bold " Offered Signature Algorithms "
-          outln "$sigalgs_client"
-          fileout "offered_client_certificate_sigalgs" "INFO" "$sigalgs_client"
-          pr_bold " Shared Signature Algorithms  "
-          outln "$sigalgs_client_shared"
-          fileout "shared_client_certificate_sigalgs" "INFO" "$sigalgs_client_shared"
+          out_row_aligned "$CLIENT_AUTH_SIGALGS_LIST"
+          fileout "$jsonID" "INFO" "$CLIENT_AUTH_SIGALGS_LIST"
+          jsonID="clientAuth_Signature_Algorithms_Cert "
+          if [[ "$CLIENT_AUTH_SIGALGS_CERT_LIST" != empty\  ]] ; then
+               pr_bold " Offered Signature Algorithms for Certificates "
+               out_row_aligned "$CLIENT_AUTH_SIGALGS_CERT_LIST"
+               fileout "$jsonID" "INFO" "$CLIENT_AUTH_SIGALGS_CERT_LIST"
+          fi
      fi
 
 
@@ -21598,13 +21604,15 @@ print_dn() {
 }
 
 # Given the OpenSSL output of a response from a TLS server (with the -msg option)
-# in which the response includes a CertificateRequest message, return the list of
-# distinguished names that are in the CA list.
+# in which the response includes a CertificateRequest message, update the CLIENT_AUTH_CA_LIST, 
+# CLIENT_AUTH_SIGALGS_LIST and CLIENT_AUTH_SIGALGS_CERT_LIST variables with data from the message.
 extract_calist() {
      local response="$1"
      local is_tls12=false is_tls13=false
-     local certreq calist="" certtypes sigalgs dn
+     local certreq calist="" certtypes sigalgs sigalgs_cert dn
      local calist_string=""
+     local sigalgs_string=""
+     local sigalgs_string_cert=""
      local -i len type
 
      # Determine whether this is a TLS 1.2 or TLS 1.3 response, since the information
@@ -21637,12 +21645,25 @@ extract_calist() {
                [[ -z "$certreq" ]] && break
                type=$(hex2dec "${certreq:0:4}")
                len=2*$(hex2dec "${certreq:4:4}")
-               if [[ $type -eq 47 ]]; then
+               if [[ $type -eq 13 ]]; then
+                    # This is the signature_algorithms extension
+                    # First two bytes are the extension type, the next two bytes are the length of the extension
+                    sigalgs="${certreq:8:len}"
+                    # The variable name is el_len so that it does not overwrite the len of the whole extension
+                    el_len=2*$(hex2dec "${sigalgs:0:4}")
+                    # Since the structure of this extension only has one element in it, we can take everything
+                    # after the two bytes which contain the length of the element.
+                    sigalgs="${sigalgs:4:el_len}"
+               elif [[ $type -eq 47 ]]; then
                     # This is the certificate_authorities extension
                     calist="${certreq:8:len}"
-                    len=2*$(hex2dec "${calist:0:4}")
-                    calist="${calist:4:len}"
-                    break
+                    el_len=2*$(hex2dec "${calist:0:4}")
+                    calist="${calist:4:el_len}"
+               elif [[ $type -eq 50 ]]; then
+                    # This is the signature_algorithms_cert extension
+                    sigalgs_cert="${certreq:8:len}"
+                    el_len=2*$(hex2dec "${sigalgs_cert:0:4}")
+                    sigalgs_cert="${sigalgs_cert:4:el_len}"
                fi
                certreq="${certreq:$((len+8))}"
           done
@@ -21673,29 +21694,59 @@ extract_calist() {
           calist="${calist:$((len+4))}"
      done
      [[ -z "$calist_string" ]] && calist_string="empty"
-     tm_out "$calist_string"
+     CLIENT_AUTH_CA_LIST="$(safe_echo "$calist_string")"
+     sigalgs_string="$(sigalgs_converter "$sigalgs")"
+     CLIENT_AUTH_SIGALGS_LIST="${sigalgs_string} "
+     [[ -z "$sigalgs_string" ]] && CLIENT_AUTH_SIGALGS_LIST="empty "
+     sigalgs_string_cert="$(sigalgs_converter "$sigalgs_cert")"
+     CLIENT_AUTH_SIGALGS_CERT_LIST="${sigalgs_string_cert} "
+     [[ -z "$sigalgs_string_cert" ]] && CLIENT_AUTH_SIGALGS_CERT_LIST="empty "
      return 0
 }
-
-# Given the OpenSSL output of a response from a TLS server (with the -msg option)
-# in which the response includes a CertificateRequest message, return the list of
-# signature algorithms supported by the server.
-extract_sigalgs_client() {
-     local response="$1"
-     local sigalgslist sigalgs="" sigalgs_shared=""
-     if [[ "$response" =~ Requested\ Signature\ Algorithms ]]; then
-          # The structure is:
-          # Requested Signature Algorithms: algs
-          # Shared Requested Signature Algorithms: algs
-          # Peer signing digest: digest
-          sigalgslist="${response#*Requested Signature Algorithms: }"
-          sigalgs="${sigalgslist%*Shared*}"
-          sigalgs_shared="${sigalgslist##*Requested Signature Algorithms: }"
-          sigalgs_shared="${sigalgs_shared%*Peer*}"
-     fi
-     # both are important since there is no guarantee that the client accepts all the signature algorithms
-     local result=("$sigalgs" "$sigalgs_shared")
-     echo ${result[@]};
+# Given the list of signature algorithms in hex format (no space) take each four 
+# characters group and convert it to the corresponding signature algorithm.
+sigalgs_converter() {
+     local sigalgs=$1
+     local sigalgs_string=""
+     while true; do
+          [[ -z "$sigalgs" ]] && break
+          case "${sigalgs:0:4}" in
+               0101) sigalgs_string+=" RSA+MD5" ;;
+               0102) sigalgs_string+=" DSA+MD5" ;;
+               0103) sigalgs_string+=" ECDSA+MD5" ;;
+               0201) sigalgs_string+=" RSA+SHA1" ;;
+               0202) sigalgs_string+=" DSA+SHA1" ;;
+               0203) sigalgs_string+=" ECDSA+SHA1" ;;
+               0301) sigalgs_string+=" RSA+SHA224" ;;
+               0302) sigalgs_string+=" DSA+SHA224" ;;
+               0303) sigalgs_string+=" ECDSA+SHA224" ;;
+               0401|0420) sigalgs_string+=" RSA+SHA256" ;;
+               0402) sigalgs_string+=" DSA+SHA256" ;;
+               0403) sigalgs_string+=" ECDSA+SHA256" ;;
+               0501|0520) sigalgs_string+=" RSA+SHA384" ;;
+               0502) sigalgs_string+=" DSA+SHA384" ;;
+               0503) sigalgs_string+=" ECDSA+SHA384" ;;
+               0601|0620) sigalgs_string+=" RSA+SHA512" ;;
+               0602) sigalgs_string+=" DSA+SHA512" ;;
+               0603) sigalgs_string+=" ECDSA+SHA512" ;;
+               0708) sigalgs_string+=" SM2+SM3" ;;
+               0804) sigalgs_string+=" RSA-PSS-RSAE+SHA256" ;;
+               0805) sigalgs_string+=" RSA-PSS-RSAE+SHA384" ;;
+               0806) sigalgs_string+=" RSA-PSS-RSAE+SHA512" ;;
+               0807) sigalgs_string+=" Ed25519" ;;
+               0808) sigalgs_string+=" Ed448" ;;
+               0809) sigalgs_string+=" RSA-PSS-PSS+SHA256" ;;
+               080a) sigalgs_string+=" RSA-PSS-PSS+SHA384" ;;
+               080b) sigalgs_string+=" RSA-PSS-PSS+SHA512" ;;
+               081a) sigalgs_string+=" ECDSA-BRAINPOOL+SHA256" ;;
+               081b) sigalgs_string+=" ECDSA-BRAINPOOL+SHA384" ;;
+               081c) sigalgs_string+=" ECDSA-BRAINPOOL+SHA512" ;;
+               *) sigalgs_string+=" unknown(${sigalgs:0:4})";;
+          esac
+          sigalgs="${sigalgs:4}"
+     done
+     echo $sigalgs_string
+     return 0
 }
 
 # This is only being called from determine_optimal_proto() in order to check whether we have a server with
@@ -21725,10 +21776,7 @@ sclient_auth() {
                # CertificateRequest message in -msg
                CLIENT_AUTH="required"
                [[ $1 -eq 0 ]] && CLIENT_AUTH="optional"
-               CLIENT_AUTH_CA_LIST="$(extract_calist "$server_hello")"
-               local sigalgs=($(extract_sigalgs_client "$server_hello"))
-               sigalgs_client=${sigalgs[0]}
-               sigalgs_client_shared=${sigalgs[1]}
+               extract_calist "$server_hello"
                return 0
           fi
           [[ $1 -eq 0 ]] && return 0
