@@ -17363,12 +17363,12 @@ run_breach() {
      detected_compression=$(sub_breach_helper "$get_command")
      case "$detected_compression" in
           warn_stalled)
-               pr_warning "First request failed (HTTP header request stalled and was terminated)"; outln
+               prln_warning "First request failed (HTTP header request stalled and was terminated)"
                fileout "$jsonID" "WARN" "Test failed as first HTTP request stalled and was terminated" "$cve" "$cwe"
                ret=1
                ;;
           warn_failed)
-               pr_warning "First request failed (HTTP header request was empty)"; outln
+               prln_warning "First request failed (HTTP header request was empty)"
                fileout "$jsonID" "WARN" "Test failed as first HTTP response was empty" "$cve" "$cwe"
                ret=1
                ;;
