@@ -13950,9 +13950,10 @@ parse_tls_serverhello() {
      local tls_serverhello_ascii="" tls_certificate_ascii=""
      local tls_serverkeyexchange_ascii="" tls_certificate_status_ascii=""
      local tls_encryptedextensions_ascii="" tls_revised_certificate_msg=""
+     local tls_certificate_request_ascii=""
      local -i tls_serverhello_ascii_len=0 tls_certificate_ascii_len=0
      local -i tls_serverkeyexchange_ascii_len=0 tls_certificate_status_ascii_len=0
-     local -i tls_encryptedextensions_ascii_len=0
+     local -i tls_encryptedextensions_ascii_len=0 tls_certificate_request_ascii_len=0
      local added_encrypted_extensions=false
      local tls_alert_descrip tls_sid_len_hex issuerDN subjectDN CAissuerDN CAsubjectDN
      local -i tls_sid_len offset extns_offset nr_certs=0
@@ -14205,6 +14206,14 @@ parse_tls_serverhello() {
                fi
                tls_serverkeyexchange_ascii="${tls_handshake_ascii:i:msg_len}"
                tls_serverkeyexchange_ascii_len=$msg_len
+          elif [[ "$process_full" =~ all ]] && [[ "$tls_msg_type" == 0D ]]; then
+               if [[ -n "$tls_certificate_request_ascii" ]]; then
+                    debugme tmln_warning "Response contained more than one CertificateRequest handshake message."
+                    [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
+                    return 1
+               fi
+               tls_certificate_request_ascii="${tls_handshake_ascii:i:msg_len}"
+               tls_certificate_request_ascii_len=$msg_len
           elif [[ "$tls_msg_type" == 0F ]]; then
                if [[ $msg_len -lt 4 ]]; then
                     debugme tmln_warning "Response contained malformed certificate_verify message."
@@ -14813,6 +14822,20 @@ parse_tls_serverhello() {
                     break
                fi
           done
+     fi
+     # Now parse the CertificateRequest message.
+     if [[ $tls_certificate_request_ascii_len -ne 0 ]] && [[ "$process_full" =~ all ]]; then
+          # The CertificateRequest message is only present in TLS 1.3 and it has a 2 char identifier and a 6 char length.
+          if [[ $tls_certificate_request_ascii_len -lt 8 ]]; then
+               debugme echo "Malformed CertificateRequest Handshake message in ServerHello."
+               tmpfile_handle ${FUNCNAME[0]}.txt
+               return 1
+          fi
+          # The extract_calist can be used to extract the extensions' data from the CertificateRequest message.
+          # The second parameter is the TLS version, if it is provided extract_calist does not try to get it.
+          extract_calist "$tls_certificate_request_ascii" "${DETECTED_TLS_VERSION:2:2}" 
+          # not sure about this
+          CLIENT_AUTH="required" 
      fi
 
      # Now parse the Certificate message.
@@ -21606,8 +21629,17 @@ print_dn() {
 # Given the OpenSSL output of a response from a TLS server (with the -msg option)
 # in which the response includes a CertificateRequest message, update the CLIENT_AUTH_CA_LIST, 
 # CLIENT_AUTH_SIGALGS_LIST and CLIENT_AUTH_SIGALGS_CERT_LIST variables with data from the message.
+# The second_parameter is optional and should contain the two low bytes of the TLS version.
+# If the second parameter is provided the first parameter should contain the certreq in the following format:
+# - hex format
+# - no spaces or new lines characters
+# - first 8 characters removed
+#    - the first 2 characters are the message identifier
+#    - the other 6 are the length of the whole message
+# The tls_socket function already provides the message in this format.
 extract_calist() {
      local response="$1"
+     local tls_version="$2"
      local is_tls12=false is_tls13=false
      local certreq calist="" certtypes sigalgs sigalgs_cert dn
      local calist_string=""
@@ -21615,28 +21647,34 @@ extract_calist() {
      local sigalgs_string_cert=""
      local -i len type
 
-     # Determine whether this is a TLS 1.2 or TLS 1.3 response, since the information
-     # is encoded in a different place for TLS 1.3 and the CertificateRequest message
-     # differs between TLS 1.2 and TLS 1.1 and earlier.
-     if [[ "$response" =~ \<\<\<\ TLS\ 1.3[\,]?\ Handshake\ \[length\ [0-9a-fA-F]*\]\,\ CertificateRequest ]]; then
-          is_tls13=true
-     elif [[ "$response" =~ \<\<\<\ TLS\ 1.2[\,]?\ Handshake\ \[length\ [0-9a-fA-F]*\]\,\ CertificateRequest ]]; then
-          is_tls12=true
-     fi
 
      # Extract just the CertificateRequest message as an ASCII-HEX string.
-     certreq="${response##*CertificateRequest}"
-     certreq="0d${certreq#*0d}"
-     certreq="${certreq%%<<<*}"
-     certreq="$(strip_spaces "$(newline_to_spaces "$certreq")")"
-     certreq="${certreq:8}"
-
-     # Get the list of DNs from the CertificateRequest message.
-     if "$is_tls13"; then
+     # The tls_version variable on ly exists if this function is called from tls_sockets which provides 
+     # certreq in the right format.
+     if [[ -z "$tls_version" ]] then
+          # Determine whether this is a TLS 1.2 or TLS 1.3 response, since the information
+          # is encoded in a different place for TLS 1.3 and the CertificateRequest message
+          # differs between TLS 1.2 and TLS 1.1 and earlier.
+          if [[ "$response" =~ \<\<\<\ TLS\ 1.3[\,]?\ Handshake\ \[length\ [0-9a-fA-F]*\]\,\ CertificateRequest ]]; then
+               is_tls13=true
+          elif [[ "$response" =~ \<\<\<\ TLS\ 1.2[\,]?\ Handshake\ \[length\ [0-9a-fA-F]*\]\,\ CertificateRequest ]]; then
+               is_tls12=true
+          fi
+          certreq="${response##*CertificateRequest}"
+          certreq="0d${certreq#*0d}"
+          certreq="${certreq%%<<<*}"
+          certreq="$(strip_spaces "$(newline_to_spaces "$certreq")")"
+          certreq="${certreq:8}"
+     else
+          certreq="$response"
+     fi 
+     # Extract the extensions' information
+     if "$is_tls13" || [[ 0x"$tls_version" = "0x04" ]]; then
           # struct {
           #     opaque certificate_request_context<0..2^8-1>;
           #     Extension extensions<2..2^16-1>;
           # } CertificateRequest;
+          # Context len
           len=2*$(hex2dec "${certreq:0:2}")
           certreq="${certreq:$((len+2))}"
           len=2*$(hex2dec "${certreq:0:4}")
@@ -21707,6 +21745,7 @@ extract_calist() {
 # characters group and convert it to the corresponding signature algorithm.
 sigalgs_converter() {
      local sigalgs=$1
+     sigalgs="$(echo "$sigalgs" | tr '[:upper:]' '[:lower:]')"
      local sigalgs_string=""
      while true; do
           [[ -z "$sigalgs" ]] && break
@@ -21965,7 +22004,7 @@ determine_optimal_sockets_params() {
 determine_optimal_proto() {
      local all_failed=true
      local tmp=""
-     local proto optimal_proto
+     local proto optimal_proto actual_proto
      local jsonID="optimal_proto"
 
      "$do_tls_sockets" && return 0
@@ -22133,8 +22172,13 @@ determine_optimal_proto() {
           ignore_no_or_lame " Type \"yes\" to proceed and accept false negatives or positives" "yes"
           [[ $? -ne 0 ]] && exit $ERR_CLUELESS
      fi
-
+     actual_proto="$(get_protocol $TMPFILE)"
      tmpfile_handle ${FUNCNAME[0]}.txt
+     if [[ $actual_proto == TLSv1.3 ]] && [[ "$(has_server_protocol "tls1_2")" -eq 0 ]] && [[ "$CLIENT_AUTH" != none ]]; then
+          # In this case we need a TLS1.2 handshake to get the information for both TLS1.2 and TLS1.3
+          $OPENSSL s_client $(s_client_options "-tls1_2 $BUGS -connect "$NODEIP:$PORT" -msg $PROXY $SNI") </dev/null >$TMPFILE 2>>$ERRFILE          
+          tmpfile_handle "tls12_handshake.txt"
+     fi
      return 0
 }
 
