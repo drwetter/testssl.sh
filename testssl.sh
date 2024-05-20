@@ -21651,7 +21651,7 @@ extract_calist() {
      # Extract just the CertificateRequest message as an ASCII-HEX string.
      # The tls_version variable on ly exists if this function is called from tls_sockets which provides 
      # certreq in the right format.
-     if [[ -z "$tls_version" ]] then
+     if [[ -z "$tls_version" ]]; then
           # Determine whether this is a TLS 1.2 or TLS 1.3 response, since the information
           # is encoded in a different place for TLS 1.3 and the CertificateRequest message
           # differs between TLS 1.2 and TLS 1.1 and earlier.
