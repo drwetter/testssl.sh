@@ -2306,7 +2306,7 @@ s_client_options() {
                fi
           fi
      fi
-     
+
      # In case of mutual TLS authentication is required by the server
      # Note: the PEM certificate file must contain: client certificate and key (not encrypted)
      if [[ -n "$MTLS" ]]; then
@@ -23585,7 +23585,8 @@ parse_cmd_line() {
                     FNAME="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     IKNOW_FNAME=true
-                    WARNINGS="batch"           # set this implicitly!
+                    # If WARNINGS was set to "off, we shouldn't overwrite it, see #2496. "batch" is set implicitly otherwise
+                    [[ "$WARNINGS" != off ]] && WARNINGS="batch"
                     do_mass_testing=true
                     ;;
                --mode|--mode=*)
