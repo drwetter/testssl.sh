@@ -14825,7 +14825,7 @@ parse_tls_serverhello() {
      fi
      # Now parse the CertificateRequest message.
      if [[ $tls_certificate_request_ascii_len -ne 0 ]] && [[ "$process_full" =~ all ]]; then
-          # The CertificateRequest message is only present in TLS 1.3 and it has a 2 char identifier and a 6 char length.
+          # The CertificateRequest message is only present in TLS 1.3 and TLS 1.2, it has a 2 char identifier and a 6 char length.
           if [[ $tls_certificate_request_ascii_len -lt 8 ]]; then
                debugme echo "Malformed CertificateRequest Handshake message in ServerHello."
                tmpfile_handle ${FUNCNAME[0]}.txt
@@ -14834,8 +14834,8 @@ parse_tls_serverhello() {
           # The extract_calist can be used to extract the extensions' data from the CertificateRequest message.
           # The second parameter is the TLS version, if it is provided extract_calist does not try to get it.
           extract_calist "$tls_certificate_request_ascii" "${DETECTED_TLS_VERSION:2:2}" 
-          # not sure about this
-          CLIENT_AUTH="required" 
+          # Can not find a way to check if it is optional or required
+          CLIENT_AUTH="optional"
      fi
 
      # Now parse the Certificate message.
@@ -21649,7 +21649,7 @@ extract_calist() {
 
 
      # Extract just the CertificateRequest message as an ASCII-HEX string.
-     # The tls_version variable on ly exists if this function is called from tls_sockets which provides 
+     # The tls_version variable only exists if this function is called from tls_sockets which provides 
      # certreq in the right format.
      if [[ -z "$tls_version" ]]; then
           # Determine whether this is a TLS 1.2 or TLS 1.3 response, since the information
@@ -21715,7 +21715,7 @@ extract_calist() {
           len=2*$(hex2dec "${certreq:0:2}")
           certtypes="${certreq:2:len}"
           certreq="${certreq:$((len+2))}"
-          if "$is_tls12"; then
+          if "$is_tls12" || [[ 0x"$tls_version" = "0x03" ]]; then
                len=2*$(hex2dec "${certreq:0:4}")
                sigalgs="${certreq:4:len}"
                certreq="${certreq:$((len+4))}"
