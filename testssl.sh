@@ -2308,7 +2308,7 @@ s_client_options() {
                fi
           fi
      fi
-     
+
      # In case of mutual TLS authentication is required by the server
      # Note: the PEM certificate file must contain: client certificate and key (not encrypted)
      if [[ -n "$MTLS" ]]; then
@@ -17398,12 +17398,12 @@ run_breach() {
      detected_compression=$(sub_breach_helper "$get_command")
      case "$detected_compression" in
           warn_stalled)
-               pr_warning "First request failed (HTTP header request stalled and was terminated)"
+               prln_warning "First request failed (HTTP header request stalled and was terminated)"
                fileout "$jsonID" "WARN" "Test failed as first HTTP request stalled and was terminated" "$cve" "$cwe"
                ret=1
                ;;
           warn_failed)
-               pr_warning "First request failed (HTTP header request was empty)"
+               prln_warning "First request failed (HTTP header request was empty)"
                fileout "$jsonID" "WARN" "Test failed as first HTTP response was empty" "$cve" "$cwe"
                ret=1
                ;;
@@ -23707,7 +23707,8 @@ parse_cmd_line() {
                     FNAME="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     IKNOW_FNAME=true
-                    WARNINGS="batch"           # set this implicitly!
+                    # If WARNINGS was set to "off, we shouldn't overwrite it, see #2496. "batch" is set implicitly otherwise
+                    [[ "$WARNINGS" != off ]] && WARNINGS="batch"
                     do_mass_testing=true
                     ;;
                --mode|--mode=*)
