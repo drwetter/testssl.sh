@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 
-# Basics: is there a synatx error where already bash hiccups on?
+# Basics: is there a syntax error where already bash hiccups on?
 # --banner is equal to --version
 
 use strict;
