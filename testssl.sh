@@ -14455,7 +14455,7 @@ parse_tls_serverhello() {
                                tls_extensions+=" (id=51), len=$extension_len\n"
                           fi
                           if [[ "$process_full" =~ all ]] || [[ "$process_full" == ephemeralkey ]]; then
-                               if [[ $extension_len -lt 4  ]]; then
+                               if [[ $extension_len -lt 8  ]]; then
                                     debugme tmln_warning "Malformed key share extension."
                                     [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                                     return 1
