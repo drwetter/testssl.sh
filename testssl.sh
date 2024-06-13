@@ -1337,7 +1337,7 @@ get_cipher() {
      # Esepcially with bash 3.2 (Mac OS X) and when on the server side binary chars
      # are returned, see https://stackoverflow.com/questions/7427262/how-to-read-a-file-into-a-variable-in-shell#22607352
      # and https://github.com/drwetter/testssl.sh/issues/1292
-     # Performance measurements showed no to barely measureable penalty (1s displayed in 9 tries).
+     # Performance measurements showed no to barely measurable penalty (1s displayed in 9 tries).
 
      if [[ "$server_hello" =~ Cipher\ *:\ ([A-Z0-9]+-[A-Za-z0-9\-]+|TLS_[A-Za-z0-9_]+|SSL_[A-Za-z0-9_]+) ]]; then
           cipher="${BASH_REMATCH##* }"
