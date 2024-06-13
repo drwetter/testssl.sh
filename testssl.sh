@@ -117,7 +117,7 @@ trap "child_error" USR1
 
 ########### Internal definitions
 #
-declare -r VERSION="3.0.8"
+declare -r VERSION="3.0.9"
 declare -r SWCONTACT="dirk aet testssl dot sh"
 grep -E -q "dev|rc|beta" <<< "$VERSION" && \
      SWURL="https://testssl.sh/dev/" ||
@@ -17725,22 +17725,21 @@ mybanner() {
      OPENSSL_NR_CIPHERS=$(count_ciphers "$(actually_supported_osslciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 'ALL')")
      bb1=$(cat <<EOF
 
-###########################################################
-    $PROG_NAME       $VERSION from
+#####################################################################
+    $PROG_NAME version $VERSION from
 EOF
 )
      bb2=$(cat <<EOF
 
-      This program is free software. Distribution and
-             modification under GPLv2 permitted.
-      USAGE w/o ANY WARRANTY. USE IT AT YOUR OWN RISK!
+  This program is free software. Distribution and modification under
+  GPLv2 permitted. USAGE w/o ANY WARRANTY. USE IT AT YOUR OWN RISK!
 
-       Please file bugs @
+    Please file bugs @
 EOF
 )
      bb3=$(cat <<EOF
 
-###########################################################
+#####################################################################
 EOF
 )
      pr_bold "$bb1 "
@@ -17754,10 +17753,11 @@ EOF
      pr_boldurl "https://testssl.sh/bugs/"; outln
      pr_bold "$bb3"
      outln "\n"
-     outln " Using \"$($OPENSSL version 2>/dev/null)\" [~$OPENSSL_NR_CIPHERS ciphers]"
-     out " on $HNAME:"
+     out " Using "; pr_italic "bash ${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}.${BASH_VERSINFO[2]}"; out ".  "
+                    pr_italic "$($OPENSSL version 2>/dev/null)"; outln " [~$OPENSSL_NR_CIPHERS ciphers]"
+     out "    on $HNAME:"
      outln "$OPENSSL_LOCATION"
-     outln " (built: \"$OSSL_BUILD_DATE\", platform: \"$OSSL_VER_PLATFORM\")\n"
+     out "    (built: "; pr_italic "$OSSL_BUILD_DATE"; out ", platform: "; pr_italic "$OSSL_VER_PLATFORM"; outln ")"
 }
 
 calc_scantime() {
