@@ -11,7 +11,11 @@ Feel free to remove this line but please stick to the template. Not filling out 
 -->
 
 **Which version are you referring to**
-3.0.x or 3.2?
+3.2
+
+<!---
+Please note that for 3.0.x weŕe in maintenance mode. There will be no new features. Try 3.2 instead and come back if it isn´tr supported there
+-->
 
 
 **Please check this repo whether this is a known feature request**
