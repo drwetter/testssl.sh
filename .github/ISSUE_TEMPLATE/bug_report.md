@@ -12,7 +12,7 @@ _Feel free to remove this line but please stick to the template. We would like t
 -->
 
 **Before you open an issue please check which version you are running and whether it is the latest in stable / dev branch**
-I am running version ( ``git log | head -1``  / ``testssl.sh -v | grep from``)
+I am running version ( ``git log | head -1`` if running from the git repo. Otherwise ``testssl.sh -v | grep from``)
 
 **Before you open an issue please whether this is a known problem by searching the issues**
 Is related to / couldn't find anything 
