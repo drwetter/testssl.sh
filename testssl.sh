@@ -288,8 +288,9 @@ TMPFILE=""
 ERRFILE=""
 CLIENT_AUTH="none"
 CLIENT_AUTH_CA_LIST=""
-CLIENT_AUTH_SIGALGS_LIST=""
-CLIENT_AUTH_SIGALGS_CERT_LIST=""
+CLIENT_AUTH_SIGALGS_LIST_13="empty"
+CLIENT_AUTH_SIGALGS_CERT_LIST_13="empty"
+CLIENT_AUTH_SIGALGS_LIST_12="empty"
 TLS_TICKETS=false
 NO_SSL_SESSIONID=true
 CERT_COMPRESSION=${CERT_COMPRESSION:-false}  # secret flag to set in addition to --devel for certificate compression
@@ -10358,16 +10359,30 @@ run_server_defaults() {
                     i+=1
                done <<< "$CLIENT_AUTH_CA_LIST"
                fi
-          jsonID="clientAuth_Signature_Algorithms"
-          pr_bold " Offered Signature Algorithms "
-          out_row_aligned "$CLIENT_AUTH_SIGALGS_LIST"
-          fileout "$jsonID" "INFO" "$CLIENT_AUTH_SIGALGS_LIST"
-          jsonID="clientAuth_Signature_Algorithms_Cert "
-          if [[ "$CLIENT_AUTH_SIGALGS_CERT_LIST" != empty\  ]] ; then
-               pr_bold " Offered Signature Algorithms for Certificates "
-               out_row_aligned "$CLIENT_AUTH_SIGALGS_CERT_LIST"
-               fileout "$jsonID" "INFO" "$CLIENT_AUTH_SIGALGS_CERT_LIST"
+          if [[ "$CLIENT_AUTH_SIGALGS_LIST_13" = "$CLIENT_AUTH_SIGALGS_LIST_12" ]]; then
+               pr_bold " Offered Signature Algorithms "
+               out_row_aligned "$CLIENT_AUTH_SIGALGS_LIST_13"
+          else
+               if [[ $CLIENT_AUTH_SIGALGS_LIST_13 != empty ]]; then
+                    pr_bold " Offered Signature Algorithms (TLS 1.3) "
+                    out_row_aligned "$CLIENT_AUTH_SIGALGS_LIST_13"
+               fi
+               if [[ $CLIENT_AUTH_SIGALGS_LIST_12 != empty ]]; then
+                    pr_bold " Offered Signature Algorithms (TLS 1.2) "
+                    out_row_aligned "$CLIENT_AUTH_SIGALGS_LIST_12"
+               fi
           fi
+          jsonID="clientAuth_Signature_Algorithms_TLS13"
+          fileout "$jsonID" "INFO" "$CLIENT_AUTH_SIGALGS_LIST_13"
+          jsonID="clientAuth_Signature_Algorithms_TLS12"
+          fileout "$jsonID" "INFO" "$CLIENT_AUTH_SIGALGS_LIST_12"
+
+          if [[ "$CLIENT_AUTH_SIGALGS_CERT_LIST_13" != empty ]]; then
+               pr_bold " Offered Signature Algorithms for Certificates "
+               out_row_aligned "$CLIENT_AUTH_SIGALGS_CERT_LIST_13"
+          fi
+          jsonID="clientAuth_Signature_Algorithms_Cert_TLS13"
+          fileout "$jsonID" "INFO" "$CLIENT_AUTH_SIGALGS_CERT_LIST_13"
      fi
 
 
@@ -21705,6 +21720,12 @@ extract_calist() {
                fi
                certreq="${certreq:$((len+8))}"
           done
+          sigalgs_string="$(sigalgs_converter "$sigalgs")"
+          CLIENT_AUTH_SIGALGS_LIST_13="${sigalgs_string}"
+          [[ -z "$sigalgs_string" ]] && CLIENT_AUTH_SIGALGS_LIST_13="empty"
+          sigalgs_string_cert="$(sigalgs_converter "$sigalgs_cert")"
+          CLIENT_AUTH_SIGALGS_CERT_LIST_13="${sigalgs_string_cert}"
+          [[ -z "$sigalgs_string_cert" ]] && CLIENT_AUTH_SIGALGS_CERT_LIST_13="empty"
      else
           # struct {
           #     ClientCertificateType certificate_types<1..2^8-1>;
@@ -21722,6 +21743,9 @@ extract_calist() {
           fi
           len=2*$(hex2dec "${certreq:0:4}")
           calist="${certreq:4:len}"
+          sigalgs_string="$(sigalgs_converter "$sigalgs")"
+          CLIENT_AUTH_SIGALGS_LIST_12="${sigalgs_string}"
+          [[ -z "$sigalgs_string" ]] && CLIENT_AUTH_SIGALGS_LIST_12="empty"
      fi
      # Convert each DN to a string.
      while true; do
@@ -21733,12 +21757,6 @@ extract_calist() {
      done
      [[ -z "$calist_string" ]] && calist_string="empty"
      CLIENT_AUTH_CA_LIST="$(safe_echo "$calist_string")"
-     sigalgs_string="$(sigalgs_converter "$sigalgs")"
-     CLIENT_AUTH_SIGALGS_LIST="${sigalgs_string} "
-     [[ -z "$sigalgs_string" ]] && CLIENT_AUTH_SIGALGS_LIST="empty "
-     sigalgs_string_cert="$(sigalgs_converter "$sigalgs_cert")"
-     CLIENT_AUTH_SIGALGS_CERT_LIST="${sigalgs_string_cert} "
-     [[ -z "$sigalgs_string_cert" ]] && CLIENT_AUTH_SIGALGS_CERT_LIST="empty "
      return 0
 }
 # Given the list of signature algorithms in hex format (no space) take each four 
@@ -22174,10 +22192,12 @@ determine_optimal_proto() {
      fi
      actual_proto="$(get_protocol $TMPFILE)"
      tmpfile_handle ${FUNCNAME[0]}.txt
-     if [[ $actual_proto == TLSv1.3 ]] && [[ "$(has_server_protocol "tls1_2")" -eq 0 ]] && [[ "$CLIENT_AUTH" != none ]]; then
-          # In this case we need a TLS1.2 handshake to get the information for both TLS1.2 and TLS1.3
-          $OPENSSL s_client $(s_client_options "-tls1_2 $BUGS -connect "$NODEIP:$PORT" -msg $PROXY $SNI") </dev/null >$TMPFILE 2>>$ERRFILE          
-          tmpfile_handle "tls12_handshake.txt"
+     # if the actual_proto is TLSv1.2 and TLSv1.3 is available it probably means that the
+     # current openssl version does not support TLSv1.3 so tls_sockets must be used to 
+     # obtain information about the certificate request
+     if [[ $actual_proto == TLSv1.2 ]] && [[ "$(has_server_protocol "tls1_3")" -eq 0 ]] && [[ "$CLIENT_AUTH" != none ]]; then
+          # this call performs the handshake and retrieves the signature_algorithms_cert information
+          tls_sockets "04" "$TLS13_CIPHER" "all+" "" "" false
      fi
      return 0
 }
