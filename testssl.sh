@@ -14850,7 +14850,7 @@ parse_tls_serverhello() {
           # The second parameter is the TLS version, if it is provided extract_calist does not try to get it.
           extract_calist "$tls_certificate_request_ascii" "${DETECTED_TLS_VERSION:2:2}" 
           # Can not find a way to check if it is optional or required
-          CLIENT_AUTH="optional"
+          [[ "$CLIENT_AUTH" = none ]] && CLIENT_AUTH="optional"
      fi
 
      # Now parse the Certificate message.
