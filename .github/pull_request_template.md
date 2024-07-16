@@ -1,10 +1,9 @@
 
 ## Describe your changes
 
-Please refer to an issue here or describe the change thouroughly in your PR.
+Please refer to an issue here or describe the change thoroughly in your PR.
 
-What is your chnage about?
-
+## What is your pull request about?
 - [ ] Bug fix (non-breaking change which fixes an issue)
 - [ ] New feature (non-breaking change which adds functionality)
 - [ ] Breaking change (fix or feature that would cause existing functionality to not work as expected)
@@ -13,7 +12,7 @@ What is your chnage about?
 - [ ] Update of other files
 
 
-## If it's a code change please check the boxes which are applicable: 
+## If it's a code change please check the boxes which are applicable
 - [ ] For the main program: My edits contain no tabs and the indentation is five spaces
 - [ ] I've read CONTRIBUTING.md and Coding_Convention.md 
 - [ ] I have tested this __fix__ against >=2 hosts and I couldn't spot a problem
