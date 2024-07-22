@@ -14,9 +14,9 @@ The certificate trust stores were retrieved from
   --> "Keychain Access" (2 click). In that window --> "Keychains" --> "System Root"
   --> "Category" --> "All Items"
   Select all CA certificates except for "Developer ID Certification Authority", omit expired ones,  "File" --> "Export Items"
-    2. __Internet:__ <s> Pick the latest subdir (=highest number) from https://opensource.apple.com/source/security_certificates/. They are in all DER format despite their file extension. Download them with ``wget --level=1 --cut-dirs=5 --mirror --convert-links --adjust-extension --page-requisites --no-parent https://opensource.apple.com/source/security_certificates/security_certificates-<latest>/certificates/roots/``. Then: ``for f in *.cer *.der *.crt; do echo $f >/dev/stderr; openssl x509 -in $f -inform DER -outform PEM ;done >/tmp/Apple.pem``</s>
+    2. __Internet:__ Clone https://github.com/apple-oss-distributions/security_certificates.git, cd to ``security_certificates/certificates/roots``, ``for f in *.* do echo $f >/dev/stderr; openssl x509 -in $f -inform DER -outform PEM ;done >/tmp/Apple.pem``
 
-**ATTENTION**: From each store you need to remove the _DST Root CA X3_ which is for your reference in this directory. See file ``DST Root CA X3.txt`` in this directory. Apple's file name is ``IdenTrust_Root_X3.der``. For the Microsoft store you have/had to identify the file beforehand like ``for f in *.crt; do  openssl x509 -in $f -inform DER -text -noout  | grep -q 'DST' && echo $f ;done``
+**ATTENTION**: From each store you need to remove the _DST Root CA X3_ which is for your reference in this directory. See file ``DST Root CA X3.txt`` in this directory. Apple's file name is ``IdenTrust_Root_X3.der`` (was not needed in 2024 anymore). For the Microsoft store you have/had to identify the file beforehand like ``for f in *.crt; do  openssl x509 -in $f -inform DER -text -noout  | grep -q 'DST' && echo $f ;done``
 
 Google Chromium uses basically the trust stores above, see https://www.chromium.org/Home/chromium-security/root-ca-policy.
 
