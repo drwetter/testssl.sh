@@ -22,6 +22,8 @@ Google Chromium uses basically the trust stores above, see https://www.chromium.
 
 If you want to check trust against e.g. a company internal CA you need to use ``./testssl.sh --add-ca companyCA1.pem,companyCA2.pem <further_cmds>`` or ``ADDTL_CA_FILES=companyCA1.pem,companyCA2.pem ./testssl.sh <further_cmds>``.
 
+IMPORTANT: After updating any of the CA root stores you have to invoke ``./utils/create_ca_hashes.sh`` to update ``~/etc/ca_hashes.txt``.
+
 
 #### License
 
@@ -37,7 +39,7 @@ Please note that the licenses of the certificate stores might not be GPLv2 in al
 * ``curves-mapping.txt`` contains information about all of the elliptic curves defined by IANA
 
 * ``ca_hashes.txt`` is used for HPKP test in order to have a fast comparison with known CAs. You MUST
-   use ``~/utils/create_ca_hashes.sh`` for every update
+   use ``./utils/create_ca_hashes.sh`` for every Root CA store update, see above.
 
 * ``common-primes.txt`` is used for LOGJAM and the PFS section
 
