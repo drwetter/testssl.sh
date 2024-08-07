@@ -22881,7 +22881,7 @@ run_rating() {
      pr_headlineln " Rating (experimental) "
      outln
 
-     [[ -n "$STARTTLS_PROTOCOL" ]] && set_grade_cap "T" "Encryption via STARTTLS is not mandatory (opportunistic)."
+     [[ -n "$STARTTLS_PROTOCOL" ]] && pr_warning "Encryption via STARTTLS should be mandatory (not opportunistic). testssl doesn't check it.\n"
 
      pr_bold " Rating specs"; out " (not complete)  "; outln "SSL Labs's 'SSL Server Rating Guide' (version 2009q from 2020-01-30)"
      pr_bold " Specification documentation  "; pr_url "https://github.com/ssllabs/research/wiki/SSL-Server-Rating-Guide"
