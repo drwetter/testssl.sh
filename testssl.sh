@@ -5639,7 +5639,7 @@ run_protocols() {
                     fileout "$jsonID" "MEDIUM" "not offered, and downgraded to SSL"
                elif [[ "$DETECTED_TLS_VERSION" == 03* ]]; then
                     detected_version_string="TLSv1.$((0x$DETECTED_TLS_VERSION-0x0301))"
-                    prln_svrty_critical " -- server responded with higher version number ($detected_version_string) than requested by client"
+                    prln_svrty_critical " -- server responded with higher version number ($detected_version_string) than requested by client (NOT ok)"
                     fileout "$jsonID" "CRITICAL" "server responded with higher version number ($detected_version_string) than requested by client"
                else
                     if [[ ${#DETECTED_TLS_VERSION} -eq 4 ]]; then
@@ -5851,7 +5851,7 @@ run_protocols() {
                     prln_svrty_critical " -- server supports $latest_supported_string, but downgraded to $detected_version_string"
                     fileout "$jsonID" "CRITICAL" "not offered, and downgraded to $detected_version_string rather than $latest_supported_string"
                elif [[ "$tls12_detected_version" == 03* ]] && [[ 0x$tls12_detected_version -gt 0x0303 ]]; then
-                    prln_svrty_critical " -- server responded with higher version number ($detected_version_string) than requested by client"
+                    prln_svrty_critical " -- server responded with higher version number ($detected_version_string) than requested by client (NOT ok)"
                     fileout "$jsonID" "CRITICAL" "not offered, server responded with higher version number ($detected_version_string) than requested by client"
                else
                     if [[ ${#tls12_detected_version} -eq 4 ]]; then
@@ -5999,7 +5999,7 @@ run_protocols() {
                     fileout "$jsonID" "CRITICAL" "not offered, and downgraded to $detected_version_string rather than $latest_supported_string"
                elif [[ "$DETECTED_TLS_VERSION" == 03* ]] && [[ 0x$DETECTED_TLS_VERSION -gt 0x0304 ]]; then
                     out "not offered"
-                    prln_svrty_critical " -- server responded with higher version number ($detected_version_string) than requested by client"
+                    prln_svrty_critical " -- server responded with higher version number ($detected_version_string) than requested by client (NOT ok)"
                     fileout "$jsonID" "CRITICAL" "not offered, server responded with higher version number ($detected_version_string) than requested by client"
                else
                     out "not offered"
