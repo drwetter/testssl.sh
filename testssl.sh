@@ -16254,7 +16254,7 @@ tls_sockets() {
 
           if ! "$close_connection" && [[ $save == 0 ]] && \
              [[ -n "$handshake_secret" ]] && [[ "$process_full" == all+ ]]; then
-                    tls_version="$DETECTED_TLS_VERSION"
+               tls_version="$DETECTED_TLS_VERSION"
                if [[ "${TLS_SERVER_HELLO:8:3}" == 7F1 ]]; then
                     tls_version="${TLS_SERVER_HELLO:8:4}"
                elif [[ "$TLS_SERVER_HELLO" =~ 002B00027F1[0-9A-F] ]]; then
@@ -16264,7 +16264,7 @@ tls_sockets() {
 
                handshake_traffic_keys="$(derive-handshake-traffic-keys "$cipher" "$handshake_secret" "$initial_msg_transcript" "client")"
                read -r key iv finished_key <<< "$handshake_traffic_keys"
-               [[ -z master_secret ]] && master_secret="$(derive-master-secret "$cipher" "$handshake_secret")"
+               master_secret="$(derive-master-secret "$cipher" "$handshake_secret")"
                master_traffic_keys="$(derive-application-traffic-keys "$cipher" "$master_secret" "$msg_transcript" server)"
                read -r server_key server_iv server_finished_key <<< "$master_traffic_keys"
                if [[ "$cipher" == *SHA256 ]]; then
