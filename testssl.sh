@@ -16074,7 +16074,8 @@ tls_sockets() {
      local close_connection=true include_headers=true
      local -i i len msg_len tag_len hello_done=0 seq_num=0
      local cipher="" tls_version handshake_secret="" res
-     local initial_msg_transcript msg_transcript finished_msg aad="" data="" plaintext
+     local initial_msg_transcript msg_transcript finished_msg aad="" data="" cert_msg="" plaintext
+     local server_key server_iv server_finished_key
      local handshake_traffic_keys key iv finished_key
      local master_secret master_traffic_keys
 
@@ -16253,7 +16254,7 @@ tls_sockets() {
 
           if ! "$close_connection" && [[ $save == 0 ]] && \
              [[ -n "$handshake_secret" ]] && [[ "$process_full" == all+ ]]; then
-               tls_version="$DETECTED_TLS_VERSION"
+                    tls_version="$DETECTED_TLS_VERSION"
                if [[ "${TLS_SERVER_HELLO:8:3}" == 7F1 ]]; then
                     tls_version="${TLS_SERVER_HELLO:8:4}"
                elif [[ "$TLS_SERVER_HELLO" =~ 002B00027F1[0-9A-F] ]]; then
@@ -16263,12 +16264,50 @@ tls_sockets() {
 
                handshake_traffic_keys="$(derive-handshake-traffic-keys "$cipher" "$handshake_secret" "$initial_msg_transcript" "client")"
                read -r key iv finished_key <<< "$handshake_traffic_keys"
+               [[ -z master_secret ]] && master_secret="$(derive-master-secret "$cipher" "$handshake_secret")"
+               master_traffic_keys="$(derive-application-traffic-keys "$cipher" "$master_secret" "$msg_transcript" server)"
+               read -r server_key server_iv server_finished_key <<< "$master_traffic_keys"
                if [[ "$cipher" == *SHA256 ]]; then
                     finished_msg="14000020$(hmac-transcript "-sha256" "$finished_key" "$msg_transcript")"
                else
                     finished_msg="14000030$(hmac-transcript "-sha384" "$finished_key" "$msg_transcript")"
                fi
                [[ "$cipher" =~ CCM_8 ]] && tag_len=8 || tag_len=16
+               if [[ $CLIENT_AUTH == optional ]]; then
+                    # in this case we try to send a client certificate
+                    change_cipher_spec="140303000101"
+                    len=${#change_cipher_spec}
+                    for (( i=0; i < len; i+=2 )); do
+                         data+=", ${change_cipher_spec:i:2}"
+                    done
+                    socksend_clienthello "${data}"
+                    data=""   
+                    # empty certificate message 0b 00 00 04 00 00 00 00 this is used only to know whether the Certificate
+                    # is required or optional.
+                    cert_msg="0b00000400000000"
+                    aad="170303$(printf "%04X" "$(( ${#cert_msg}/2 + tag_len + 1 ))")"
+                    if "$include_headers"; then
+                         cert_msg="$(sym-encrypt "$cipher" "$key" "$(get-nonce "$iv" 0)" "${cert_msg}16" "$aad")"
+                    else
+                         cert_msg="$(sym-encrypt "$cipher" "$key" "$(get-nonce "$iv" 0)" "${cert_msg}16" "")"
+                    fi
+                    cert_msg="$aad$cert_msg"
+                    len=${#cert_msg}
+                    for (( i=0; i < len; i+=2 )); do
+                         data+=", ${cert_msg:i:2}"
+                    done
+                    debugme echo -e "\nsending certificate..."
+                    socksend_clienthello "${data}"
+                    data=""
+
+                    sockread 32768
+                    ciphertext=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
+                    msg_len=$((2*0x${ciphertext:6:4}))
+                    aad="${ciphertext:0:10}"
+                    "$include_headers" || aad=""
+                    data="$(sym-decrypt "$cipher" "$server_key" "$(get-nonce "$server_iv" 0)" "${ciphertext:10:msg_len}" "$aad")"
+                    [[ $data == 027415 ]] && CLIENT_AUTH=required
+               fi
                aad="170303$(printf "%04X" "$(( ${#finished_msg}/2 + tag_len + 1 ))")"
                if "$include_headers"; then
                     # The header information was added to additional data in TLSv1.3 draft 25.
