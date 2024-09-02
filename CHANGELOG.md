@@ -47,6 +47,7 @@
 * Don't use external pwd command anymore
 * Doesn't hang anymore when there's no local resolver
 * Added --mtls feature to support client authentication 
+* Added support for signature_algorithms_cert extension
 
 
 ### Features implemented / improvements in 3.0

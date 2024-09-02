@@ -75,6 +75,10 @@ Full contribution, see git log.
   - lots of cleanups
   - Shellcheck static analysis
 
+* Riccardo Germenia
+  - add support for signature_algorithms_cert extension
+  - add Certificate message to TLS sockets
+
 * Laine Gholson
   - avahi/mDNS support
   - HTTP2/ALPN
