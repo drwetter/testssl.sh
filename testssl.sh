@@ -5642,7 +5642,7 @@ run_protocols() {
                     fileout "$jsonID" "MEDIUM" "not offered, and downgraded to SSL"
                elif [[ "$DETECTED_TLS_VERSION" == 03* ]]; then
                     detected_version_string="TLSv1.$((0x$DETECTED_TLS_VERSION-0x0301))"
-                    prln_svrty_critical " -- server responded with higher version number ($detected_version_string) than requested by client"
+                    prln_svrty_critical " -- server responded with higher version number ($detected_version_string) than requested by client (NOT ok)"
                     fileout "$jsonID" "CRITICAL" "server responded with higher version number ($detected_version_string) than requested by client"
                else
                     if [[ ${#DETECTED_TLS_VERSION} -eq 4 ]]; then
@@ -5854,7 +5854,7 @@ run_protocols() {
                     prln_svrty_critical " -- server supports $latest_supported_string, but downgraded to $detected_version_string"
                     fileout "$jsonID" "CRITICAL" "not offered, and downgraded to $detected_version_string rather than $latest_supported_string"
                elif [[ "$tls12_detected_version" == 03* ]] && [[ 0x$tls12_detected_version -gt 0x0303 ]]; then
-                    prln_svrty_critical " -- server responded with higher version number ($detected_version_string) than requested by client"
+                    prln_svrty_critical " -- server responded with higher version number ($detected_version_string) than requested by client (NOT ok)"
                     fileout "$jsonID" "CRITICAL" "not offered, server responded with higher version number ($detected_version_string) than requested by client"
                else
                     if [[ ${#tls12_detected_version} -eq 4 ]]; then
@@ -6002,7 +6002,7 @@ run_protocols() {
                     fileout "$jsonID" "CRITICAL" "not offered, and downgraded to $detected_version_string rather than $latest_supported_string"
                elif [[ "$DETECTED_TLS_VERSION" == 03* ]] && [[ 0x$DETECTED_TLS_VERSION -gt 0x0304 ]]; then
                     out "not offered"
-                    prln_svrty_critical " -- server responded with higher version number ($detected_version_string) than requested by client"
+                    prln_svrty_critical " -- server responded with higher version number ($detected_version_string) than requested by client (NOT ok)"
                     fileout "$jsonID" "CRITICAL" "not offered, server responded with higher version number ($detected_version_string) than requested by client"
                else
                     out "not offered"
@@ -21330,7 +21330,7 @@ get_aaaa_record() {
                elif "$HAS_DIG"; then
                     ip6=$(filter_ip6_address $(dig $DIG_R @ff02::fb -p 5353 -t aaaa +short +notcp "$NODE" 2>/dev/null))
                elif "$HAS_DRILL"; then
-                    ip6=$(filter_ip6_address $(drill @ff02::fb -p 5353 "$1" 2>/dev/null | awk '/ANSWER SECTION/,/AUTHORITY SECTION/ { print $NF }' | awk '/^[0-9]/'))
+                    ip6=$(filter_ip6_address $(drill @ff02::fb -p 5353 "$1" 2>/dev/null | awk '/ANSWER SECTION/,/AUTHORITY SECTION/ { print $NF }' | awk '/^[a-f0-9]/'))
                else
                     fatal "Local hostname given but neither 'avahi-resolve', 'dig' nor 'drill' is available." $ERR_DNSBIN
                fi
@@ -21339,11 +21339,11 @@ get_aaaa_record() {
      fi
      if [[ -z "$ip6" ]]; then
           if "$HAS_DIG"; then
-               ip6=$(filter_ip6_address $(dig +search $DIG_R +short +timeout=2 +tries=2 $noidnout -t aaaa "$1" 2>/dev/null | awk '/^[0-9]/ { print $1 }'))
+               ip6=$(filter_ip6_address $(dig +search $DIG_R +short +timeout=2 +tries=2 $noidnout -t aaaa "$1" 2>/dev/null | awk '/^[a-f0-9]/ { print $1 }'))
           elif "$HAS_HOST"; then
                ip6=$(filter_ip6_address $(host -t aaaa "$1" | awk '/address/ { print $NF }'))
           elif "$HAS_DRILL"; then
-               ip6=$(filter_ip6_address $(drill aaaa "$1" | awk '/ANSWER SECTION/,/AUTHORITY SECTION/ { print $NF }' | awk '/^[0-9]/'))
+               ip6=$(filter_ip6_address $(drill aaaa "$1" | awk '/ANSWER SECTION/,/AUTHORITY SECTION/ { print $NF }' | awk '/^[a-f0-9]/'))
           elif "$HAS_NSLOOKUP"; then
                ip6=$(filter_ip6_address $(strip_lf "$(nslookup -type=aaaa "$1" 2>/dev/null | awk '/'"^${a}"'.*AAAA/ { print $NF }')"))
           fi
