@@ -76,6 +76,7 @@ Full contribution, see git log.
   - Shellcheck static analysis
 
 * Riccardo Germenia
+  - add list of signature algorithms for client auth
   - add support for signature_algorithms_cert extension
   - add Certificate message to TLS sockets
 
