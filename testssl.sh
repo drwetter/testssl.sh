@@ -2741,6 +2741,8 @@ run_hsts() {
           # strict parsing now as suggested in #2381
           hsts_age_sec="${HEADERVALUE#*=}"
           hsts_age_sec=${hsts_age_sec%%;*}
+          # see #2466
+          hsts_age_sec=$(strip_trailing_space "$hsts_age_sec")
           if [[ $hsts_age_sec =~ \" ]]; then
                # remove first an last " in $hsts_age_sec (borrowed from strip_trailing_space/strip_leading_space):
                hsts_age_sec=$(printf "%s" "${hsts_age_sec#"${hsts_age_sec%%[!\"]*}"}")
