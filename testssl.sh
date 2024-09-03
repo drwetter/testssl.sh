@@ -2588,7 +2588,7 @@ match_ipv4_httpheader() {
 
      # Exclude some headers as they are mistakenly identified as ipv4 address. Issues #158, #323.
      # Also facebook used to have a CSP rule for 127.0.0.1
-     headers="$(grep -Evai "$excluded_header" $HEADERFILE)"
+     headers="$(grep -Evai "$excluded_header" $HEADERFILE 2>/dev/null)"
      if [[ "$headers" =~ $ipv4address ]]; then
           pr_bold " IPv4 address in header       "
           while read line; do
@@ -2736,6 +2736,8 @@ run_hsts() {
           # strict parsing now as suggested in #2381
           hsts_age_sec="${HEADERVALUE#*=}"
           hsts_age_sec=${hsts_age_sec%%;*}
+          # see #2466
+          hsts_age_sec=$(strip_trailing_space "$hsts_age_sec")
           if [[ $hsts_age_sec =~ \" ]]; then
                # remove first an last " in $hsts_age_sec (borrowed from strip_trailing_space/strip_leading_space):
                hsts_age_sec=$(printf "%s" "${hsts_age_sec#"${hsts_age_sec%%[!\"]*}"}")
