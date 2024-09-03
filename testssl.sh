@@ -2512,9 +2512,13 @@ run_http_header() {
      # Quit on first empty line to catch 98% of the cases. Next pattern is there because the SEDs tested
      # so far seem not to be fine with header containing x0d x0a (CRLF) which is the usual case.
      # So we also trigger also on any sign on a single line which is not alphanumeric (plus _)
-     sed -e '/^$/q' -e '/^[^a-zA-Z_0-9]$/q' $HEADERFILE >$HEADERFILE.tmp
+     #
+     # Also we use tr here to remove any crtl chars which the server side offers --> possible security problem
+     # Only allowed now is LF + CR. See  #2337
+     # awk, see above, doesn't seem to care
+     sed -e '/^$/q' -e '/^[^a-zA-Z_0-9]$/q' $HEADERFILE | tr -d '\000-\011\013\014\016-\037' >$HEADERFILE.tmp
      # Now to be more sure we delete from '<' or '{' maybe with a leading blank until the end
-     sed -e '/^ *<.*$/d' -e '/^ *{.*$/d'  $HEADERFILE.tmp >$HEADERFILE
+     sed -e '/^ *<.*$/d' -e '/^ *{.*$/d' $HEADERFILE.tmp >$HEADERFILE
      debugme echo -e "---\n $(< $HEADERFILE) \n---"
 
      HTTP_STATUS_CODE=$(awk '/^HTTP\// { print $2 }' $HEADERFILE 2>>$ERRFILE)
@@ -2589,7 +2593,7 @@ match_ipv4_httpheader() {
 
      # Exclude some headers as they are mistakenly identified as ipv4 address. Issues #158, #323.
      # Also facebook used to have a CSP rule for 127.0.0.1
-     headers="$(grep -Evai "$excluded_header" $HEADERFILE)"
+     headers="$(grep -Evai "$excluded_header" $HEADERFILE 2>/dev/null)"
      if [[ "$headers" =~ $ipv4address ]]; then
           pr_bold " IPv4 address in header       "
           while read line; do
