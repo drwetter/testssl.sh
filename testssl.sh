@@ -317,6 +317,7 @@ OSSL_VER=""                             # openssl version, will be auto-determin
 OSSL_VER_MAJOR=0
 OSSL_VER_MINOR=0
 OSSL_VER_APPENDIX="none"
+OSSL_SHORT_STR=""                       # short string for banner
 CLIENT_PROB_NO=1
 
 GOOD_CA_BUNDLE=""                       # A bundle of CA certificates that can be used to validate the server's certificate
@@ -20127,6 +20128,21 @@ find_openssl_binary() {
      OSSL_VER_PLATFORM=$($OPENSSL version -p 2>/dev/null | sed 's/^platform: //')
      OSSL_BUILD_DATE=$($OPENSSL version -a 2>/dev/null | grep '^built' | sed -e 's/built on//' -e 's/: ... //' -e 's/: //' -e 's/ UTC//' -e 's/ +0000//' -e 's/.000000000//')
 
+     # Determine an OpenSSL short string for the banner
+     # E.g MacOS' homebrew and Debian add a library string: OpenSSL 3.3.1 4 Jun 2024 (Library: OpenSSL 3.3.1 4 Jun 2024),
+     # so we omit the part after the round bracket as it breaks formatting and doesn't provide more useful info
+     OSSL_SHORT_STR=$($OPENSSL version 2>/dev/null)
+     OSSL_SHORT_STR=${OSSL_SHORT_STR%\(*}
+     # Now handle strings like this: OpenSSL 1.1.1l-fips  24 Aug 2021 SUSE release 150500.17.34.1
+     # we find the year, remove until first occurrence, re-add it
+     for yr in {2014..2029} ; do
+          if [[ $OSSL_SHORT_STR =~ \ $yr ]] ; then
+               OSSL_SHORT_STR=${OSSL_SHORT_STR%%$yr*}
+               OSSL_SHORT_STR="${OSSL_SHORT_STR}${yr}"
+               break
+          fi
+     done
+
      # see #190, reverting logic: unless otherwise proved openssl has no dh bits
      case "$OSSL_VER_MAJOR.$OSSL_VER_MINOR" in
           1.0.2|1.1.0|1.1.1|3.*) HAS_DH_BITS=true ;;
@@ -20765,46 +20781,55 @@ prepare_arrays() {
 
 mybanner() {
      local bb1 bb2 bb3
+     local spaces="  "
+     local full="$1"
 
      "$QUIET" && return
      "$CHILD_MASS_TESTING" && return
      OPENSSL_NR_CIPHERS=$(count_ciphers "$(actually_supported_osslciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 'ALL')")
      bb1=$(cat <<EOF
 
-###########################################################
-    $PROG_NAME       $VERSION from
+#####################################################################
 EOF
 )
-     bb2=$(cat <<EOF
+   bb2=$(cat <<EOF
 
-      This program is free software. Distribution and
-             modification under GPLv2 permitted.
-      USAGE w/o ANY WARRANTY. USE IT AT YOUR OWN RISK!
+  This program is free software. Distribution and modification under
+  GPLv2 permitted. USAGE w/o ANY WARRANTY. USE IT AT YOUR OWN RISK!
 
-       Please file bugs @
 EOF
 )
-     bb3=$(cat <<EOF
+   bb3=$(cat <<EOF
 
-###########################################################
+#####################################################################
 EOF
 )
-     pr_bold "$bb1 "
+     prln_bold "$bb1"; out "$spaces" ; pr_bold "$PROG_NAME"; out " version " ; pr_bold "$VERSION" ; out " from "
      pr_boldurl "$SWURL"; outln
      if [[ -n "$GIT_REL" ]]; then
-          pr_bold "    ("
+          out "$spaces"
+          pr_bold "("
           pr_litegrey "$GIT_REL"
           prln_bold ")"
      fi
-     pr_bold "$bb2 "
+     prln_bold "$bb2"
+     out "\n${spaces}" ; out "Please file bugs @ "
      pr_boldurl "https://testssl.sh/bugs/"; outln
      pr_bold "$bb3"
      outln "\n"
-     outln " Using \"$($OPENSSL version 2>/dev/null)\" [~$OPENSSL_NR_CIPHERS ciphers]"
-     out " on $HNAME:"
+     out "${spaces}Using "
+     pr_italic "$OSSL_SHORT_STR"
+     outln "  [~$OPENSSL_NR_CIPHERS ciphers]"
+     out "${spaces}on $HNAME:"
      outln "$OPENSSL_LOCATION"
-     outln " (built: \"$OSSL_BUILD_DATE\", platform: \"$OSSL_VER_PLATFORM\")\n"
+     if [[ -n $full ]] || [[ $DEBUG -ge 1 ]]; then
+          out "${spaces}built: "; pr_italic "$OSSL_BUILD_DATE"; out ", platform: "; prln_italic "$OSSL_VER_PLATFORM"
+          out "${spaces}Using "
+          pr_italic "bash ${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}.${BASH_VERSINFO[2]}"
+          outln
+     fi
 }
+
 
 calc_scantime() {
           END_TIME=$(date +%s)
@@ -23318,7 +23343,8 @@ parse_cmd_line() {
                get_install_dir
                find_openssl_binary
                prepare_debug
-               mybanner
+               # full banner
+               mybanner true
                exit $ALLOK
                ;;
      esac
