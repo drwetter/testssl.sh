@@ -332,6 +332,7 @@ OSSL_VER=""                             # openssl version, will be auto-determin
 OSSL_VER_MAJOR=0
 OSSL_VER_MINOR=0
 OSSL_VER_APPENDIX="none"
+OSSL_SHORT_STR=""                       # short string for banner
 CLIENT_PROB_NO=1
 HAS_DH_BITS=${HAS_DH_BITS:-false}       # initialize openssl variables
 HAS_CURVES=false
@@ -17114,7 +17115,7 @@ test_openssl_suffix() {
 find_openssl_binary() {
      local s_client_has=$TEMPDIR/s_client_has.txt
      local s_client_starttls_has=$TEMPDIR/s_client_starttls_has.txt
-     local openssl_location cwd=""
+     local openssl_location cwd="" yr=1
      local ossl_wo_dev_info
      local curve
      local -a curves_ossl=("sect163k1" "sect163r1" "sect163r2" "sect193r1" "sect193r2" "sect233k1" "sect233r1" "sect239k1" "sect283k1" "sect283r1" "sect409k1" "sect409r1" "sect571k1" "sect571r1" "secp160k1" "secp160r1" "secp160r2" "secp192k1" "prime192v1" "secp224k1" "secp224r1" "secp256k1" "prime256v1" "secp384r1" "secp521r1" "brainpoolP256r1" "brainpoolP384r1" "brainpoolP512r1" "X25519" "X448")
@@ -17162,6 +17163,21 @@ find_openssl_binary() {
      OSSL_VER_APPENDIX="${OSSL_VER#$OSSL_VER_MAJOR\.$OSSL_VER_MINOR}"
      OSSL_VER_PLATFORM=$($OPENSSL version -p 2>/dev/null | sed 's/^platform: //')
      OSSL_BUILD_DATE=$($OPENSSL version -a 2>/dev/null | grep '^built' | sed -e 's/built on//' -e 's/: ... //' -e 's/: //' -e 's/ UTC//' -e 's/ +0000//' -e 's/.000000000//')
+
+     # Determine an OpenSSL short string for the banner
+     # E.g MacOS' homebrew and Debian add a library string: OpenSSL 3.3.1 4 Jun 2024 (Library: OpenSSL 3.3.1 4 Jun 2024),
+     # so we omit the part after the round bracket as it breaks formatting and doesn't provide more useful info
+     OSSL_SHORT_STR=$($OPENSSL version 2>/dev/null)
+     OSSL_SHORT_STR=${OSSL_SHORT_STR%\(*}
+     # Now handle strings like this: OpenSSL 1.1.1l-fips  24 Aug 2021 SUSE release 150500.17.34.1
+     # we find the year, remove until first occurrence, re-add it
+     for yr in {2014..2029} ; do
+          if [[ $OSSL_SHORT_STR =~ \ $yr ]] ; then
+               OSSL_SHORT_STR=${OSSL_SHORT_STR%%$yr*}
+               OSSL_SHORT_STR="${OSSL_SHORT_STR}${yr}"
+               break
+          fi
+     done
 
      # see #190, reverting logic: unless otherwise proved openssl has no dh bits
      case "$OSSL_VER_MAJOR.$OSSL_VER_MINOR" in
@@ -17719,6 +17735,8 @@ prepare_arrays() {
 
 mybanner() {
      local bb1 bb2 bb3
+     local spaces="  "
+     local full="$1"
 
      "$QUIET" && return
      "$CHILD_MASS_TESTING" && return
@@ -17726,38 +17744,44 @@ mybanner() {
      bb1=$(cat <<EOF
 
 #####################################################################
-    $PROG_NAME version $VERSION from
 EOF
 )
-     bb2=$(cat <<EOF
+   bb2=$(cat <<EOF
 
   This program is free software. Distribution and modification under
   GPLv2 permitted. USAGE w/o ANY WARRANTY. USE IT AT YOUR OWN RISK!
 
-    Please file bugs @
 EOF
 )
-     bb3=$(cat <<EOF
+   bb3=$(cat <<EOF
 
 #####################################################################
 EOF
 )
-     pr_bold "$bb1 "
+     prln_bold "$bb1"; out "$spaces" ; pr_bold "$PROG_NAME"; out " version " ; pr_bold "$VERSION" ; out " from "
      pr_boldurl "$SWURL"; outln
      if [[ -n "$GIT_REL" ]]; then
-          pr_bold "    ("
+          out "$spaces"
+          pr_bold "("
           pr_litegrey "$GIT_REL"
           prln_bold ")"
      fi
-     pr_bold "$bb2 "
+     prln_bold "$bb2"
+     out "\n${spaces}" ; out "Please file bugs @ "
      pr_boldurl "https://testssl.sh/bugs/"; outln
      pr_bold "$bb3"
      outln "\n"
-     out " Using "; pr_italic "bash ${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}.${BASH_VERSINFO[2]}"; out ".  "
-                    pr_italic "$($OPENSSL version 2>/dev/null)"; outln " [~$OPENSSL_NR_CIPHERS ciphers]"
-     out "    on $HNAME:"
+     out "${spaces}Using "
+     pr_italic "$OSSL_SHORT_STR"
+     outln "  [~$OPENSSL_NR_CIPHERS ciphers]"
+     out "${spaces}on $HNAME:"
      outln "$OPENSSL_LOCATION"
-     out "    (built: "; pr_italic "$OSSL_BUILD_DATE"; out ", platform: "; pr_italic "$OSSL_VER_PLATFORM"; outln ")"
+     if [[ -n $full ]] || [[ $DEBUG -ge 1 ]]; then
+          out "${spaces}built: "; pr_italic "$OSSL_BUILD_DATE"; out ", platform: "; prln_italic "$OSSL_VER_PLATFORM"
+          out "${spaces}Using "
+          pr_italic "bash ${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}.${BASH_VERSINFO[2]}"
+          outln
+     fi
 }
 
 calc_scantime() {
@@ -19698,7 +19722,8 @@ parse_cmd_line() {
                get_install_dir
                find_openssl_binary
                prepare_debug
-               mybanner
+               # full banner
+               mybanner true
                exit $ALLOK
                ;;
      esac

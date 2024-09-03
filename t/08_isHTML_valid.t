@@ -73,6 +73,9 @@ $debughtml =~ s/ Pre-test: .*\n//g;
 $debughtml =~ s/.*OK: below 825 days.*\n//g;
 $debughtml =~ s/.*DEBUG:.*\n//g;
 $debughtml =~ s/No engine or GOST support via engine with your.*\n//g;
+$debughtml =~ s/.*built: .*\n//g;
+$debughtml =~ s/.*Using bash .*\n//g;
+# is whole line:   s/.*<pattern> .*\n//g;
 
 cmp_ok($debughtml, "eq", $html, "HTML file created with --debug 4 matches HTML file created without --debug");
 $tests++;
