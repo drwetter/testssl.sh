@@ -17780,8 +17780,8 @@ EOF
           out "${spaces}built: "; pr_italic "$OSSL_BUILD_DATE"; out ", platform: "; prln_italic "$OSSL_VER_PLATFORM"
           out "${spaces}Using "
           pr_italic "bash ${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}.${BASH_VERSINFO[2]}"
+          outln
      fi
-     outln
 }
 
 calc_scantime() {
