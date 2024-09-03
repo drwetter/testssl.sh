@@ -17166,11 +17166,11 @@ find_openssl_binary() {
 
      # Determine an OpenSSL short string for the banner
      # E.g MacOS' homebrew and Debian add a library string: OpenSSL 3.3.1 4 Jun 2024 (Library: OpenSSL 3.3.1 4 Jun 2024),
-     # so we omit the part after the round bracket as it breaks formatting and doesnt provide more useful info
+     # so we omit the part after the round bracket as it breaks formatting and doesn't provide more useful info
      OSSL_SHORT_STR=$($OPENSSL version 2>/dev/null)
      OSSL_SHORT_STR=${OSSL_SHORT_STR%\(*}
      # Now handle strings like this: OpenSSL 1.1.1l-fips  24 Aug 2021 SUSE release 150500.17.34.1
-     # we find the year, remove until first occurence, readd it
+     # we find the year, remove until first occurrence, re-add it
      for yr in {2014..2029} ; do
           if [[ $OSSL_SHORT_STR =~ \ $yr ]] ; then
                OSSL_SHORT_STR=${OSSL_SHORT_STR%%$yr*}
