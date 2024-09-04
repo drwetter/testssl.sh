@@ -1,6 +1,6 @@
 # Build using git repo
 
-FROM alpine:3.18
+FROM alpine:3.20
 
 ARG BUILD_VERSION
 ARG ARCHIVE_URL=https://github.com/drwetter/testssl.sh/archive/
