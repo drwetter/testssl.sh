@@ -1,27 +1,19 @@
 name: testssl.sh CI
 
 on:
-  push:
-    paths-ignore:
-      - 'utils/**'
-      - 'doc/**'
-      - 'bin/**'
-      - '**.md'
-      - '**.pem'
-      - '**.pdf'
-      - '**.html'
-      - 'LICENSE'
-      - 'Dockerfile'
     pull_request:
-      - 'utils/**'
-      - 'doc/**'
-      - 'bin/**'
-      - '**.md'
-      - '**.pem'
-      - '**.pdf'
-      - '**.html'
-      - 'LICENSE'
-      - 'Dockerfile'
+      paths-ignore:
+        - 'utils/**'
+        - 'doc/**'
+        - 'bin/**'
+        - '.github/workflows/**.yml
+        - '**.md'
+        - '**.pem'
+        - '**.pdf'
+        - '**.html'
+        - 'LICENSE'
+        - 'Dockerfile'
+        - 'Dockerfile.git'
 
 permissions:
   contents: read
@@ -31,11 +23,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: ['ubuntu-20.04']
+        os: ['ubuntu-22.04']
         perl: ['5.26']
     name: Perl ${{ matrix.perl }} on ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up perl
         uses: shogo82148/actions-setup-perl@v1
         with:
