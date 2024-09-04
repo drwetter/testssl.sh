@@ -6,7 +6,7 @@ on:
         - 'utils/**'
         - 'doc/**'
         - 'bin/**'
-        - '.github/workflows/**.yml
+        - '.github/workflows/**.yml'
         - '**.md'
         - '**.pem'
         - '**.pdf'
