@@ -317,6 +317,7 @@ OSSL_VER=""                             # openssl version, will be auto-determin
 OSSL_VER_MAJOR=0
 OSSL_VER_MINOR=0
 OSSL_VER_APPENDIX="none"
+OSSL_SHORT_STR=""                       # short string for banner
 CLIENT_PROB_NO=1
 
 GOOD_CA_BUNDLE=""                       # A bundle of CA certificates that can be used to validate the server's certificate
@@ -2306,7 +2307,7 @@ s_client_options() {
                fi
           fi
      fi
-     
+
      # In case of mutual TLS authentication is required by the server
      # Note: the PEM certificate file must contain: client certificate and key (not encrypted)
      if [[ -n "$MTLS" ]]; then
@@ -2512,9 +2513,13 @@ run_http_header() {
      # Quit on first empty line to catch 98% of the cases. Next pattern is there because the SEDs tested
      # so far seem not to be fine with header containing x0d x0a (CRLF) which is the usual case.
      # So we also trigger also on any sign on a single line which is not alphanumeric (plus _)
-     sed -e '/^$/q' -e '/^[^a-zA-Z_0-9]$/q' $HEADERFILE >$HEADERFILE.tmp
+     #
+     # Also we use tr here to remove any crtl chars which the server side offers --> possible security problem
+     # Only allowed now is LF + CR. See  #2337
+     # awk, see above, doesn't seem to care
+     sed -e '/^$/q' -e '/^[^a-zA-Z_0-9]$/q' $HEADERFILE | tr -d '\000-\011\013\014\016-\037' >$HEADERFILE.tmp
      # Now to be more sure we delete from '<' or '{' maybe with a leading blank until the end
-     sed -e '/^ *<.*$/d' -e '/^ *{.*$/d'  $HEADERFILE.tmp >$HEADERFILE
+     sed -e '/^ *<.*$/d' -e '/^ *{.*$/d' $HEADERFILE.tmp >$HEADERFILE
      debugme echo -e "---\n $(< $HEADERFILE) \n---"
 
      HTTP_STATUS_CODE=$(awk '/^HTTP\// { print $2 }' $HEADERFILE 2>>$ERRFILE)
@@ -2589,7 +2594,7 @@ match_ipv4_httpheader() {
 
      # Exclude some headers as they are mistakenly identified as ipv4 address. Issues #158, #323.
      # Also facebook used to have a CSP rule for 127.0.0.1
-     headers="$(grep -Evai "$excluded_header" $HEADERFILE)"
+     headers="$(grep -Evai "$excluded_header" $HEADERFILE 2>/dev/null)"
      if [[ "$headers" =~ $ipv4address ]]; then
           pr_bold " IPv4 address in header       "
           while read line; do
@@ -2737,6 +2742,8 @@ run_hsts() {
           # strict parsing now as suggested in #2381
           hsts_age_sec="${HEADERVALUE#*=}"
           hsts_age_sec=${hsts_age_sec%%;*}
+          # see #2466
+          hsts_age_sec=$(strip_trailing_space "$hsts_age_sec")
           if [[ $hsts_age_sec =~ \" ]]; then
                # remove first an last " in $hsts_age_sec (borrowed from strip_trailing_space/strip_leading_space):
                hsts_age_sec=$(printf "%s" "${hsts_age_sec#"${hsts_age_sec%%[!\"]*}"}")
@@ -5640,7 +5647,7 @@ run_protocols() {
                     fileout "$jsonID" "MEDIUM" "not offered, and downgraded to SSL"
                elif [[ "$DETECTED_TLS_VERSION" == 03* ]]; then
                     detected_version_string="TLSv1.$((0x$DETECTED_TLS_VERSION-0x0301))"
-                    prln_svrty_critical " -- server responded with higher version number ($detected_version_string) than requested by client"
+                    prln_svrty_critical " -- server responded with higher version number ($detected_version_string) than requested by client (NOT ok)"
                     fileout "$jsonID" "CRITICAL" "server responded with higher version number ($detected_version_string) than requested by client"
                else
                     if [[ ${#DETECTED_TLS_VERSION} -eq 4 ]]; then
@@ -5852,7 +5859,7 @@ run_protocols() {
                     prln_svrty_critical " -- server supports $latest_supported_string, but downgraded to $detected_version_string"
                     fileout "$jsonID" "CRITICAL" "not offered, and downgraded to $detected_version_string rather than $latest_supported_string"
                elif [[ "$tls12_detected_version" == 03* ]] && [[ 0x$tls12_detected_version -gt 0x0303 ]]; then
-                    prln_svrty_critical " -- server responded with higher version number ($detected_version_string) than requested by client"
+                    prln_svrty_critical " -- server responded with higher version number ($detected_version_string) than requested by client (NOT ok)"
                     fileout "$jsonID" "CRITICAL" "not offered, server responded with higher version number ($detected_version_string) than requested by client"
                else
                     if [[ ${#tls12_detected_version} -eq 4 ]]; then
@@ -6000,7 +6007,7 @@ run_protocols() {
                     fileout "$jsonID" "CRITICAL" "not offered, and downgraded to $detected_version_string rather than $latest_supported_string"
                elif [[ "$DETECTED_TLS_VERSION" == 03* ]] && [[ 0x$DETECTED_TLS_VERSION -gt 0x0304 ]]; then
                     out "not offered"
-                    prln_svrty_critical " -- server responded with higher version number ($detected_version_string) than requested by client"
+                    prln_svrty_critical " -- server responded with higher version number ($detected_version_string) than requested by client (NOT ok)"
                     fileout "$jsonID" "CRITICAL" "not offered, server responded with higher version number ($detected_version_string) than requested by client"
                else
                     out "not offered"
@@ -14458,7 +14465,7 @@ parse_tls_serverhello() {
                                tls_extensions+=" (id=51), len=$extension_len\n"
                           fi
                           if [[ "$process_full" =~ all ]] || [[ "$process_full" == ephemeralkey ]]; then
-                               if [[ $extension_len -lt 4  ]]; then
+                               if [[ $extension_len -lt 8  ]]; then
                                     debugme tmln_warning "Malformed key share extension."
                                     [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                                     return 1
@@ -17063,6 +17070,8 @@ run_renego() {
           # We will need $ERRFILE for mitigation detection
           if [[ $ERRFILE =~ dev.null ]]; then
                ERRFILE=$TEMPDIR/errorfile.txt || exit $ERR_FCREATE
+               # cleanup previous run if any (multiple IP)
+               rm -f $ERRFILE
                restore_errfile=1
           else
                restore_errfile=0
@@ -17108,14 +17117,16 @@ run_renego() {
                               (j=0; while [[ $(grep -ac '^SSL-Session:' $TMPFILE) -ne 1 ]] && [[ $j -lt 30 ]]; do sleep $ssl_reneg_wait; ((j++)); done; \
                                    for ((i=0; i < ssl_reneg_attempts; i++ )); do sleep $ssl_reneg_wait; echo R; k=0; \
                                        while [[ $(grep -ac '^RENEGOTIATING' $ERRFILE) -ne $((i+3)) ]] && [[ -f $TEMPDIR/allowed_to_loop ]] \
-					       && [[ $(tail -n1 $ERRFILE |grep -acE '^(RENEGOTIATING|depth|verify)') -eq 1 ]] && [[ $k -lt 120 ]]; \
-                                       do sleep $ssl_reneg_wait; ((k++)); done; \
+                                             && [[ $(tail -n1 $ERRFILE |grep -acE '^(RENEGOTIATING|depth|verify|notAfter)') -eq 1 ]] \
+                                             && [[ $k -lt 120 ]]; \
+                                           do sleep $ssl_reneg_wait; ((k++)); if (tail -5 $TMPFILE| grep -qa '^closed'); then sleep 1; break; fi; done; \
                                    done) | \
                                    $OPENSSL s_client $(s_client_options "$proto $legacycmd $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>>$ERRFILE &
                               pid=$!
                               ( sleep $((ssl_reneg_attempts*3)) && kill $pid && touch $TEMPDIR/was_killed ) >&2 2>/dev/null &
                               watcher=$!
-                              # Trick to get the return value of the openssl command, output redirection and a timeout. Yes, some target hang/block after some tries.  
+                              # Trick to get the return value of the openssl command, output redirection and a timeout.
+                              # Yes, some target hang/block after some tries.
                               wait $pid
                               tmp_result=$?
                               pkill -HUP -P $watcher
@@ -17123,6 +17134,10 @@ run_renego() {
                               rm -f $TEMPDIR/allowed_to_loop
                               # If we are here, we have done two successful renegotiation (-2) and do the loop
                               loop_reneg=$(($(grep -ac '^RENEGOTIATING' $ERRFILE)-2))
+                              # As above, some servers close the connection and return value is zero
+                              if (tail -5 $TMPFILE| grep -qa '^closed'); then
+                                   tmp_result=1
+                              fi
                               if [[ -f $TEMPDIR/was_killed ]]; then
                                    tmp_result=2
                                    rm -f $TEMPDIR/was_killed
@@ -17358,12 +17373,12 @@ run_breach() {
      detected_compression=$(sub_breach_helper "$get_command")
      case "$detected_compression" in
           warn_stalled)
-               pr_warning "First request failed (HTTP header request stalled and was terminated)"
+               prln_warning "First request failed (HTTP header request stalled and was terminated)"
                fileout "$jsonID" "WARN" "Test failed as first HTTP request stalled and was terminated" "$cve" "$cwe"
                ret=1
                ;;
           warn_failed)
-               pr_warning "First request failed (HTTP header request was empty)"
+               prln_warning "First request failed (HTTP header request was empty)"
                fileout "$jsonID" "WARN" "Test failed as first HTTP response was empty" "$cve" "$cwe"
                ret=1
                ;;
@@ -20122,6 +20137,21 @@ find_openssl_binary() {
      OSSL_VER_PLATFORM=$($OPENSSL version -p 2>/dev/null | sed 's/^platform: //')
      OSSL_BUILD_DATE=$($OPENSSL version -a 2>/dev/null | grep '^built' | sed -e 's/built on//' -e 's/: ... //' -e 's/: //' -e 's/ UTC//' -e 's/ +0000//' -e 's/.000000000//')
 
+     # Determine an OpenSSL short string for the banner
+     # E.g MacOS' homebrew and Debian add a library string: OpenSSL 3.3.1 4 Jun 2024 (Library: OpenSSL 3.3.1 4 Jun 2024),
+     # so we omit the part after the round bracket as it breaks formatting and doesn't provide more useful info
+     OSSL_SHORT_STR=$($OPENSSL version 2>/dev/null)
+     OSSL_SHORT_STR=${OSSL_SHORT_STR%\(*}
+     # Now handle strings like this: OpenSSL 1.1.1l-fips  24 Aug 2021 SUSE release 150500.17.34.1
+     # we find the year, remove until first occurrence, re-add it
+     for yr in {2014..2029} ; do
+          if [[ $OSSL_SHORT_STR =~ \ $yr ]] ; then
+               OSSL_SHORT_STR=${OSSL_SHORT_STR%%$yr*}
+               OSSL_SHORT_STR="${OSSL_SHORT_STR}${yr}"
+               break
+          fi
+     done
+
      # see #190, reverting logic: unless otherwise proved openssl has no dh bits
      case "$OSSL_VER_MAJOR.$OSSL_VER_MINOR" in
           1.0.2|1.1.0|1.1.1|3.*) HAS_DH_BITS=true ;;
@@ -20760,46 +20790,55 @@ prepare_arrays() {
 
 mybanner() {
      local bb1 bb2 bb3
+     local spaces="  "
+     local full="$1"
 
      "$QUIET" && return
      "$CHILD_MASS_TESTING" && return
      OPENSSL_NR_CIPHERS=$(count_ciphers "$(actually_supported_osslciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 'ALL')")
      bb1=$(cat <<EOF
 
-###########################################################
-    $PROG_NAME       $VERSION from
+#####################################################################
 EOF
 )
-     bb2=$(cat <<EOF
+   bb2=$(cat <<EOF
 
-      This program is free software. Distribution and
-             modification under GPLv2 permitted.
-      USAGE w/o ANY WARRANTY. USE IT AT YOUR OWN RISK!
+  This program is free software. Distribution and modification under
+  GPLv2 permitted. USAGE w/o ANY WARRANTY. USE IT AT YOUR OWN RISK!
 
-       Please file bugs @
 EOF
 )
-     bb3=$(cat <<EOF
+   bb3=$(cat <<EOF
 
-###########################################################
+#####################################################################
 EOF
 )
-     pr_bold "$bb1 "
+     prln_bold "$bb1"; out "$spaces" ; pr_bold "$PROG_NAME"; out " version " ; pr_bold "$VERSION" ; out " from "
      pr_boldurl "$SWURL"; outln
      if [[ -n "$GIT_REL" ]]; then
-          pr_bold "    ("
+          out "$spaces"
+          pr_bold "("
           pr_litegrey "$GIT_REL"
           prln_bold ")"
      fi
-     pr_bold "$bb2 "
+     prln_bold "$bb2"
+     out "\n${spaces}" ; out "Please file bugs @ "
      pr_boldurl "https://testssl.sh/bugs/"; outln
      pr_bold "$bb3"
      outln "\n"
-     outln " Using \"$($OPENSSL version 2>/dev/null)\" [~$OPENSSL_NR_CIPHERS ciphers]"
-     out " on $HNAME:"
+     out "${spaces}Using "
+     pr_italic "$OSSL_SHORT_STR"
+     outln "  [~$OPENSSL_NR_CIPHERS ciphers]"
+     out "${spaces}on $HNAME:"
      outln "$OPENSSL_LOCATION"
-     outln " (built: \"$OSSL_BUILD_DATE\", platform: \"$OSSL_VER_PLATFORM\")\n"
+     if [[ -n $full ]] || [[ $DEBUG -ge 1 ]]; then
+          out "${spaces}built: "; pr_italic "$OSSL_BUILD_DATE"; out ", platform: "; prln_italic "$OSSL_VER_PLATFORM"
+          out "${spaces}Using "
+          pr_italic "bash ${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}.${BASH_VERSINFO[2]}"
+          outln
+     fi
 }
+
 
 calc_scantime() {
           END_TIME=$(date +%s)
@@ -21236,7 +21275,7 @@ get_aaaa_record() {
                elif "$HAS_DIG"; then
                     ip6=$(filter_ip6_address $(dig $DIG_R @ff02::fb -p 5353 -t aaaa +short +notcp "$NODE" 2>/dev/null))
                elif "$HAS_DRILL"; then
-                    ip6=$(filter_ip6_address $(drill @ff02::fb -p 5353 "$1" 2>/dev/null | awk '/ANSWER SECTION/,/AUTHORITY SECTION/ { print $NF }' | awk '/^[0-9]/'))
+                    ip6=$(filter_ip6_address $(drill @ff02::fb -p 5353 "$1" 2>/dev/null | awk '/ANSWER SECTION/,/AUTHORITY SECTION/ { print $NF }' | awk '/^[a-f0-9]/'))
                else
                     fatal "Local hostname given but neither 'avahi-resolve', 'dig' nor 'drill' is available." $ERR_DNSBIN
                fi
@@ -21245,11 +21284,11 @@ get_aaaa_record() {
      fi
      if [[ -z "$ip6" ]]; then
           if "$HAS_DIG"; then
-               ip6=$(filter_ip6_address $(dig +search $DIG_R +short +timeout=2 +tries=2 $noidnout -t aaaa "$1" 2>/dev/null | awk '/^[0-9]/ { print $1 }'))
+               ip6=$(filter_ip6_address $(dig +search $DIG_R +short +timeout=2 +tries=2 $noidnout -t aaaa "$1" 2>/dev/null | awk '/^[a-f0-9]/ { print $1 }'))
           elif "$HAS_HOST"; then
                ip6=$(filter_ip6_address $(host -t aaaa "$1" | awk '/address/ { print $NF }'))
           elif "$HAS_DRILL"; then
-               ip6=$(filter_ip6_address $(drill aaaa "$1" | awk '/ANSWER SECTION/,/AUTHORITY SECTION/ { print $NF }' | awk '/^[0-9]/'))
+               ip6=$(filter_ip6_address $(drill aaaa "$1" | awk '/ANSWER SECTION/,/AUTHORITY SECTION/ { print $NF }' | awk '/^[a-f0-9]/'))
           elif "$HAS_NSLOOKUP"; then
                ip6=$(filter_ip6_address $(strip_lf "$(nslookup -type=aaaa "$1" 2>/dev/null | awk '/'"^${a}"'.*AAAA/ { print $NF }')"))
           fi
@@ -23435,7 +23474,8 @@ parse_cmd_line() {
                get_install_dir
                find_openssl_binary
                prepare_debug
-               mybanner
+               # full banner
+               mybanner true
                exit $ALLOK
                ;;
      esac
@@ -23702,7 +23742,8 @@ parse_cmd_line() {
                     FNAME="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     IKNOW_FNAME=true
-                    WARNINGS="batch"           # set this implicitly!
+                    # If WARNINGS was set to "off, we shouldn't overwrite it, see #2496. "batch" is set implicitly otherwise
+                    [[ "$WARNINGS" != off ]] && WARNINGS="batch"
                     do_mass_testing=true
                     ;;
                --mode|--mode=*)
