@@ -15,7 +15,7 @@ env:
 jobs:
 
   deploy:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Source checkout
@@ -60,4 +60,3 @@ jobs:
           labels: ${{ steps.docker_meta.outputs.labels }}
           tags: |
             ghcr.io/${{ github.repository }}:${{ env.BUILD_VERSION }}
-            ghcr.io/${{ github.repository }}:latest

@@ -1,27 +1,19 @@
 name: testssl.sh CI
 
 on:
-  push:
-    paths-ignore:
-      - 'utils/**'
-      - 'doc/**'
-      - 'bin/**'
-      - '**.md'
-      - '**.pem'
-      - '**.pdf'
-      - '**.html'
-      - 'LICENSE'
-      - 'Dockerfile'
     pull_request:
-      - 'utils/**'
-      - 'doc/**'
-      - 'bin/**'
-      - '**.md'
-      - '**.pem'
-      - '**.pdf'
-      - '**.html'
-      - 'LICENSE'
-      - 'Dockerfile'
+      paths-ignore:
+        - 'utils/**'
+        - 'doc/**'
+        - 'bin/**'
+        - '.github/workflows/**.yml'
+        - '**.md'
+        - '**.pem'
+        - '**.pdf'
+        - '**.html'
+        - 'LICENSE'
+        - 'Dockerfile'
+        - 'Dockerfile.git'
 
 permissions:
   contents: read
