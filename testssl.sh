@@ -2330,6 +2330,7 @@ s_client_options() {
 
 # determines whether the port has an HTTP service running or not (plain TLS, no STARTTLS)
 # arg1 could be the protocol determined as "working". IIS6 needs that.
+# sets global $SERVICE
 #
 service_detection() {
      local -i was_killed
@@ -2372,24 +2373,30 @@ service_detection() {
           debugme head -50 $TMPFILE | sed -e '/<HTML>/,$d' -e '/<html>/,$d' -e '/<XML/,$d' -e '/<xml/,$d' -e '/<\?XML/,$d' -e '/<\?xml/,$d' -e '/<\!DOCTYPE/,$d' -e '/<\!doctype/,$d'
      fi
 
-     out " Service detected:      $CORRECT_SPACES"
      jsonID="service"
      case $SERVICE in
           HTTP)
-               out " $SERVICE"
+               if [[ $SERVICE == HTTP ]]; then
+                    dns_https_rr
+               fi
+               pr_bold " Service detected:"
+               out "      $CORRECT_SPACES $SERVICE"
                fileout "${jsonID}" "INFO" "$SERVICE"
-               ;;
+                          ;;
           IMAP|POP|SMTP|NNTP|MongoDB)
-               out " $SERVICE, thus skipping HTTP specific checks"
+               pr_bold " Service detected:"
+               out "      $CORRECT_SPACES $SERVICE, thus skipping HTTP specific checks"
                fileout "${jsonID}" "INFO" "$SERVICE, thus skipping HTTP specific checks"
                ;;
-          *)   if [[ ! -z $MTLS ]]; then
+#FIXME:        \/     \/  dns_https_rr
+          *)   pr_bold " Service detected:"; out "      $CORRECT_SPACES"
+               if [[ ! -z $MTLS ]]; then
                     out " not identified, but mTLS authentication is set ==> trying HTTP checks"
                     SERVICE=HTTP
                     fileout "${jsonID}" "DEBUG" "Couldn't determine service -- ASSUME_HTTP set"
                elif [[ "$CLIENT_AUTH" == required ]] && [[ -z $MTLS ]]; then
                     out " certificate-based authentication without providing client certificate and private key => skipping all HTTP checks"
-                    echo "certificate-based authentication without providing client certificate and private key  => skipping all HTTP checks" >$TMPFILE
+                    echo "certificate-based authentication without providing client certificate and private key => skipping all HTTP checks" >$TMPFILE
                     fileout "${jsonID}" "INFO" "certificate-based authentication without providing client certificate and private key  => skipping all HTTP checks"
                else
                     out " Couldn't determine what's running on port $PORT"
@@ -2398,14 +2405,14 @@ service_detection() {
                          out " -- ASSUME_HTTP set though"
                          fileout "${jsonID}" "DEBUG" "Couldn't determine service -- ASSUME_HTTP set"
                     else
-                         out ", assuming no HTTP service => skipping all HTTP checks"
+                         out ", assuming no HTTP => skipping all HTTP checks"
                          fileout "${jsonID}" "DEBUG" "Couldn't determine service, skipping all HTTP checks"
                     fi
                fi
                ;;
      esac
 
-     outln "\n"
+     outln
      tmpfile_handle ${FUNCNAME[0]}.txt
      return 0
 }
@@ -9787,40 +9794,42 @@ certificate_info() {
      must_staple "$json_postfix" "$provides_stapling" "$cert_txt"
 
      out "$indent"; pr_bold " DNS CAA RR"; out " (experimental)    "
-     jsonID="DNS_CAArecord"
+     jsonID="DNS_CAA_rrecord"
      caa_node="$NODE"
      caa=""
-     while [[ -z "$caa" ]] &&  [[ -n "$caa_node" ]]; do
-          caa="$(get_caa_rr_record $caa_node)"
-          tmp=${PIPESTATUS[@]}
-          [[ $DEBUG -ge 4 ]] && echo "get_caa_rr_record: $tmp"
-          [[ $caa_node =~ '.'$ ]] || caa_node+="."
-          caa_node=${caa_node#*.}
-     done
-     if [[ -n "$caa" ]]; then
-          pr_svrty_good "available"; out " - please check for match with \"Issuer\" below"
-          if [[ $(count_lines "$caa") -eq 1 ]]; then
-               out ": "
-          else
-               outln; out "$spaces"
-          fi
-          while read caa; do
-               if [[ -n "$caa" ]]; then
-                    all_caa+="$caa, "
-               fi
-          done <<< "$caa"
-          all_caa=${all_caa%, }                 # strip trailing comma
-          pr_italic "$(out_row_aligned_max_width "$all_caa" "$indent                              " $TERM_WIDTH)"
-          fileout "${jsonID}${json_postfix}" "OK" "$all_caa"
-     elif [[ -n "$NODNS" ]]; then
+     if [[ -n "$NODNS" ]]; then
           out "(instructed to minimize/skip DNS queries)"
           fileout "${jsonID}${json_postfix}" "INFO" "check skipped as instructed"
      elif "$DNS_VIA_PROXY"; then
           out "(instructed to use the proxy for DNS only)"
           fileout "${jsonID}${json_postfix}" "INFO" "check skipped as instructed (proxy)"
      else
-          pr_svrty_low "not offered"
-          fileout "${jsonID}${json_postfix}" "LOW" "--"
+          while [[ -z "$caa" ]] &&  [[ -n "$caa_node" ]]; do
+               caa="$(get_caa_rrecord $caa_node)"
+               tmp=${PIPESTATUS[@]}
+               [[ $DEBUG -ge 4 ]] && echo "get_https_caa_rr_record: $tmp"
+               [[ $caa_node =~ '.'$ ]] || caa_node+="."
+               caa_node=${caa_node#*.}
+          done
+          if [[ -n "$caa" ]]; then
+               pr_svrty_good "available"; out " - please check for match with \"Issuer\" below"
+               if [[ $(count_lines "$caa") -eq 1 ]]; then
+                    out ": "
+               else
+                    outln; out "$spaces"
+               fi
+               while read caa; do
+                    if [[ -n "$caa" ]]; then
+                         all_caa+="$caa, "
+                    fi
+               done <<< "$caa"
+               all_caa=${all_caa%, }                 # strip trailing comma
+               pr_italic "$(out_row_aligned_max_width "$all_caa" "$indent                              " $TERM_WIDTH)"
+               fileout "${jsonID}${json_postfix}" "OK" "$all_caa"
+          else
+               pr_svrty_low "not offered"
+               fileout "${jsonID}${json_postfix}" "LOW" "--"
+          fi
      fi
      outln
 
@@ -21296,7 +21305,8 @@ get_aaaa_record() {
 
 # RFC6844: DNS Certification Authority Authorization (CAA) Resource Record
 # arg1: domain to check for
-get_caa_rr_record() {
+#FIXME: should be refactored, see get_https_rrecord()
+get_caa_rrecord() {
      local raw_caa=""
      local hash len line
      local -i len_caa_property
@@ -21372,10 +21382,101 @@ get_caa_rr_record() {
           return 1
      fi
 
-# to do:
+#TODO:
 #    4: check whether $1 is a CNAME and take this
      return 0
 }
+
+# See https://www.rfc-editor.org/rfc/rfc9460.html:
+# Service Binding and Parameter Specification via the DNS (SVCB and HTTPS Resource Records)
+# arg1: domain to check for
+#
+get_https_rrecord() {
+     local raw_https=""
+     local hash len line
+     local -i len_https_property
+     local https_property_name
+     local https_property_value
+     local saved_openssl_conf="$OPENSSL_CONF"
+     local all_https=""
+     local noidnout=""
+
+     "$HAS_DIG_NOIDNOUT" && noidnout="+noidnout"
+
+     [[ -n "$NODNS" ]] && return 2          # if minimum DNS lookup was instructed, leave here
+
+     # Ff there's a type65 record there are 2x3 output formats, mostly depending on age of distribution
+     # -- roughly that's the difference between text and binary format -- and the type of DNS client
+
+     # for host:
+     # 1) 'google.com has HTTPS record 1 . alpn="h2,h3" '
+     # 2) 'google.com has TYPE65 record  \# 13 0001000001000602683202683 '
+
+     # for drill and dig it's like
+     #1) google.com.	18665	IN	TYPE65	\# 13 00010000010006026832026833
+     #2) google.com.	18301	IN	HTTPS	1 . alpn="h2,h3"
+
+     # nslookup:
+     # 1) dev.testssl.sh	rdata_65 = 1 . alpn="h2"
+     # 2) dev.testssl.sh	rdata_65 = \# 10 00010000010003026832
+
+     # we normalize the output during the following so that's either 1) 1 . alpn="h2"  or 2) \# 10 00010000010003026832 or empty
+
+     OPENSSL_CONF=""
+     # Read either answer 1) or 2) into raw_https. Should be empty if no such record
+     if "$HAS_DIG"; then
+          raw_https="$(dig $DIG_R +short +search +timeout=3 +tries=3 $noidnout type65 "$1" 2>/dev/null)"
+          # empty if there's no such record
+     elif "$HAS_DRILL"; then
+          raw_https="$(drill $1 type65 | awk '/'"^${1}"'.*TYPE65/ { print substr($0,index($0,$5)) }' )" # from 5th field onwards
+          # empty if there's no such record
+     elif "$HAS_HOST"; then
+          raw_https="$(host -t type65 $1)"
+          if grep -Ewq "has no HTTPS|has no TYPE65" <<< "$raw_https"; then
+               raw_https=""
+          else
+               raw_https="$(sed -e 's/^.*has HTTPS record //' -e 's/^.*has TYPE65 record //' <<< "$raw_https")"
+          fi
+     elif "$HAS_NSLOOKUP"; then
+          raw_https="$(strip_lf "$(nslookup -type=type65 $1 | awk '/'"^${1}"'.*rdata_65/ { print substr($0,index($0,$4)) }' )")"
+          # empty if there's no such record
+     else
+          return 1
+          # No dig, drill, host, or nslookup --> complaint was elsewhere already
+     fi
+     OPENSSL_CONF="$saved_openssl_conf"      # see https://github.com/drwetter/testssl.sh/issues/134
+
+     if [[ -z "$raw_https" ]]; then
+          :
+     elif [[ -n "$raw_https" ]]; then
+         safe_echo "$raw_https"
+     elif [[ "$raw_https" =~ \#\ [0-9][0-9] ]]; then
+          # now this is binary / hex encoded like \# 10 00010000010003026832
+#FIXME: this probably doesn't work yet and intentionally won't be reached yet
+          while read hash len line ;do
+               if [[ "${line:0:2}" == "00" ]]; then                               # probably the https flag, always 00, so we don't keep this
+                    len_https_property=$(printf "%0d" "$((10#${line:2:2}))")      # get len and do type casting, for posteo we have 05 or 09 here as a string
+                    len_https_property=$((len_https_property*2))                  # =>word! Now get name from 4th and value from 4th+len position...
+                    line="${line/ /}"                                             # especially with iodefs there's a blank in the string which we just skip
+                    https_property_name="$(hex2ascii ${line:4:$len_https_property})"
+                    https_property_value="$(hex2ascii "${line:$((4+len_https_property)):100}")"
+                    # echo "${https}=${https}"
+                    all_https+="${https_property_name}=${https_property_value}\n"
+               else
+                    outln "please report unknown CAA RR $line with flag  @ $NODE"
+                    return 7
+               fi
+          done <<< "$raw_https"
+          sort <<< "$(safe_echo "$all_https")"
+     else
+          echo "fixme"
+     fi
+
+#TODO:
+#    4: check whether $1 is a CNAME and take this
+     return 0
+}
+
 
 # arg1: domain to check for. Returned will be the MX record as a string
 get_mx_record() {
@@ -22092,6 +22193,34 @@ determine_optimal_proto() {
 }
 
 
+
+dns_https_rr () {
+     local jsonID="DNS_HTTPS_rrecord"
+     local https_rr=""
+
+     out "$indent"; pr_bold " DNS HTTPS RR"; out " (experim.) "
+     if [[ -n "$NODNS" ]]; then
+          out "(instructed to minimize/skip DNS queries)"
+          fileout "${jsonID}" "INFO" "check skipped as instructed"
+     elif "$DNS_VIA_PROXY"; then
+          out "(instructed to use the proxy for DNS only)"
+          fileout "${jsonID}" "INFO" "check skipped as instructed (proxy)"
+     else
+          https_rr="$(get_https_rrecord $NODE)"
+          if [[ -n "$https_rr" ]]; then
+               pr_svrty_good "yes" ; out " "
+               prln_italic "$(out_row_aligned_max_width "$https_rr" "$indent                              " $TERM_WIDTH)"
+               fileout "${jsonID}" "OK" "$https_rr"
+          else
+               outln "--"
+               fileout "${jsonID}" "INFO" " no resource record found"
+          fi
+     fi
+
+}
+
+
+
 # arg1 (optional): ftp smtp, lmtp, pop3, imap, sieve, xmpp, xmpp-server, telnet, ldap, postgres, mysql, irc, nntp (maybe with trailing s)
 #
 determine_service() {
@@ -22130,7 +22259,7 @@ determine_service() {
           fi
           GET_REQ11="GET $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $ua\r\n${basicauth_header}${reqheader}Accept-Encoding: identity\r\nAccept: */*\r\nConnection: Close\r\n\r\n"
           determine_optimal_proto
-          # returns always 0:
+          # returns always 0 and sets $SERVICE
           service_detection $OPTIMAL_PROTO
      else # STARTTLS
           if [[ "$1" == postgres ]] || [[ "$1" == sieve ]]; then
@@ -22216,7 +22345,6 @@ determine_service() {
           # It comes handy later also for STARTTLS injection to define this global. When we do banner grabbing
           # or replace service_detection() we might not need that anymore
           SERVICE=$protocol
-
      fi
 
      tmpfile_handle ${FUNCNAME[0]}.txt
@@ -22282,7 +22410,7 @@ display_rdns_etc() {
           outln "$PROXYIP:$PROXYPORT "
      fi
      if [[ $(count_words "$IP46ADDRs") -gt 1 ]]; then
-          out " Further IP addresses:   $CORRECT_SPACES"
+          pr_bold " Further IP addresses:"; out "   $CORRECT_SPACES"
           for ip in $IP46ADDRs; do
                if [[ "$ip" == "$NODEIP" ]] || [[ "[$ip]" == "$NODEIP" ]]; then
                     continue
@@ -22303,11 +22431,12 @@ display_rdns_etc() {
                outln " A record via:          $CORRECT_SPACES supplied IP \"$CMDLINE_IP\""
           fi
      fi
+     pr_bold " rDNS "
      if [[ "$rDNS" =~ instructed ]]; then
-          out "$(printf " %-23s " "rDNS ($nodeip):")"
+          out "$(printf "%-19s" "($nodeip):")"
           out "$rDNS"
      elif [[ -n "$rDNS" ]]; then
-          out "$(printf " %-23s " "rDNS ($nodeip):")"
+          out "$(printf "%-19s" "($nodeip):")"
           out "$(out_row_aligned_max_width "$rDNS" "                         $CORRECT_SPACES" $TERM_WIDTH)"
      fi
 }
