@@ -2373,24 +2373,30 @@ service_detection() {
           debugme head -50 $TMPFILE | sed -e '/<HTML>/,$d' -e '/<html>/,$d' -e '/<XML/,$d' -e '/<xml/,$d' -e '/<\?XML/,$d' -e '/<\?xml/,$d' -e '/<\!DOCTYPE/,$d' -e '/<\!doctype/,$d'
      fi
 
-     out " Service detected:      $CORRECT_SPACES"
      jsonID="service"
      case $SERVICE in
           HTTP)
-               out " $SERVICE"
+               if [[ $SERVICE == HTTP ]]; then
+                    dns_https_rr
+               fi
+               pr_bold " Service detected:"
+               out "      $CORRECT_SPACES $SERVICE"
                fileout "${jsonID}" "INFO" "$SERVICE"
-               ;;
+                          ;;
           IMAP|POP|SMTP|NNTP|MongoDB)
-               out " $SERVICE, thus skipping HTTP specific checks"
+               pr_bold " Service detected:"
+               out "      $CORRECT_SPACES $SERVICE, thus skipping HTTP specific checks"
                fileout "${jsonID}" "INFO" "$SERVICE, thus skipping HTTP specific checks"
                ;;
-          *)   if [[ ! -z $MTLS ]]; then
+#FIXME:        \/     \/  dns_https_rr
+          *)   pr_bold " Service detected:"; out "      $CORRECT_SPACES"
+               if [[ ! -z $MTLS ]]; then
                     out " not identified, but mTLS authentication is set ==> trying HTTP checks"
                     SERVICE=HTTP
                     fileout "${jsonID}" "DEBUG" "Couldn't determine service -- ASSUME_HTTP set"
                elif [[ "$CLIENT_AUTH" == required ]] && [[ -z $MTLS ]]; then
                     out " certificate-based authentication without providing client certificate and private key => skipping all HTTP checks"
-                    echo "certificate-based authentication without providing client certificate and private key  => skipping all HTTP checks" >$TMPFILE
+                    echo "certificate-based authentication without providing client certificate and private key => skipping all HTTP checks" >$TMPFILE
                     fileout "${jsonID}" "INFO" "certificate-based authentication without providing client certificate and private key  => skipping all HTTP checks"
                else
                     out " Couldn't determine what's running on port $PORT"
@@ -2399,7 +2405,7 @@ service_detection() {
                          out " -- ASSUME_HTTP set though"
                          fileout "${jsonID}" "DEBUG" "Couldn't determine service -- ASSUME_HTTP set"
                     else
-                         out ", assuming no HTTP service => skipping all HTTP checks"
+                         out ", assuming no HTTP => skipping all HTTP checks"
                          fileout "${jsonID}" "DEBUG" "Couldn't determine service, skipping all HTTP checks"
                     fi
                fi
@@ -22255,9 +22261,6 @@ determine_service() {
           determine_optimal_proto
           # returns always 0 and sets $SERVICE
           service_detection $OPTIMAL_PROTO
-          if [[ $SERVICE == HTTP ]]; then
-               dns_https_rr
-          fi
      else # STARTTLS
           if [[ "$1" == postgres ]] || [[ "$1" == sieve ]]; then
                protocol="$1"
@@ -22407,7 +22410,7 @@ display_rdns_etc() {
           outln "$PROXYIP:$PROXYPORT "
      fi
      if [[ $(count_words "$IP46ADDRs") -gt 1 ]]; then
-          out " Further IP addresses:   $CORRECT_SPACES"
+          pr_bold " Further IP addresses:"; out "   $CORRECT_SPACES"
           for ip in $IP46ADDRs; do
                if [[ "$ip" == "$NODEIP" ]] || [[ "[$ip]" == "$NODEIP" ]]; then
                     continue
@@ -22428,11 +22431,12 @@ display_rdns_etc() {
                outln " A record via:          $CORRECT_SPACES supplied IP \"$CMDLINE_IP\""
           fi
      fi
+     pr_bold " rDNS "
      if [[ "$rDNS" =~ instructed ]]; then
-          out "$(printf " %-23s " "rDNS ($nodeip):")"
+          out "$(printf "%-19s" "($nodeip):")"
           out "$rDNS"
      elif [[ -n "$rDNS" ]]; then
-          out "$(printf " %-23s " "rDNS ($nodeip):")"
+          out "$(printf "%-19s" "($nodeip):")"
           out "$(out_row_aligned_max_width "$rDNS" "                         $CORRECT_SPACES" $TERM_WIDTH)"
      fi
 }
