@@ -2406,7 +2406,7 @@ service_detection() {
                ;;
      esac
 
-     outln "\n"
+     outln
      tmpfile_handle ${FUNCNAME[0]}.txt
      return 0
 }
@@ -20298,7 +20298,6 @@ find_openssl_binary() {
      # not check /usr/bin/openssl -- if available. This is more a kludge which we shouldn't use for
      # every openssl feature. At some point we need to decide which with openssl version we go.
      # We also check, whether there's /usr/bin/openssl which has TLS 1.3
-     OPENSSL2=${OPENSSL2:-/usr/bin/openssl}
      if [[ ! "$OSSL_NAME" =~ LibreSSL ]] && [[ ! $OSSL_VER =~ 1.1.1 ]] && [[ ! $OSSL_VER_MAJOR =~ 3 ]]; then
           if [[ -x $OPENSSL2 ]]; then
                $OPENSSL2 s_client -help 2>$s_client_has2
