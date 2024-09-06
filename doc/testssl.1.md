@@ -175,7 +175,7 @@ Any single check switch supplied as an argument prevents testssl.sh from doing a
 
 `-f, --fs, --nsa, --forward-secrecy` Checks robust forward secrecy key exchange. "Robust" means that ciphers having intrinsic severe weaknesses like Null Authentication or Encryption, 3DES and RC4 won't be considered here. There shouldn't be the wrong impression that a secure key exchange has been taking place and everything is fine when in reality the encryption sucks. Also this section lists the available elliptical curves and Diffie Hellman groups, as well as FFDHE groups (TLS 1.2 and TLS 1.3).
 
-`-p, --protocols`  checks TLS/SSL protocols SSLv2, SSLv3, TLS 1.0 through TLS 1.3 and for HTTP: SPDY (NPN) and ALPN, a.k.a. HTTP/2. For TLS 1.3 several drafts (from 18 on) and final are supported and being tested for.
+`-p, --protocols`  checks TLS/SSL protocols SSLv2, SSLv3, TLS 1.0 through TLS 1.3 and for HTTP: SPDY (NPN) and ALPN, a.k.a. HTTP/2. For TLS 1.3 several drafts (from 18 on) and final are supported and being tested for. Note the supplied openssl-bad version doesn't support TLS 1.3 . As the check for TLS 1.3 will be done in sockets this normally does not pose a problem. However if a TLS-1.3-only host is encountered and to have a complete test coverage (e.g. header checks) `/usr/bin/openssl` (or the content of `OPENSSL2`) is checked for existence and support of TLS 1.3 and if those tests succeeded it will be switched to this binary. A message will notify you.
 
 `-P, --server-preference, --preference`  displays the servers preferences: cipher order, with used openssl client: negotiated protocol and cipher. If there's a cipher order enforced by the server it displays it for each protocol (openssl+sockets). If there's not, it displays instead which ciphers from the server were picked with each protocol.
 
@@ -403,6 +403,9 @@ Except the environment variables mentioned above which can replace command line 
 * MAX_SOCKET_FAIL: A number which tells testssl.sh how often a TCP socket connection may fail before the program gives up and terminates. The default is 2. You can increase it to a higher value if you frequently see a message like *Fatal error: repeated openssl s_client connect problem, doesn't make sense to continue*.
 * MAX_OSSL_FAIL: A number which tells testssl.sh how often an OpenSSL s_client connect may fail before the program gives up and terminates. The default is 2. You can increase it to a higher value if you frequently see a message like *Fatal error: repeated TCP connect problems, giving up*.
 * MAX_HEADER_FAIL: A number which tells testssl.sh how often a HTTP GET request over OpenSSL may return an empty file before the program gives up and terminates. The default is 3. Also here you can increase the threshold when you spot messages like *Fatal error: repeated HTTP header connect problems, doesn't make sense to continue*.
+* OPENSSL2 can be used to supply an alternative openssl version. This only makes sense if you want to amend the supplied version in `bin/` which lacks TLS 1.3 support with a version which doesn not and is not in `/usr/bin/openssl`.
+* OSSL_SHORTCUT can be set to true when you run interactively and don't want to switch automatically to `/usr/bin/openssl` (`OPENSSL2`) if you encounter a TLS 1.3-only host.
+
 
 ### RATING
 
