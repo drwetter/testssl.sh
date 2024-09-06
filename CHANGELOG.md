@@ -46,7 +46,8 @@
 * Compatible to GNU grep 3.8
 * Don't use external pwd command anymore
 * Doesn't hang anymore when there's no local resolver
-* Added --mtls feature to support client authentication 
+* Added --mtls feature to support client authentication
+* If a TLS 1.3 host is tested and e.g. /usr/bin/openssl supports it, it'll automagically will switch to it
 
 
 ### Features implemented / improvements in 3.0

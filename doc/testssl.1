@@ -141,7 +141,7 @@ Any single check switch supplied as an argument prevents testssl\.sh from doing 
 .P
 \fB\-f, \-\-fs, \-\-nsa, \-\-forward\-secrecy\fR Checks robust forward secrecy key exchange\. "Robust" means that ciphers having intrinsic severe weaknesses like Null Authentication or Encryption, 3DES and RC4 won't be considered here\. There shouldn't be the wrong impression that a secure key exchange has been taking place and everything is fine when in reality the encryption sucks\. Also this section lists the available elliptical curves and Diffie Hellman groups, as well as FFDHE groups (TLS 1\.2 and TLS 1\.3)\.
 .P
-\fB\-p, \-\-protocols\fR checks TLS/SSL protocols SSLv2, SSLv3, TLS 1\.0 through TLS 1\.3 and for HTTP: SPDY (NPN) and ALPN, a\.k\.a\. HTTP/2\. For TLS 1\.3 several drafts (from 18 on) and final are supported and being tested for\.
+\fB\-p, \-\-protocols\fR checks TLS/SSL protocols SSLv2, SSLv3, TLS 1\.0 through TLS 1\.3 and for HTTP: SPDY (NPN) and ALPN, a\.k\.a\. HTTP/2\. For TLS 1\.3 several drafts (from 18 on) and final are supported and being tested for\. Note the supplied openssl\-bad version doesn't support TLS 1\.3 \. As the check for TLS 1\.3 will be done in sockets this normally does not pose a problem\. However if a TLS\-1\.3\-only host is encountered and to have a complete test coverage (e.g. header checks) \fB/usr/bin/openssl\fR (or the content of \fBOPENSSL2\fR) is checked for existence and support of TLS 1\.3 and if those tests succeeded it will be switched to this binary\. A message will notify you\.
 .P
 \fB\-P, \-\-server\-preference, \-\-preference\fR displays the servers preferences: cipher order, with used openssl client: negotiated protocol and cipher\. If there's a cipher order enforced by the server it displays it for each protocol (openssl+sockets)\. If there's not, it displays instead which ciphers from the server were picked with each protocol\.
 .P
@@ -418,6 +418,10 @@ MAX_SOCKET_FAIL: A number which tells testssl\.sh how often a TCP socket connect
 MAX_OSSL_FAIL: A number which tells testssl\.sh how often an OpenSSL s_client connect may fail before the program gives up and terminates\. The default is 2\. You can increase it to a higher value if you frequently see a message like \fIFatal error: repeated TCP connect problems, giving up\fR\.
 .IP "\[ci]" 4
 MAX_HEADER_FAIL: A number which tells testssl\.sh how often a HTTP GET request over OpenSSL may return an empty file before the program gives up and terminates\. The default is 3\. Also here you can increase the threshold when you spot messages like \fIFatal error: repeated HTTP header connect problems, doesn't make sense to continue\fR\.
+.IP "\[ci]" 4
+OPENSSL2 can be used to supply an alternative openssl version\. This only makes sense if you want to amend the supplied version in \fBbin/\fR which lacks TLS 1\.3 support with a version which does not and is not in \fB/usr/bin/openssl\fR.
+.IP "\[ci]" 4
+OSSL_SHORTCUT can be set to true when you run interactively and don't want to switch automatically to \fB/usr/bin/openssl\fR (\fBOPENSSL2\fR) if you encounter a TLS 1\.3-only host\.
 .IP "" 0
 .SS "RATING"
 This program has a near\-complete implementation of SSL Labs's 'SSL Server Rating Guide \fIhttps://github\.com/ssllabs/research/wiki/SSL\-Server\-Rating\-Guide\fR'\.
