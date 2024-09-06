@@ -245,7 +245,7 @@ CIPHERS_BY_STRENGTH_FILE=""
 TLS_DATA_FILE=""                        # mandatory file for socket-based handshakes
 OPENSSL=""                              # ~/bin/openssl.$(uname).$(uname -m) if you run this from GitHub. Linux otherwise probably /usr/bin/openssl
 OPENSSL2=${OPENSSL2:-/usr/bin/openssl}  # This will be openssl version >=1.1.1 (auto determined) as opposed to openssl-bad (OPENSSL)
-OPENSSL2_HAS_TLS_1_3=false              # If we run with supplied binary AND $OPENSSL2 supports TLS 1.3 this wil be set to true
+OPENSSL2_HAS_TLS_1_3=false              # If we run with supplied binary AND $OPENSSL2 supports TLS 1.3 this will be set to true
 OSSL_SHORTCUT=${OSSL_SHORTCUT:-true}    # Hack: if during the scan turns out the OpenSSL binary supports TLS 1.3 would be a better choice
 OPENSSL_LOCATION=""
 IKNOW_FNAME=false
@@ -21015,8 +21015,8 @@ EOF
 
 # arg1: text to display before "-->"
 # arg2: arg needed to accept to continue
-# ret=0 : arg was acceppted to continue (batch mode doesn't do this,or warnings are turned off)
-#     1 : arg was not acceppted by user or we're in bacth mode
+# ret=0 : arg was accepted to continue (batch mode doesn't do this,or warnings are turned off)
+#     1 : arg was not accepted by user or we're in bacth mode
 
 ignore_no_or_lame() {
      local a
@@ -22039,8 +22039,8 @@ determine_optimal_proto() {
                if "$OPENSSL2_HAS_TLS_1_3"; then
                     if "$OSSL_SHORTCUT" || [[ "$WARNINGS" == batch ]]; then
                          # switch w/o asking
-                         OPEN_MSG=" $NODE:$PORT appeared to support TLS 1.3 ONLY. Thus switched implictly from\n \"$OPENSSL\" to \"$OPENSSL2\"."
-                         fileout "$jsonID" "INFO" "$NODE:$PORT appears to support TLS 1.3 ONLY, switching from $OPENSSL to $OPENSSL2 was implictly enforced"
+                         OPEN_MSG=" $NODE:$PORT appeared to support TLS 1.3 ONLY. Thus switched implicitly from\n \"$OPENSSL\" to \"$OPENSSL2\"."
+                         fileout "$jsonID" "INFO" "$NODE:$PORT appears to support TLS 1.3 ONLY, switching from $OPENSSL to $OPENSSL2 was implicitly enforced"
                          OPENSSL="$OPENSSL2"
                          find_openssl_binary
                          prepare_arrays
@@ -22102,7 +22102,7 @@ determine_optimal_proto() {
 
 # Check messages which needed to be processed. I.e. those which would have destroyed the nice
 # screen output and thus havve been postponed. This is just an idea and is only used once
-# but can be extended in the future. An array migh be more handy
+# but can be extended in the future. An array might be more handy
 #
 check_msg() {
      if [[ -n "$OPEN_MSG" ]]; then
