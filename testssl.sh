@@ -243,9 +243,10 @@ SYSTEM2=""                              # currently only being used for WSL = ba
 PRINTF=""                               # which external printf to use. Empty presets the internal one, see #1130
 CIPHERS_BY_STRENGTH_FILE=""
 TLS_DATA_FILE=""                        # mandatory file for socket-based handshakes
-OPENSSL=""                              # If you run this from GitHub it's ~/bin/openssl.$(uname).$(uname -m) otherwise /usr/bin/openssl
-OPENSSL2=""                             # When running from GitHub, this will be openssl version >=1.1.1 (auto determined)
-OPENSSL2_HAS_TLS_1_3=false              # If we run with supplied binary AND /usr/bin/openssl supports TLS 1.3 this is set to true
+OPENSSL=""                              # ~/bin/openssl.$(uname).$(uname -m) if you run this from GitHub. Linux otherwise probably /usr/bin/openssl
+OPENSSL2=${OPENSSL2:-/usr/bin/openssl}  # This will be openssl version >=1.1.1 (auto determined) as opposed to openssl-bad (OPENSSL)
+OPENSSL2_HAS_TLS_1_3=false              # If we run with supplied binary AND $OPENSSL2 supports TLS 1.3 this wil be set to true
+OSSL_SHORTCUT=${OSSL_SHORTCUT:-true}    # Hack: if during the scan turns out the OpenSSL binary supports TLS 1.3 would be a better choice
 OPENSSL_LOCATION=""
 IKNOW_FNAME=false
 FIRST_FINDING=true                      # is this the first finding we are outputting to file?
@@ -275,7 +276,6 @@ KNOWN_OSSL_PROB=false                   # We need OpenSSL a few times. This vari
 DETECTED_TLS_VERSION=""                 # .. as hex string, e.g. 0300 or 0303
 APP_TRAF_KEY_INFO=""                    # Information about the application traffic keys for a TLS 1.3 connection.
 TLS13_ONLY=false                        # Does the server support TLS 1.3 ONLY?
-OSSL_SHORTCUT=${OSSL_SHORTCUT:-false}   # Hack: if during the scan turns out the OpenSSL binary supports TLS 1.3 would be a better choice, this enables it.
 TLS_EXTENSIONS=""
 TLS13_CERT_COMPRESS_METHODS=""
 CERTIFICATE_TRANSPARENCY_SOURCE=""
@@ -415,6 +415,7 @@ END_TIME=0                              # .. ended
 SCAN_TIME=0                             # diff of both: total scan time
 LAST_TIME=0                             # only used for performance measurements (MEASURE_TIME=true)
 SERVER_COUNTER=0                        # Counter for multiple servers
+OPEN_MSG=""                             # Null the poor man's implementation of a message stack
 
 TLS_LOW_BYTE=""                         # For "secret" development stuff, see -q below
 HEX_CIPHER=""                           #                -- " --
@@ -20297,7 +20298,7 @@ find_openssl_binary() {
      # not check /usr/bin/openssl -- if available. This is more a kludge which we shouldn't use for
      # every openssl feature. At some point we need to decide which with openssl version we go.
      # We also check, whether there's /usr/bin/openssl which has TLS 1.3
-     OPENSSL2=/usr/bin/openssl
+     OPENSSL2=${OPENSSL2:-/usr/bin/openssl}
      if [[ ! "$OSSL_NAME" =~ LibreSSL ]] && [[ ! $OSSL_VER =~ 1.1.1 ]] && [[ ! $OSSL_VER_MAJOR =~ 3 ]]; then
           if [[ -x $OPENSSL2 ]]; then
                $OPENSSL2 s_client -help 2>$s_client_has2
@@ -21015,6 +21016,9 @@ EOF
 
 # arg1: text to display before "-->"
 # arg2: arg needed to accept to continue
+# ret=0 : arg was acceppted to continue (batch mode doesn't do this,or warnings are turned off)
+#     1 : arg was not acceppted by user or we're in bacth mode
+
 ignore_no_or_lame() {
      local a
 
@@ -22033,21 +22037,26 @@ determine_optimal_proto() {
           [[ $? -ne 0 ]] && exit $ERR_CLUELESS
      elif "$all_failed" && ! "$ALL_FAILED_SOCKETS"; then
           if ! "$HAS_TLS13" && "$TLS13_ONLY"; then
-               pr_magenta " $NODE:$PORT appears to support TLS 1.3 ONLY. You better use --openssl=<path_to_openssl_supporting_TLS_1.3>"
-               if ! "$OSSL_SHORTCUT" || [[ ! -x /usr/bin/openssl ]] || /usr/bin/openssl s_client -tls1_3 2>&1 | grep -aiq "unknown option"; then
-                    outln
-                    fileout "$jsonID" "WARN" "$NODE:$PORT appears to support TLS 1.3 ONLY, but $OPENSSL does not support TLS 1.3"
-                    ignore_no_or_lame " Type \"yes\" to proceed with $OPENSSL and accept all scan problems" "yes"
-                    [[ $? -ne 0 ]] && exit $ERR_CLUELESS
-                    MAX_OSSL_FAIL=10
-               else
-                    # dirty hack but an idea for the future to be implemented upfront: Now we know, we'll better off
-                    # with the OS supplied openssl binary. We need to initialize variables / arrays again though.
-                    # And the service detection can't be made up for now
-                    outln ", \n proceeding with /usr/bin/openssl"
-                    OPENSSL=/usr/bin/openssl
-                    find_openssl_binary
-                    prepare_arrays
+               if "$OPENSSL2_HAS_TLS_1_3"; then
+                    if "$OSSL_SHORTCUT" || [[ "$WARNINGS" == batch ]]; then
+                         # switch w/o asking
+                         OPEN_MSG=" $NODE:$PORT appeared to support TLS 1.3 ONLY. Thus switched implictly from\n \"$OPENSSL\" to \"$OPENSSL2\"."
+                         fileout "$jsonID" "INFO" "$NODE:$PORT appears to support TLS 1.3 ONLY, switching from $OPENSSL to $OPENSSL2 was implictly enforced"
+                         OPENSSL="$OPENSSL2"
+                         find_openssl_binary
+                         prepare_arrays
+                    else
+                         # now we need to ask the user
+                         ignore_no_or_lame " Type \"yes\" to proceed with \"$OPENSSL2\" OR accept all scan problems" "yes"
+                         if [[ $? -eq 0 ]]; then
+                              fileout "$jsonID" "INFO" "$NODE:$PORT appears to support TLS 1.3 ONLY, switching from $OPENSSL to $OPENSSL2 by the user"
+                              OPENSSL="$OPENSSL2"
+                              find_openssl_binary
+                              prepare_arrays
+                         else
+                              fileout "$jsonID" "WARN" "$NODE:$PORT appears to support TLS 1.3 ONLY, switching from $OPENSSL to $OPENSSL2 was denied by user"
+                         fi
+                    fi
                fi
           elif ! "$HAS_SSL3" && [[ "$(has_server_protocol "ssl3")" -eq 0 ]] && [[ "$(has_server_protocol "tls1_3")" -ne 0 ]] && \
                [[ "$(has_server_protocol "tls1_2")" -ne 0 ]] && [[ "$(has_server_protocol "tls1_1")" -ne 0 ]] &&
@@ -22092,6 +22101,18 @@ determine_optimal_proto() {
 }
 
 
+# Check messages which needed to be processed. I.e. those which would have destroyed the nice
+# screen output and thus havve been postponed. This is just an idea and is only used once
+# but can be extended in the future. An array migh be more handy
+#
+check_msg() {
+     if [[ -n "$OPEN_MSG" ]]; then
+          outln "$OPEN_MSG"
+          OPEN_MSG=""
+     fi
+}
+
+
 # arg1 (optional): ftp smtp, lmtp, pop3, imap, sieve, xmpp, xmpp-server, telnet, ldap, postgres, mysql, irc, nntp (maybe with trailing s)
 #
 determine_service() {
@@ -22132,6 +22153,7 @@ determine_service() {
           determine_optimal_proto
           # returns always 0:
           service_detection $OPTIMAL_PROTO
+          check_msg
      else # STARTTLS
           if [[ "$1" == postgres ]] || [[ "$1" == sieve ]]; then
                protocol="$1"
