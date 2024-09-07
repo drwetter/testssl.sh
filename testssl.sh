@@ -22912,7 +22912,7 @@ run_rating() {
      pr_headlineln " Rating (experimental) "
      outln
 
-     [[ -n "$STARTTLS_PROTOCOL" ]] && set_grade_cap "T" "STARTTLS encryption is not mandatory for clients. STARTTLS can only be secured clientside"
+     [[ -n "$STARTTLS_PROTOCOL" ]] && set_grade_cap "T" "STARTTLS encryption is not mandatory for clients. STARTTLS can only be secured client-side"
 
      # TL;DR: E-mail transfer via port 25 is broken and the amendments suggested so far are duct tape. So please do not expect testssl.sh to shut up.
 
