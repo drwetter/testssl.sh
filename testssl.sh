@@ -22973,7 +22973,7 @@ run_rating() {
                c1_worst=80
           elif [[ $(has_server_protocol "tls1") -eq 0 ]]; then
                c1_worst=90
-          elif [[ $(as_server_protocol "tls1_1") -eq 0 ]]; then
+          elif [[ $(has_server_protocol "tls1_1") -eq 0 ]]; then
                c1_worst=95
           else # TLS1.2 and TLS1.3 both give 100 points
                c1_worst=100
