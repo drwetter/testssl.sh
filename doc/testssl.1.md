@@ -404,7 +404,7 @@ Except the environment variables mentioned above which can replace command line 
 * MAX_OSSL_FAIL: A number which tells testssl.sh how often an OpenSSL s_client connect may fail before the program gives up and terminates. The default is 2. You can increase it to a higher value if you frequently see a message like *Fatal error: repeated TCP connect problems, giving up*.
 * MAX_HEADER_FAIL: A number which tells testssl.sh how often a HTTP GET request over OpenSSL may return an empty file before the program gives up and terminates. The default is 3. Also here you can increase the threshold when you spot messages like *Fatal error: repeated HTTP header connect problems, doesn't make sense to continue*.
 * OPENSSL2 can be used to supply an alternative openssl version. This only makes sense if you want to amend the supplied version in `bin/` which lacks TLS 1.3 support with a version which doesn not and is not in `/usr/bin/openssl`.
-* OSSL_SHORTCUT can be set to true when you run interactively and don't want to switch automatically to `/usr/bin/openssl` (`OPENSSL2`) if you encounter a TLS 1.3-only host.
+* OSSL_SHORTCUT should be set to false when you run interactively and don't want to switch automatically to `/usr/bin/openssl` (`OPENSSL2`) if you encounter a TLS 1.3-only host.
 
 
 ### RATING
@@ -413,8 +413,7 @@ This program has a near-complete implementation of SSL Labs's '[SSL Server Ratin
 
 This is *not* a 100% reimplementation of the [SSL Lab's SSL Server Test](https://www.ssllabs.com/ssltest/analyze.html), but an implementation of the above rating specification, slight discrepancies may occur. Please note that for now we stick to the SSL Labs rating as good as possible. We are not responsible for their rating. Before filing issues please inspect their Rating Guide.
 
-Disclaimer: Having a good grade is **NOT** necessarily equal to having good security! Don't start a competition for the best grade, at least not without monitoring the client handshakes and not without adding a portion of good sense to it. Please note STARTTLS always results in a grade cap to T. Anything else
-would lead to a false sense of security - at least until we test for DANE or MTA-STS.
+Disclaimer: Having a good grade is **NOT** necessarily equal to having good security! Don't start a competition for the best grade, at least not without monitoring the client handshakes and not without adding a portion of good sense to it. Please note STARTTLS always results in a grade cap to T. Anything else would lead to a false sense of security. Use TLS, see also RFC 8314. The security of STARTTLS is always client determined, i.e. checking the certificate which for SMTP port 25 is often enough not the case. Also with DANE or MTA-STS no one can test on the server side whether a client makes use if it.
 
 As of writing, these checks are missing:
 
