@@ -7,7 +7,7 @@
 [![License](https://img.shields.io/github/license/drwetter/testssl.sh)](https://github.com/drwetter/testssl.sh/LICENSE)
 [![Docker](https://img.shields.io/docker/pulls/drwetter/testssl.sh)](https://github.com/drwetter/testssl.sh/blob/3.2/Dockerfile.md)
 
-`testssl.sh` is a free command line tool which checks a server's service on
+`testssl.sh` is a free command line tool which checks a server its service on
 any port for the support of TLS/SSL ciphers, protocols as well as some
 cryptographic flaws.
 
@@ -73,7 +73,7 @@ For more please consult [Dockerfile.md](https://github.com/drwetter/testssl.sh/b
 
 ### No Warranty
 
-Usage of the program is without any warranty. Use it at yor own risk. 
+Usage of the program is without any warranty. Use it at your own risk. 
 
 Testssl.sh is intended to be used as a standalone CLI tool. While we tried to apply best practise security measures, we can't guarantee that the program is without any vulnerabilities. Running as a service may pose security risks and you're recommended to apply additional security measures.
 
