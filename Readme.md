@@ -73,7 +73,7 @@ For more please consult [Dockerfile.md](https://github.com/drwetter/testssl.sh/b
 
 ### No Warranty
 
-Usage of the program is without any warranty. Use it at yor own risk. 
+Usage of the program is without any warranty. Use it at your own risk. 
 
 Testssl.sh is intended to be used as a standalone CLI tool. While we tried to apply best practise security measures, we can't guarantee that the program is without any vulnerabilities. Running as a service may pose security risks and you're recommended to apply additional security measures.
 
