@@ -3001,7 +3001,7 @@ sub_f5_bigip_check() {
           [[ -z "$cookievalue" ]] && break
           cookievalue=${cookievalue/;/}
           debugme echo $cookiename : $cookievalue
-          if grep -Eq '[0-9]{9,10}\.[0-9]{3,5}\.0000' <<< "$cookievalue"; then
+          if grep -Eq '[0-9]{8,10}\.[0-9]{3,5}\.0000' <<< "$cookievalue"; then
                ip="$(f5_ip_oldstyle "$cookievalue")"
                port="$(f5_port_decode $cookievalue)"
                out "${spaces}F5 cookie (default IPv4 pool member): "; pr_italic "$cookiename "; prln_svrty_medium "${ip}:${port}"
