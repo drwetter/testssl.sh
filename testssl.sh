@@ -5050,7 +5050,8 @@ run_protocols() {
                     fileout "$jsonID" "OK" "not offered"
                     add_tls_offered ssl2 no
                     ;;
-               4)   out "likely "; pr_svrty_best "not offered (OK), "
+               4)   # STARTTLS problem
+                    out "likely "; pr_svrty_best "not offered (OK), "
                     fileout "$jsonID" "OK" "likely not offered"
                     add_tls_offered ssl2 no
                     pr_warning "received 4xx/5xx after STARTTLS handshake"; outln "$debug_recomm"
@@ -5220,7 +5221,7 @@ run_protocols() {
                pr_warning "TLS downgraded to STARTTLS plaintext"; outln
                fileout "$jsonID" "WARN" "TLS downgraded to STARTTLS plaintext"
                ;;
-          4)   out "likely not offered, "
+          4)   out "likely not offered, "                                  # STARTTLS problem
                fileout "$jsonID" "INFO" "likely not offered"
                add_tls_offered tls1 no
                pr_warning "received 4xx/5xx after STARTTLS handshake"; outln "$debug_recomm"
@@ -5301,8 +5302,8 @@ run_protocols() {
                pr_warning "TLS downgraded to STARTTLS plaintext"; outln
                fileout "$jsonID" "WARN" "TLS downgraded to STARTTLS plaintext"
                ;;
-          4)   out "likely not offered, "
-               fileout "$jsonID" "INFO" "not offered"
+          4)   out "likely not offered, "                        # STARTTLS problem
+               fileout "$jsonID" "INFO" "likely not offered"
                add_tls_offered tls1_1 no
                pr_warning "received 4xx/5xx after STARTTLS handshake"; outln "$debug_recomm"
                fileout "$jsonID" "WARN" "received 4xx/5xx after STARTTLS handshake${debug_recomm}"
@@ -5566,8 +5567,8 @@ run_protocols() {
                pr_warning "TLS downgraded to STARTTLS plaintext"; outln
                fileout "$jsonID" "WARN" "TLS downgraded to STARTTLS plaintext"
                ;;
-          4)   out "likely not offered, "
-               fileout "$jsonID" "INFO" "not offered"
+          4)   out "likely not offered, "              # STARTTLS problem
+               fileout "$jsonID" "INFO" "likely not offered"
                add_tls_offered tls1_3 no
                pr_warning "received 4xx/5xx after STARTTLS handshake"; outln "$debug_recomm"
                fileout "$jsonID" "WARN" "received 4xx/5xx after STARTTLS handshake${debug_recomm}"
