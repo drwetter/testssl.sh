@@ -1,6 +1,6 @@
 # syntax=docker.io/docker/dockerfile:1
 
-ARG LEAP_VERSION=15.5
+ARG LEAP_VERSION=15.6
 ARG INSTALL_ROOT=/rootfs
 
 FROM opensuse/leap:${LEAP_VERSION} as builder
@@ -18,7 +18,8 @@ RUN source /etc/os-release \
   && zypper "${ZYPPER_OPTIONS[@]}" --gpg-auto-import-keys refresh \
   && rpm -e util-linux --nodeps \
   && zypper "${ZYPPER_OPTIONS[@]}" --non-interactive install --download-in-advance --no-recommends \
-       bash procps grep gawk sed coreutils busybox-util-linux busybox-vi ldns libidn2-0 socat openssl curl \
+       bash procps grep gawk sed coreutils busybox ldns libidn2-0 socat openssl curl \
+  && ln -s /usr/bin/busybox /usr/bin/hexdump \
   && zypper up -y \
   && zypper "${ZYPPER_OPTIONS[@]}" clean --all
 ## Cleanup (reclaim approx 13 MiB):
