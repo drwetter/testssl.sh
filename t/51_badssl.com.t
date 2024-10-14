@@ -17,7 +17,7 @@ pass("Running testssl.sh against badssl.com to create a baseline (may take 2~3 m
 my $okout = `./testssl.sh -S -e --freak --logjam --drown --rc4 --sweet32 --breach --winshock --crime --jsonfile tmp.json --color 0 badssl.com`;
 my $okjson = json('tmp.json');
 unlink 'tmp.json';
-cmp_ok(@$okjson,'>',10,"We have more then 10 findings"); $tests++;
+cmp_ok(@$okjson,'>',10,"We should have more then 10 findings"); $tests++;
 
 # Expiration
 pass("Running testssl against expired.badssl.com"); $tests++;
@@ -35,7 +35,7 @@ foreach my $f ( @$json ) {
 		last;
     }
 }
-is($found,1,"We had a finding for this in the JSON output"); $tests++;
+is($found,1,"We should have a finding for this in the JSON output"); $tests++;
 
 # Self signed and not-expired
 pass("Running testssl against self-signed.badssl.com"); $tests++;
@@ -52,7 +52,7 @@ foreach my $f ( @$json ) {
 		last;
     }
 }
-is($found,1,"We had a finding for this in the JSON output"); $tests++;
+is($found,1,"We should a finding for this in the JSON output"); $tests++;
 
 like($out, qr/Chain of trust.*?NOT ok.*\(self signed\)/,"Chain of trust should fail because of self signed"); $tests++;
 $found = 0;
@@ -64,7 +64,7 @@ foreach my $f ( @$json ) {
 		last;
     }
 }
-is($found,1,"We had a finding for this in the JSON output"); $tests++;
+is($found,1,"We should have a finding for this in the JSON output"); $tests++;
 
 like($okout, qr/Chain of trust[^\n]*?Ok/,"Chain of trust should be ok"); $tests++;
 $found = 0;
@@ -77,7 +77,7 @@ foreach my $f ( @$okjson ) {
 		last;
     }
 }
-is($found,1,"We had a finding for this in the JSON output"); $tests++;
+is($found,1,"We should have a finding for this in the JSON output"); $tests++;
 
 # Wrong host
 #pass("Running testssl against wrong.host.badssl.com"); $tests++;
@@ -111,7 +111,7 @@ foreach my $f ( @$json ) {
 		last;
     }
 }
-is($found,1,"We had a finding for this in the JSON output"); $tests++;
+is($found,1,"We should have a finding for this in the JSON output"); $tests++;
 
 # TODO: RSA 8192
 
