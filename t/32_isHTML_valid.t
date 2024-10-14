@@ -46,15 +46,16 @@ $edited_html =~ s/&gt;/>/g;
 $edited_html =~ s/&quot;/"/g;
 $edited_html =~ s/&apos;/'/g;
 
-cmp_ok($edited_html, "eq", $out, "HTML file matches terminal output");
-$tests++;
-
 $diff = diff \$edited_html, \$out;
-printf "\n%s\n", "$diff";
+
+cmp_ok($edited_html, "eq", $out, "Checking if HTML file matches terminal output") or
+     diag ("\n%s\n", "$diff");
+
+$tests++;
 
 
 #2
-printf "\n%s\n", " .. running again $prg against \"$uri\", now with --debug 4 to create HTML output (may take another ~2 minutes)";
+printf "%s\n", " .. running again $prg against \"$uri\", now with --debug 4 to create HTML output (may take another ~2 minutes)";
 # Redirect stderr to /dev/null in order to avoid some unexplained "date: invalid date" error messages
 $out = `TERM_WIDTH=120 $prg $check2run --debug 4 $uri 2> /dev/null`;
 $debughtml = `cat $htmlfile`;
@@ -79,15 +80,14 @@ $debughtml =~ s/.*built: .*\n//g;
 $debughtml =~ s/.*Using bash .*\n//g;
 # is whole line:   s/.*<pattern> .*\n//g;
 
-cmp_ok($debughtml, "eq", $html, "HTML file created with --debug 4 matches HTML file created without --debug");
+$diff = diff \$debughtml, \$html;
+
+cmp_ok($debughtml, "eq", $html, "Checking if HTML file created with --debug 4 matches HTML file created without --debug") or
+     diag ("\n%s\n", "$diff");
 $tests++;
 
-$diff = diff \$debughtml, \$html;
-printf "\n%s\n", "$diff";
 
-
-
-printf "\n";
+printf "\n\n";
 done_testing($tests);
 
 
