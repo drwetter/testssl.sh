@@ -23132,9 +23132,11 @@ EOF
      # Pretty print - again, it's just nicer to read
      for reason in "${sorted_reasons[@]}"; do
           if [[ $reason_nr -eq 0 ]]; then
-               pr_bold " Grade cap reasons            "; out_row_aligned_max_width "$reason\n" '                                ' $TERM_WIDTH
+               pr_bold " Grade cap reasons            "
+               outln "$(out_row_aligned_max_width "$reason" "                                " $TERM_WIDTH)"
           else
-               out_row_aligned_max_width "                              $reason\n" '                                ' $TERM_WIDTH
+               outln "$(out_row_aligned_max_width "                              $reason" "                                " $TERM_WIDTH)"
+
           fi
           ((reason_nr++))
           fileout "grade_cap_reason_${reason_nr}" "INFO" "$reason"
