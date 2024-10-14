@@ -24,10 +24,10 @@ printf "\n%s\n", "Testing whether just calling \"./testssl.sh\" produces no erro
 my $info    = stat($prg);
 my $retMode = $info->mode;
 
-is($retMode & 0400, 0400, "Checking \"./testssl.sh\" for read permission"); 
+is($retMode & 0400, 0400, "Checking \"./testssl.sh\" for read permission");
 $tests++;
 
-is($retMode & 0100, 0100, "Checking \"./testssl.sh\" for execute permission"); 
+is($retMode & 0100, 0100, "Checking \"./testssl.sh\" for execute permission");
 $tests++;
 
 $fileout = `timeout 10 bash $prg 2>&1`;
@@ -55,7 +55,7 @@ $out=`grep -E "$debug_regexp" $prg`;
 unlike($out, qr/$debug_regexp/, "Debug RegEx");
 $tests++;
 
-printf "\n";
+printf "\n\n";
 done_testing($tests);
 
 
