@@ -19322,7 +19322,7 @@ run_starttls_injection() {
      esac
 
      uds="$TEMPDIR/uds"
-     $SOCAT FD:5 UNIX-LISTEN:$uds &
+     $SOCAT FD:5 UNIX-LISTEN:$uds 2>/dev/null &
      socat_pid=$!
 
      if "$HAS_UDS"; then
@@ -22934,11 +22934,11 @@ run_rating() {
      pr_headlineln " Rating (experimental) "
      outln
 
-     [[ -n "$STARTTLS_PROTOCOL" ]] && set_grade_cap "T" "STARTTLS is prone to MITM downgrade attacks. A secure TLS upgrade can only be ensured client-side. You should use TLS only (=implicit TLS) rather than STARTTLS as per RFC 8314, for other than SMTP and SIEVE"
+     [[ -n "$STARTTLS_PROTOCOL" ]] && set_grade_cap "T" "STARTTLS is prone to MITM downgrade attacks. A secure TLS upgrade can only be ensured client-side. As per RFC 8314 you should use implicit TLS rather than STARTTLS. For SMTP (port 25) and SIEVE this is not possible."
 
      # TL;DR: STARTTLS connections are inherently insecure. A MITM can always intercept the connection, unless the client checks e.g. the
-     # certificate accordingly. A secure STARTTLS client is the key but we can't test for it. For other than SMTP and SIEVE (there's no implicit TLS port)
-     # you should use implicit TLS as per RFC 8314. Especially e-mail transfer via port 25 is broken and amendments so far are duct tape.
+     # certificate accordingly. A secure STARTTLS client is the key but we can't test for it. Especially e-mail transfer via port 25 is broken
+     # as message delivery is still more important than security. Amendments like DANE and MTA-STS are duct tape and depend on the client.
 
      # Explanation: There are active MitM attacks possible when using STARTTLS like https://github.com/tintinweb/striptls or
      # https://github.com/libcrack/starttlsstrip. It depends on the client only whether it can detect such downgrade attack.
@@ -22946,6 +22946,9 @@ run_rating() {
      # accept those wrong certificates -- delivering e-mails is more important. There is an e-mail submission port 587 but a mail server
      # cannot just switch to it and continue to receive mail from everyone. Even if you advertise this via SRV record (RFC 6186).
      # TLSA Records/DANE and MTA-STS (RFC-8461) on the server side can help too,
+     #
+     # For other than SMTP on port 25 and port 587 and SIEVE (there's no implicit TLS port) you should use implicit TLS as per RFC 8314.
+     # Instead of port 587 (STARTTLS) implicit TLS on port 465 should be considered.
 
      pr_bold " Rating specs"; out " (not complete)  "; outln "SSL Labs's 'SSL Server Rating Guide' (version 2009q from 2020-01-30)"
      pr_bold " Specification documentation  "; pr_url "https://github.com/ssllabs/research/wiki/SSL-Server-Rating-Guide"
