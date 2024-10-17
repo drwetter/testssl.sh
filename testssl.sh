@@ -2035,7 +2035,7 @@ check_revocation_ocsp() {
      local stapled_response="$2"
      local jsonID="$3"
      local tmpfile=""
-     local -i success
+     local -i success=1
      local response=""
      local host_header=""
 
@@ -2052,9 +2052,20 @@ check_revocation_ocsp() {
      tmpfile=$TEMPDIR/${NODE}-${NODEIP}.${uri##*\/} || exit $ERR_FCREATE
      if [[ -n "$stapled_response" ]]; then
           hex2binary "$stapled_response" > "$TEMPDIR/stapled_ocsp_response.dd"
-          $OPENSSL ocsp -no_nonce -respin "$TEMPDIR/stapled_ocsp_response.dd" \
-               -issuer $TEMPDIR/hostcert_issuer.pem -verify_other $TEMPDIR/intermediatecerts.pem \
-               -CAfile <(cat $ADDTL_CA_FILES "$GOOD_CA_BUNDLE") -cert $HOSTCERT -text &> "$tmpfile"
+          if [[ "$stapled_response" =~ 06052[bB]0[eE]03021[aA] ]]; then
+               # Response appears to use SHA-1 in CertID
+               $OPENSSL ocsp -no_nonce -respin "$TEMPDIR/stapled_ocsp_response.dd" \
+                    -issuer $TEMPDIR/hostcert_issuer.pem -verify_other $TEMPDIR/intermediatecerts.pem \
+                    -CAfile <(cat $ADDTL_CA_FILES "$GOOD_CA_BUNDLE") -cert $HOSTCERT -text &> "$tmpfile"
+               success=$?
+          fi
+          if [[ $success -ne 0 ]] && [[ "$stapled_response" =~ 0609608648016503040201 ]]; then
+               # Response appears to use SHA-256 in CertID
+               $OPENSSL ocsp -sha256 -no_nonce -respin "$TEMPDIR/stapled_ocsp_response.dd" \
+                    -issuer $TEMPDIR/hostcert_issuer.pem -verify_other $TEMPDIR/intermediatecerts.pem \
+                    -CAfile <(cat $ADDTL_CA_FILES "$GOOD_CA_BUNDLE") -cert $HOSTCERT -text &> "$tmpfile"
+               success=$?
+          fi
      else
           host_header=${uri##http://}
           host_header=${host_header%%/*}
@@ -2069,8 +2080,9 @@ check_revocation_ocsp() {
           $OPENSSL ocsp -no_nonce ${host_header} -url "$uri" \
                -issuer $TEMPDIR/hostcert_issuer.pem -verify_other $TEMPDIR/intermediatecerts.pem \
                -CAfile <(cat $ADDTL_CA_FILES "$GOOD_CA_BUNDLE") -cert $HOSTCERT -text &> "$tmpfile"
+          success=$?
      fi
-     if [[ $? -eq 0 ]] && grep -Fq "Response verify OK" "$tmpfile"; then
+     if [[ $success -eq 0 ]] && grep -Fq "Response verify OK" "$tmpfile"; then
           response="$(grep -F "$HOSTCERT: " "$tmpfile")"
           response="${response#$HOSTCERT: }"
           response="${response%\.}"
