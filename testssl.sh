@@ -23429,7 +23429,7 @@ determine_rdns() {
      # circumstances (see #1506) can show up here. The blacklist is taken from RFC 1912 ("Allowable characters in a
      # label for a host name are only ASCII, letters, digits, and the `-' character")
      while read -r line; do
-          line="$(tr -dc '[a-zA-Z0-9-_.]' <<< "$line")"
+          line="$(tr -dc 'a-zA-Z0-9-_.' <<< "$line")"
           [[ -z "$rdns" ]] && rdns="$line" || rdns="$rdns $line"
      done <<< "$rDNS"
      rDNS="$rdns"
