@@ -630,6 +630,12 @@ pr_blue()       { tm_blue "$1"; [[ "$COLOR" -ge 2 ]] && { "$COLORBLIND" && html_
 tmln_blue()     { tm_blue "$1"; tmln_out; }
 prln_blue()     { pr_blue "$1"; outln; }
 
+tm_yellow()  { [[ "$COLOR" -ge 2 ]] && tm_out "\033[1;33m$1" || tm_out "$1"; tm_off; }
+pr_yellow()  { tm_yellow "$1"; [[ "$COLOR" -ge 2 ]] && html_out "<span style=\"color:#8a7237;font-weight:bold;\">$(html_reserved "$1")</span>" || html_out "$(html_reserved "$1")"; }
+
+tm_brown()  { [[ "$COLOR" -ge 2 ]] && tm_out "\033[0;33m$1" || tm_out "$1"; tm_off; }
+pr_brown()  { tm_brown "$1"; [[ "$COLOR" -ge 2 ]] && html_out "<span style=\"color:#8a7237;\">$(html_reserved "$1")</span>" || html_out "$(html_reserved "$1")"; }
+
 # we should be able to use aliases here
 tm_warning()    { [[ "$COLOR" -ge 2 ]] && tm_out "\033[0;35m$1" || tm_underline "$1"; tm_off; }                   # some local problem: one test cannot be done
 tmln_warning()  { tm_warning "$1"; tmln_out; }                                                                    # litemagenta
@@ -3414,117 +3420,28 @@ run_hpkp() {
      return 0
 }
 
-emphasize_stuff_in_headers(){
-     local html_brown="<span style=\\\"color:#8a7237;\\\">"
-     local html_yellow="<span style=\\\"color:#8a7237;font-weight:bold;\\\">"
-     local html_off="<\\/span>"
+emphasize_stuff_in_headers() (
+     local stuff="$1" match
 
-# see https://www.grymoire.com/Unix/Sed.html#uh-3
-#    outln "$1" | sed "s/[0-9]*/$brown&${off}/g"
-     tmln_out "$1" | sed -e "s/\([0-9]\)/${brown}\1${off}/g" \
-          -e "s/Unix/${yellow}Unix${off}/g" \
-          -e "s/Debian/${yellow}Debian${off}/g" \
-          -e "s/Win32/${yellow}Win32${off}/g" \
-          -e "s/Win64/${yellow}Win64${off}/g" \
-          -e "s/Ubuntu/${yellow}Ubuntu${off}/g" \
-          -e "s/ubuntu/${yellow}ubuntu${off}/g" \
-          -e "s/buster/${yellow}buster${off}/g" \
-          -e "s/stretch/${yellow}stretch${off}/g" \
-          -e "s/jessie/${yellow}jessie${off}/g" \
-          -e "s/squeeze/${yellow}squeeze${off}/g" \
-          -e "s/wheezy/${yellow}wheezy${off}/g" \
-          -e "s/lenny/${yellow}lenny${off}/g" \
-          -e "s/SUSE/${yellow}SUSE${off}/g" \
-          -e "s/Red Hat Enterprise Linux/${yellow}Red Hat Enterprise Linux${off}/g" \
-          -e "s/Red Hat/${yellow}Red Hat${off}/g" \
-          -e "s/CentOS/${yellow}CentOS${off}/g" \
-          -e "s/Via/${yellow}Via${off}/g" \
-          -e "s/X-Forwarded/${yellow}X-Forwarded${off}/g" \
-          -e "s/X-TYPO3-Parsetime/${yellow}X-TYPO3-Parsetime${off}/g" \
-          -e "s/Liferay-Portal/${yellow}Liferay-Portal${off}/g" \
-          -e "s/X-Cache-Lookup/${yellow}X-Cache-Lookup${off}/g" \
-          -e "s/X-Cache/${yellow}X-Cache${off}/g" \
-          -e "s/X-Squid/${yellow}X-Squid${off}/g" \
-          -e "s/X-Server/${yellow}X-Server${off}/g" \
-          -e "s/X-Varnish/${yellow}X-Varnish${off}/g" \
-          -e "s/X-OWA-Version/${yellow}X-OWA-Version${off}/g" \
-          -e "s/MicrosoftSharePointTeamServices/${yellow}MicrosoftSharePointTeamServices${off}/g" \
-          -e "s/X-Application-Context/${yellow}X-Application-Context${off}/g" \
-          -e "s/X-Version/${yellow}X-Version${off}/g" \
-          -e "s/X-Powered-By/${yellow}X-Powered-By${off}/g" \
-          -e "s/X-UA-Compatible/${yellow}X-UA-Compatible${off}/g" \
-          -e "s/Link/${yellow}Link${off}/g" \
-          -e "s/X-DNS-Prefetch-Control/${yellow}X-DNS-Prefetch-Control${off}/g" \
-          -e "s/X-Rack-Cache/${yellow}X-Rack-Cache${off}/g" \
-          -e "s/X-Runtime/${yellow}X-Runtime${off}/g" \
-          -e "s/X-Pingback/${yellow}X-Pingback${off}/g" \
-          -e "s/X-Permitted-Cross-Domain-Policies/${yellow}X-Permitted-Cross-Domain-Policies${off}/g" \
-          -e "s/X-AspNet-Version/${yellow}X-AspNet-Version${off}/g" \
-          -e "s/X-AspNetMvc-Version/${yellow}X-AspNetMvc-Version${off}/g" \
-          -e "s/x-note/${yellow}x-note${off}/g" \
-          -e "s/x-global-transaction-id/${yellow}x-global-transaction-id${off}/g" \
-          -e "s/X-Global-Transaction-ID/${yellow}X-Global-Transaction-ID${off}/g" \
-          -e "s/Alt-Svc/${yellow}Alt-Svc${off}/g" \
-          -e "s/system-wsgw-management-loopback/${yellow}system-wsgw-management-loopback${off}/g"
-
-     if "$do_html"; then
-          if [[ $COLOR -ge 2 ]]; then
-               html_out "$(tm_out "$1" | sed -e 's/\&/\&amp;/g' \
-                    -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/\"/\&quot;/g' -e "s/\'/\&apos;/g" \
-                    -e "s/\([0-9]\)/${html_brown}\1${html_off}/g" \
-                    -e "s/Unix/${html_yellow}Unix${html_off}/g" \
-                    -e "s/Debian/${html_yellow}Debian${html_off}/g" \
-                    -e "s/Win32/${html_yellow}Win32${html_off}/g" \
-                    -e "s/Win64/${html_yellow}Win64${html_off}/g" \
-                    -e "s/Ubuntu/${html_yellow}Ubuntu${html_off}/g" \
-                    -e "s/ubuntu/${html_yellow}ubuntu${html_off}/g" \
-                    -e "s/buster/${html_yellow}buster${html_off}/g" \
-                    -e "s/stretch/${html_yellow}stretch${html_off}/g" \
-                    -e "s/jessie/${html_yellow}jessie${html_off}/g" \
-                    -e "s/squeeze/${html_yellow}squeeze${html_off}/g" \
-                    -e "s/wheezy/${html_yellow}wheezy${html_off}/g" \
-                    -e "s/lenny/${html_yellow}lenny${html_off}/g" \
-                    -e "s/SUSE/${html_yellow}SUSE${html_off}/g" \
-                    -e "s/Red Hat Enterprise Linux/${html_yellow}Red Hat Enterprise Linux${html_off}/g" \
-                    -e "s/Red Hat/${html_yellow}Red Hat${html_off}/g" \
-                    -e "s/CentOS/${html_yellow}CentOS${html_off}/g" \
-                    -e "s/Via/${html_yellow}Via${html_off}/g" \
-                    -e "s/X-Forwarded/${html_yellow}X-Forwarded${html_off}/g" \
-                    -e "s/X-TYPO3-Parsetime/${yellow}X-TYPO3-Parsetime${html_off}/g" \
-                    -e "s/Liferay-Portal/${html_yellow}Liferay-Portal${html_off}/g" \
-                    -e "s/X-Cache-Lookup/${html_yellow}X-Cache-Lookup${html_off}/g" \
-                    -e "s/X-Cache/${html_yellow}X-Cache${html_off}/g" \
-                    -e "s/X-Squid/${html_yellow}X-Squid${html_off}/g" \
-                    -e "s/X-Server/${html_yellow}X-Server${html_off}/g" \
-                    -e "s/X-Varnish/${html_yellow}X-Varnish${html_off}/g" \
-                    -e "s/X-OWA-Version/${html_yellow}X-OWA-Version${html_off}/g" \
-                    -e "s/MicrosoftSharePointTeamServices/${html_yellow}MicrosoftSharePointTeamServices${html_off}/g" \
-                    -e "s/X-Application-Context/${html_yellow}X-Application-Context${html_off}/g" \
-                    -e "s/X-Version/${html_yellow}X-Version${html_off}/g" \
-                    -e "s/X-Powered-By/${html_yellow}X-Powered-By${html_off}/g" \
-                    -e "s/X-UA-Compatible/${html_yellow}X-UA-Compatible${html_off}/g" \
-                    -e "s/Link/${html_yellow}Link${html_off}/g" \
-                    -e "s/X-Runtime/${html_yellow}X-Runtime${html_off}/g" \
-                    -e "s/X-Rack-Cache/${html_yellow}X-Rack-Cache${html_off}/g" \
-                    -e "s/X-DNS-Prefetch-Control/${html_yellow}X-DNS-Prefetch-Control${html_off}/g" \
-                    -e "s/X-Pingback/${html_yellow}X-Pingback${html_off}/g" \
-                    -e "s/X-Permitted-Cross-Domain-Policies/${html_yellow}X-Permitted-Cross-Domain-Policies${html_off}/g" \
-                    -e "s/X-AspNet-Version/${html_yellow}X-AspNet-Version${html_off}/g" \
-                    -e "s/X-AspNetMvc-Version/${html_yellow}X-AspNetMvc-Version${html_off}/g" \
-                    -e "s/x-note/${html_yellow}x-note${html_off}/g" \
-                    -e "s/X-Global-Transaction-ID/${html_yellow}X-Global-Transaction-ID${html_off}/g" \
-                    -e "s/x-global-transaction-id/${html_yellow}x-global-transaction-id${html_off}/g" \
-                    -e "s/Alt-Svc/${html_yellow}Alt-Svc${html_off}/g" \
-                    -e "s/system-wsgw-management-loopback/${html_yellow}system-wsgw-management-loopback${html_off}/g" \
-               )"
-#FIXME: this is double code. The pattern to emphasize headers should be better in one single function
-# And: It matches case sensitive headers only which won't detect all banners. (sed ignorecase is not a/v for OpenBSD sed)
+     # Note: parens in function definition here force this into a separate
+     # shell, preventing nocasematch from affecting the code outside this function
+     shopt -s nocasematch
+          
+     while [[ -n "$stuff" ]]; do
+          if [[ "$stuff" =~ ^Unix|^Debian|^Win32|^Win64|^Ubuntu|^buster|^stretch|^jessie|^squeeze|^wheezy|^lenny|^SUSE|^Red\ Hat\ Enterprise\ Linux|^Red\ Hat|^CentOS|^Via|^X-Forwarded|^X-TYPO3-Parsetime|^Liferay-Portal|^X-Cache-Lookup|^X-Cache|^X-Squid|^X-Server|^X-Varnish|^X-OWA-Version|^MicrosoftSharePointTeamServices|^X-Application-Context|^X-Version|^X-Powered-By|^X-UA-Compatible|^Link|^X-DNS-Prefetch-Control|^X-Rack-Cache|^X-Runtime|^X-Pingback|^X-Permitted-Cross-Domain-Policies|^X-AspNet-Version|^X-AspNetMvc-Version|^x-note/|^x-global-transaction-id|^X-Global-Transaction-ID|^Alt-Svc|^system-wsgw-management-loopback ]]; then
+               match="$BASH_REMATCH"
+               pr_yellow "$match"
+               stuff="${stuff/#$match}"
+          elif [[ "${stuff:0:1}" =~ [0-9] ]]; then
+               pr_brown "${stuff:0:1}"
+               stuff="${stuff:1}"
           else
-               html_out "$(html_reserved "$1")"
+               out "${stuff:0:1}"
+               stuff="${stuff:1}"
           fi
-          html_out "\n"
-     fi
-}
+     done
+     outln
+)
 
 run_server_banner() {
      local serverbanner
