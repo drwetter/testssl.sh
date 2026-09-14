@@ -8417,7 +8417,7 @@ extract_new_tls_extensions() {
      if [[ -n "$tls_extensions" ]]; then
           # check to see if any new TLS extensions were returned and add any new ones to TLS_EXTENSIONS
           while read -d "\"" -r line; do
-               if [[ $line != "" ]] && [[ ! "${TLS_EXTENSIONS[*]}" =~ "$line" ]]; then
+               if [[ $line != "" ]] && [[ ! "${TLS_EXTENSIONS[*]}" =~ $line ]]; then
                     i=${#TLS_EXTENSIONS[*]}
                     while [[ $i -gt 0 ]] && [[ ${TLS_EXTENSIONS[i-1]#*/#} -gt ${line#*/#} ]]; do
                          TLS_EXTENSIONS[i]="${TLS_EXTENSIONS[i-1]}"
@@ -9343,7 +9343,7 @@ must_staple() {
           # probably okay, since it seems likely that any TLS Feature extension
           # that includes status_request_v2 will also include status_request.
           supported=true
-     elif [[ "$hostcert_txt" =~ '1.3.6.1.5.5.7.1.24:' ]]; then
+     elif [[ "$hostcert_txt" =~ 1\.3\.6\.1\.5\.5\.7\.1\.24: ]]; then
           cert="$($OPENSSL x509 -in "$HOSTCERT" -outform DER 2>>$ERRFILE | hexdump -v -e '16/1 "%02X"')"
           extn="${cert##*06082B06010505070118}"
           # Check for critical bit, and skip over it if present.
@@ -9408,11 +9408,11 @@ certificate_transparency() {
      # server's certificate. If they aren't, check whether the server provided
      # a stapled OCSP response with SCTs. If no SCTs were found in the certificate
      # or OCSP response, check for an SCT TLS extension.
-     if [[ "$cert_txt" =~ CT\ Precertificate\ SCTs ]] || [[ "$cert_txt" =~ '1.3.6.1.4.1.11129.2.4.2' ]]; then
+     if [[ "$cert_txt" =~ CT\ Precertificate\ SCTs ]] || [[ "$cert_txt" =~ 1\.3\.6\.1\.4\.1\.11129\.2\.4\.2 ]]; then
           CERTIFICATE_TRANSPARENCY_SOURCE="certificate extension"
           return 0
      fi
-     if [[ "$ocsp_response" =~ CT\ Certificate\ SCTs ]] || [[ "$ocsp_response" =~ '1.3.6.1.4.1.11129.2.4.5' ]]; then
+     if [[ "$ocsp_response" =~ CT\ Certificate\ SCTs ]] || [[ "$ocsp_response" =~ 1\.3\.6\.1\.4\.1\.11129\.2\.4\.5 ]]; then
           CERTIFICATE_TRANSPARENCY_SOURCE="OCSP extension"
           return 0
      fi
@@ -22809,7 +22809,7 @@ get_caa_rrecord() {
           raw_caa="$(drill $1 type257 | awk '/'"^${1}"'.*CAA/ { print $5,$6,$7 }')"
      elif "$HAS_HOST"; then
           raw_caa="$(host -t type257 $1)"
-          if [[ "$raw_caa" =~ "has no CAA|has no TYPE257" ]]; then
+          if [[ "$raw_caa" =~ has\ no\ CAA|has\ no\ TYPE257 ]]; then
                raw_caa=""
           else
                raw_caa="${raw_caa/$1 has CAA record /}"
@@ -22936,7 +22936,7 @@ get_https_rrecord() {
           # empty if there's no such record
      elif "$HAS_HOST"; then
           raw_https="$(host -t type65 "$1")"
-          if [[ "$raw_https" =~ "has no HTTPS|has no TYPE65" ]]; then
+          if [[ "$raw_https" =~ has\ no\ HTTPS|has\ no\ TYPE65 ]]; then
                raw_https=""
           else
                raw_https="${raw_https/$1 has HTTPS record /}"
