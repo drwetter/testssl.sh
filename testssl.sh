@@ -767,6 +767,9 @@ pr_boldurl() { tm_bold "$1"; html_out "<a href=\"$(html_reserved "$1")\" style=\
 ### color switcher (see e.g. https://linuxtidbits.wordpress.com/2008/08/11/output-color-on-bash-scripts/
 ###                          https://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x405.html
 ### no output support for HTML!
+### NOTE: These color functions (brown, yellow, off) are used in emphasize_stuff_in_headers(), but should
+### generally be avoided, Functions such as pr_svrty_low() and pr_svrty_medium() should be used instead, as
+### they handle both terminal and HTML output.
 set_color_functions() {
      local ncurses_tput=true
 
@@ -778,56 +781,26 @@ set_color_functions() {
      fi
 
      # Empty all vars if we have COLOR=0 equals no escape code -- these are globals:
-     red=""
-     green=""
      brown=""
-     blue=""
-     magenta=""
-     cyan=""
-     grey=""
      yellow=""
      off=""
-     bold=""
-     underline=""
-     italic=""
 
      type -p tput &>/dev/null || return 0      # Hey wait, do we actually have tput / ncurses ?
      tput cols &>/dev/null || return 0         # tput under BSDs and GNUs doesn't work either (TERM undefined?)
      tput sgr0 &>/dev/null || ncurses_tput=false
      if [[ "$COLOR" -ge 2 ]]; then
           if $ncurses_tput; then
-               red=$(tput setaf 1)
-               green=$(tput setaf 2)
                brown=$(tput setaf 3)
-               blue=$(tput setaf 4)
-               magenta=$(tput setaf 5)
-               cyan=$(tput setaf 6)
-               grey=$(tput setaf 7)
                yellow=$(tput setaf 3; tput bold)
           else                                    # this is a try for old BSD, see terminfo(5)
-               red=$(tput AF 1)
-               green=$(tput AF 2)
                brown=$(tput AF 3)
-               blue=$(tput AF 4)
-               magenta=$(tput AF 5)
-               cyan=$(tput AF 6)
-               grey=$(tput AF 7)
                yellow=$(tput AF 3; tput md)
           fi
      fi
      if [[ "$COLOR" -ge 1 ]]; then
           if $ncurses_tput; then
-               bold=$(tput bold)
-               underline=$(tput sgr 0 1 2>/dev/null)
-               italic=$(tput sitm)                # This doesn't work on FreeBSDi (9,10) and OpenBSD ...
-               italic_end=$(tput ritm)            # ... and this, too
                off=$(tput sgr0)
           else                                    # this is a try for old BSD, see terminfo(5)
-               bold=$(tput md)
-               underline=$(tput us)
-               italic=$(tput ZH 2>/dev/null)       # This doesn't work on FreeBSDi (9,10) and OpenBSD
-               italic_end=$(tput ZR 2>/dev/null)   # ... probably entry missing in /etc/termcap
-               reverse=$(tput mr)
                off=$(tput me)
           fi
      fi
@@ -19306,7 +19279,7 @@ run_freak() {
                return 0
                ;;
           1|2|3)
-               addtl_warning=" ($magenta""tested only with $nr_supported_ciphers out of 9 ciphers only!$off)" ;;
+               addtl_warning=" (tested only with $nr_supported_ciphers out of 9 ciphers only!)" ;;
           4|5|6|7)
                addtl_warning=" (tested with $nr_supported_ciphers/9 ciphers)" ;;
           8|9|10|11)
@@ -19344,7 +19317,12 @@ run_freak() {
           pr_svrty_critical "VULNERABLE (NOT ok)"; out ", uses EXPORT RSA ciphers"
           fileout "$jsonID" "CRITICAL" "VULNERABLE, uses EXPORT RSA ciphers" "$cve" "$cwe" "$hint"
      else
-          pr_svrty_best "not vulnerable (OK)"; out "$addtl_warning"
+          pr_svrty_best "not vulnerable (OK)"
+          if [[ -n "$addtl_warning" ]] && [[ $nr_supported_ciphers -le 3 ]]; then
+               out " ("; pr_warning "${addtl_warning:2:-1}"; out ")"
+          else
+               out "$addtl_warning"
+          fi
           fileout "$jsonID" "OK" "not vulnerable $addtl_warning" "$cve" "$cwe"
      fi
      outln
@@ -19506,7 +19484,7 @@ run_logjam() {
                     out "$spaces"
                     openssl_no_expdhciphers=true
                     ;;
-               1|2|3) addtl_warning=" ($magenta""tested w/ $nr_supported_ciphers/4 ciphers only!$off)" ;;
+               1|2|3) addtl_warning=" (tested w/ $nr_supported_ciphers/4 ciphers only!)" ;;
                4)   ;;
           esac
      fi
@@ -19612,16 +19590,16 @@ run_logjam() {
                out_common_prime "$jsonID2" "$cve" "$cwe"
                if ! "$openssl_no_expdhciphers"; then
                     outln ","
-                    out "${spaces}but no DH EXPORT ciphers${addtl_warning}"
+                    out "${spaces}but no DH EXPORT ciphers"
                     fileout "$jsonID" "OK" "not vulnerable, no DH EXPORT ciphers,$addtl_warning" "$cve" "$cwe"
                fi
           elif [[ $subret -eq 3 ]]; then
-               pr_svrty_good "not vulnerable (OK):"; out " no DH EXPORT ciphers${addtl_warning}"
+               pr_svrty_good "not vulnerable (OK):"; out " no DH EXPORT ciphers"
                fileout "$jsonID" "OK" "not vulnerable, no DH EXPORT ciphers,$addtl_warning" "$cve" "$cwe"
                out ", no DH key detected with <= TLS 1.2"
                fileout "$jsonID2" "OK" "no DH key with <= TLS 1.2" "$cve" "$cwe"
           elif [[ $subret -eq 0 ]]; then
-               pr_svrty_good "not vulnerable (OK):"; out " no DH EXPORT ciphers${addtl_warning}"
+               pr_svrty_good "not vulnerable (OK):"; out " no DH EXPORT ciphers"
                fileout "$jsonID" "OK" "not vulnerable, no DH EXPORT ciphers,$addtl_warning" "$cve" "$cwe"
                # we issue a special warning if there's no common prime but the bit length is too low
                if [[ $DH_GROUP_LEN_P -le 1024 ]]; then
@@ -19637,8 +19615,11 @@ run_logjam() {
                     fileout "$jsonID2" "OK" "--" "$cve" "$cwe"
                fi
           elif [[ $ret -eq 1 ]]; then
-               pr_svrty_good "partly not vulnerable:"; out " no DH EXPORT ciphers${addtl_warning}"
+               pr_svrty_good "partly not vulnerable:"; out " no DH EXPORT ciphers"
                fileout "$jsonID" "OK" "not vulnerable, no DH EXPORT ciphers,$addtl_warning" "$cve" "$cwe"
+          fi
+          if [[ -n "$addtl_warning" ]]; then
+               out " ("; pr_warning "${addtl_warning:2:-1}"; out ")"
           fi
      fi
 
