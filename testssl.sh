@@ -18666,7 +18666,7 @@ run_freak() {
                return 0
                ;;
           1|2|3)
-               addtl_warning=" ($magenta""tested only with $nr_supported_ciphers out of 9 ciphers only!$off)" ;;
+               addtl_warning=" (tested only with $nr_supported_ciphers out of 9 ciphers only!)" ;;
           4|5|6|7)
                addtl_warning=" (tested with $nr_supported_ciphers/9 ciphers)" ;;
           8|9|10|11)
@@ -18704,7 +18704,12 @@ run_freak() {
           pr_svrty_critical "VULNERABLE (NOT ok)"; out ", uses EXPORT RSA ciphers"
           fileout "$jsonID" "CRITICAL" "VULNERABLE, uses EXPORT RSA ciphers" "$cve" "$cwe" "$hint"
      else
-          pr_svrty_best "not vulnerable (OK)"; out "$addtl_warning"
+          pr_svrty_best "not vulnerable (OK)"
+          if [[ -n "$addtl_warning" ]] && [[ $nr_supported_ciphers -le 3 ]]; then
+               out " ("; pr_warning "${addtl_warning:2:-1}"; out ")"
+          else
+               out "$addtl_warning"
+          fi
           fileout "$jsonID" "OK" "not vulnerable $addtl_warning" "$cve" "$cwe"
      fi
      outln
@@ -18867,7 +18872,7 @@ run_logjam() {
                     out "$spaces"
                     openssl_no_expdhciphers=true
                     ;;
-               1|2|3) addtl_warning=" ($magenta""tested w/ $nr_supported_ciphers/4 ciphers only!$off)" ;;
+               1|2|3) addtl_warning=" (tested w/ $nr_supported_ciphers/4 ciphers only!)" ;;
                4)   ;;
           esac
      fi
@@ -18973,16 +18978,16 @@ run_logjam() {
                out_common_prime "$jsonID2" "$cve" "$cwe"
                if ! "$openssl_no_expdhciphers"; then
                     outln ","
-                    out "${spaces}but no DH EXPORT ciphers${addtl_warning}"
+                    out "${spaces}but no DH EXPORT ciphers"
                     fileout "$jsonID" "OK" "not vulnerable, no DH EXPORT ciphers,$addtl_warning" "$cve" "$cwe"
                fi
           elif [[ $subret -eq 3 ]]; then
-               pr_svrty_good "not vulnerable (OK):"; out " no DH EXPORT ciphers${addtl_warning}"
+               pr_svrty_good "not vulnerable (OK):"; out " no DH EXPORT ciphers"
                fileout "$jsonID" "OK" "not vulnerable, no DH EXPORT ciphers,$addtl_warning" "$cve" "$cwe"
                out ", no DH key detected with <= TLS 1.2"
                fileout "$jsonID2" "OK" "no DH key with <= TLS 1.2" "$cve" "$cwe"
           elif [[ $subret -eq 0 ]]; then
-               pr_svrty_good "not vulnerable (OK):"; out " no DH EXPORT ciphers${addtl_warning}"
+               pr_svrty_good "not vulnerable (OK):"; out " no DH EXPORT ciphers"
                fileout "$jsonID" "OK" "not vulnerable, no DH EXPORT ciphers,$addtl_warning" "$cve" "$cwe"
                # we issue a special warning if there's no common prime but the bit length is too low
                if [[ $DH_GROUP_LEN_P -le 1024 ]]; then
@@ -18998,8 +19003,11 @@ run_logjam() {
                     fileout "$jsonID2" "OK" "--" "$cve" "$cwe"
                fi
           elif [[ $ret -eq 1 ]]; then
-               pr_svrty_good "partly not vulnerable:"; out " no DH EXPORT ciphers${addtl_warning}"
+               pr_svrty_good "partly not vulnerable:"; out " no DH EXPORT ciphers"
                fileout "$jsonID" "OK" "not vulnerable, no DH EXPORT ciphers,$addtl_warning" "$cve" "$cwe"
+          fi
+          if [[ -n "$addtl_warning" ]]; then
+               out " ("; pr_warning "${addtl_warning:2:-1}"; out ")"
           fi
      fi
 
@@ -22339,7 +22347,7 @@ determine_rdns() {
      # circumstances (see #1506) can show up here. The blacklist is taken from RFC 1912 ("Allowable characters in a
      # label for a host name are only ASCII, letters, digits, and the `-' character")
      while read -r line; do
-          line="$(tr -dc '[a-zA-Z0-9-_.]' <<< "$line")"
+          line="$(tr -dc 'a-zA-Z0-9-_.' <<< "$line")"
           [[ -z "$rdns" ]] && rdns="$line" || rdns="$rdns $line"
      done <<< "$rDNS"
      rDNS="$rdns"
